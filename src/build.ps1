@@ -10,7 +10,7 @@ if (-not (Test-Path $csc)) { throw '找不到 csc.exe（.NET Framework 4.x 缺�
 $ico = Join-Path $srcDir 'app.ico'
 if (-not (Test-Path $ico)) { & (Join-Path $srcDir 'make-icon.ps1') }
 
-$out = Join-Path $root 'AndroidTool.exe'
+$out = Join-Path $root 'Easy-platform-tools-GUI.exe'
 if (Test-Path $out) { Remove-Item $out -Force }
 
 $cscArgs = @(
@@ -27,7 +27,7 @@ $cscArgs = @(
     '/reference:System.Windows.Forms.dll'
     '/reference:System.IO.Compression.dll'
     '/reference:System.IO.Compression.FileSystem.dll'
-    (Join-Path $srcDir 'AndroidTool.cs')
+    (Join-Path $srcDir 'EasyPlatformTools.cs')
 )
 
 Write-Host ('csc -> ' + $out)

@@ -1,29 +1,30 @@
-# AndroidTool v1.4.0 — 读分区表
+# Easy-platform-tools-GUI v1.5.0 — 换名字
 
-给刷写加一层保险：刷之前先把这台设备**真实的分区**拉出来看。
+项目从 `android-debug-console` 改名为 **Easy-platform-tools-GUI**。
 
-## 新增：读分区表
+旧仓库地址 <https://github.com/moqi12386/android-debug-console> 会被 GitHub 自动重定向，
+老链接仍然可用，但建议更新到新地址。
 
-- 跑 `fastboot getvar all`，解析 `partition-size` / `partition-type`
-- 列表展示：分区名、大小（自动换算 MB/GB）、类型、原始十六进制值
-- **复制列表**到剪贴板、**导出 CSV**
-- 选中某行点「用于刷入镜像」，直接把分区名带进刷写对话框——不用手打，也就不会打错
+## 变化
 
-![分区表](https://github.com/moqi12386/android-debug-console/raw/main/docs/parts.png)
+| 项目 | 旧 | 新 |
+|---|---|---|
+| 仓库 | `android-debug-console` | `Easy-platform-tools-GUI` |
+| 程序 | `AndroidTool.exe` | `Easy-platform-tools-GUI.exe` |
+| 启动器 | `AndroidTool.bat` | `Easy-platform-tools-GUI.bat` |
+| 窗口标题 | 安卓调试台 — adb / fastboot | Easy-platform-tools-GUI — adb / fastboot |
+| 源码 | `src/AndroidTool.cs` | `src/EasyPlatformTools.cs` |
 
-## 连带改进
-
-- 读过分区表后，「刷入镜像」的分区下拉框会用**真实分区名**替代内置的 40 个通用名
-- 没读过也能用，只是候选来自内置列表
+功能没有变化，配置 `config.ini` 也继续沿用（`bg` / `font` / `size` / `proxy` / `pt_source`）。
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `AndroidTool-v1.4.0.zip` | 解压即用 |
-| `AndroidTool.exe` | 单文件本体，81 KB |
+| `Easy-platform-tools-GUI-v1.5.0.zip` | 解压即用 |
+| `Easy-platform-tools-GUI.exe` | 单文件本体，81 KB |
 
-## 完整功能一览
+## 功能一览
 
 | 分类 | 功能 |
 |---|---|

@@ -1,4 +1,4 @@
-# 安卓调试台 · AndroidTool
+# Easy-platform-tools-GUI
 
 Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体、可换背景配色，
 编译出来就是一个 81 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
@@ -22,8 +22,8 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体�
 
 ## 快速开始
 
-1. 到 [Releases](../../releases) 下载 `AndroidTool-v1.4.0.zip` 并解压
-2. 双击 `AndroidTool.exe`
+1. 到 [Releases](../../releases) 下载 `Easy-platform-tools-GUI-v1.5.0.zip` 并解压
+2. 双击 `Easy-platform-tools-GUI.exe`
 3. 首次启动会提示缺少 **Android platform-tools**，点「立即下载」即可，程序自动下载并解压到 `bin\`
 
 ![首次启动](docs/setup.png)
@@ -141,16 +141,16 @@ powershell -ExecutionPolicy Bypass -File src\build.ps1
 ```
 
 - 只用 .NET Framework 4.x 自带的 `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`
-- 产物是同目录的 `AndroidTool.exe`
+- 产物是同目录的 `Easy-platform-tools-GUI.exe`
 - 图标由 `src\make-icon.ps1` 生成 `src\app.ico`
 - `src\shot.ps1` 是开发期截图脚本（启动 exe → 输入命令 → PrintWindow 存 PNG）
 
 ## 命令行参数
 
 ```bat
-AndroidTool.exe --version                  :: 版本与仓库地址
-AndroidTool.exe --selftest                 :: 打印组件解析、字体、主题、控件数
-AndroidTool.exe --run "adb devices -l"     :: 不开窗口跑一条命令并输出
+Easy-platform-tools-GUI.exe --version                  :: 版本与仓库地址
+Easy-platform-tools-GUI.exe --selftest                 :: 打印组件解析、字体、主题、控件数
+Easy-platform-tools-GUI.exe --run "adb devices -l"     :: 不开窗口跑一条命令并输出
 ```
 
 `--selftest` / `--run` 可加 `--out <文件>` 把结果写进文件（在无控制台的宿主里很有用）。

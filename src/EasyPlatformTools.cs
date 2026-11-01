@@ -1,4 +1,4 @@
-﻿// 安卓调试台 — adb / fastboot 图形化命令台
+﻿// Easy-platform-tools-GUI — adb / fastboot 图形化命令台
 // 编译：powershell -ExecutionPolicy Bypass -File build.ps1
 // 依赖：.NET Framework 4.x（Windows 自带），无需 PowerShell 运行时。
 // 字体：assets\fonts\*.ttf（MiSans、JetBrains Mono），缺失时回退系统字体。
@@ -19,7 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace AndroidTool
+namespace EasyPlatformTools
 {
     internal static class Program
     {
@@ -28,8 +28,8 @@ namespace AndroidTool
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.4.0";
-        private const string AppRepo = "https://github.com/moqi12386/android-debug-console";
+        private const string AppVersion = "1.5.0";
+        private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
         private static readonly string[][] PT_SOURCES = new string[][]
@@ -306,7 +306,7 @@ namespace AndroidTool
             if (showVersion)
             {
                 AttachConsole(ATTACH_PARENT_PROCESS);
-                Emit("AndroidTool " + AppVersion + "\r\n" + AppRepo + "\r\n", outFile);
+                Emit("Easy-platform-tools-GUI " + AppVersion + "\r\n" + AppRepo + "\r\n", outFile);
                 return 0;
             }
 
@@ -434,7 +434,7 @@ namespace AndroidTool
             try
             {
                 StringBuilder sb = new StringBuilder();
-                sb.AppendLine("; 安卓调试台配置");
+                sb.AppendLine("; Easy-platform-tools-GUI 配置");
                 sb.AppendLine("bg=" + ToHex(theme.Bg));
                 sb.AppendLine("font=" + fontName);
                 sb.AppendLine("size=" + fontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
@@ -449,7 +449,7 @@ namespace AndroidTool
         private static void BuildUi()
         {
             form = new Form();
-            form.Text = "安卓调试台 — adb / fastboot";
+            form.Text = "Easy-platform-tools-GUI — adb / fastboot";
             form.Size = new Size(1060, 720);
             form.MinimumSize = new Size(880, 560);
             form.StartPosition = FormStartPosition.CenterScreen;
@@ -473,7 +473,7 @@ namespace AndroidTool
 
             form.Shown += delegate
             {
-                AddOut("安卓调试台 v" + AppVersion + "　·　adb / fastboot 命令控制台", Role.Cmd);
+                AddOut("Easy-platform-tools-GUI v" + AppVersion + "　·　adb / fastboot 命令控制台", Role.Cmd);
                 AddOut("组件目录：" + toolDir, Role.Dim);
                 AddOut("字体：" + ResolvedFontName() + " " + fontSize.ToString("0.#") + "pt　·　主题：" + ToHex(theme.Bg), Role.Dim);
                 AddOut("左下角「设置」可换背景色和字体。", Role.Dim);
@@ -885,7 +885,7 @@ namespace AndroidTool
             dlgSettings.Controls.Add(lblFontTip);
 
             lblPreview = new Label();
-            lblPreview.Text = "示例　安卓调试台 AaBb 0123　adb devices -l";
+            lblPreview.Text = "示例　Easy-platform-tools-GUI AaBb 0123　adb devices -l";
             lblPreview.Location = new Point(16, 244);
             lblPreview.Size = new Size(420, 46);
             lblPreview.TextAlign = ContentAlignment.MiddleLeft;
@@ -993,7 +993,7 @@ namespace AndroidTool
             dlgSetup.Controls.Add(lblSetupTitle);
 
             lblSetupBody = new Label();
-            lblSetupBody.Text = "安卓调试台依赖 Android platform-tools 才能和设备通信。\n"
+            lblSetupBody.Text = "本程序依赖 Android platform-tools 才能和设备通信。\n"
                 + "点「立即下载」会拉取约 8 MB 的压缩包并自动解压到 bin\\ 目录。\n"
                 + "下载源先在腾讯云镜像和 Google 官方之间自动切换，失败会自动换下一个。\n\n"
                 + "内容归 Google 所有，遵循 Android SDK 许可协议。";
@@ -2673,7 +2673,7 @@ namespace AndroidTool
                     return;
                 }
 
-                report.AppendLine("安卓调试台 基带备份");
+                report.AppendLine("Easy-platform-tools-GUI 基带备份");
                 report.AppendLine("时间：" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                 report.AppendLine("设备：" + DeviceProp("ro.product.model") + " / " + DeviceProp("ro.serialno"));
                 report.AppendLine();
