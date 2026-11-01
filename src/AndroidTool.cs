@@ -9,6 +9,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Text;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -24,8 +26,17 @@ namespace AndroidTool
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.0.0";
+        private const string AppVersion = "1.1.0";
         private const string AppRepo = "https://github.com/moqi12386/android-debug-console";
+
+        // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
+        private static readonly string[][] PT_SOURCES = new string[][]
+        {
+            new string[] { "腾讯云",   "https://mirrors.cloud.tencent.com/AndroidSDK/platform-tools-latest-windows.zip" },
+            new string[] { "Google",   "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" },
+            new string[] { "Google CDN", "https://redirector.gvt1.com/edgedl/android/repository/platform-tools-latest-windows.zip" }
+        };
+        private const string PT_PAGE = "https://developer.android.com/tools/releases/platform-tools";
 
         // ================================================================
         //  主题
@@ -255,6 +266,16 @@ namespace AndroidTool
         private static FlowLayoutPanel dlgSwatches;
         private static bool dlgLoading;
 
+        // 首次运行：下载 platform-tools
+        private static Form dlgSetup;
+        private static Label lblSetupTitle, lblSetupBody, lblSetupPct;
+        private static ProgressBar pbSetup;
+        private static Button btnSetupGo, btnSetupManual, btnSetupExit;
+        private static volatile bool setupBusy;
+        private static string proxyUrl = "";
+        private static string customPtSource = "";
+        private static string lastPtSource = "";
+
         private enum Role { Text, Cmd, Err, Ok, Dim, Warn }
 
         private static readonly List<KeyValuePair<Role, string>> lines = new List<KeyValuePair<Role, string>>();
@@ -289,6 +310,9 @@ namespace AndroidTool
             ResolveTools();
             LoadFonts();
             LoadConfig();
+
+            // .NET Framework 默认可能只协商 TLS 1.0，镜像站普遍要求 1.2
+            try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; } catch { }
 
             if (runOnce != null) { AttachConsole(ATTACH_PARENT_PROCESS); return RunHeadless(runOnce, outFile); }
 
@@ -389,6 +413,14 @@ namespace AndroidTool
                             fontSize = s;
                         }
                     }
+                    else if (key == "proxy")
+                    {
+                        proxyUrl = val;
+                    }
+                    else if (key == "pt_source")
+                    {
+                        customPtSource = val;
+                    }
                 }
             }
             catch { }
@@ -445,6 +477,7 @@ namespace AndroidTool
                 AddOut("", Role.Dim);
                 txtInput.Focus();
                 RefreshStatusAsync();
+                if (!File.Exists(adbPath)) { ShowSetupDialog(); }
             };
 
             ApplyTheme(theme);
@@ -898,6 +931,315 @@ namespace AndroidTool
             if (lblFontTip != null) { lblFontTip.ForeColor = t.Dim; }
             if (lblPreview != null) { lblPreview.BackColor = t.EditBg; lblPreview.ForeColor = t.Text; }
             if (dlgSwatches != null) { dlgSwatches.BackColor = t.Panel; }
+        }
+
+        // ================================================================
+        //  首次运行：联网下载 platform-tools
+        // ================================================================
+        private static void ShowSetupDialog()
+        {
+            if (dlgSetup != null && !dlgSetup.IsDisposed) { dlgSetup.Activate(); return; }
+
+            dlgSetup = new Form();
+            dlgSetup.Text = "初始化 — 需要 Android platform-tools";
+            dlgSetup.FormBorderStyle = FormBorderStyle.FixedDialog;
+            dlgSetup.MaximizeBox = false;
+            dlgSetup.MinimizeBox = false;
+            dlgSetup.ShowInTaskbar = false;
+            dlgSetup.StartPosition = FormStartPosition.CenterParent;
+            dlgSetup.AutoScaleMode = AutoScaleMode.None;
+            dlgSetup.ClientSize = new Size(520, 272);
+            dlgSetup.Font = fUi;
+            dlgSetup.BackColor = theme.Panel;
+
+            lblSetupTitle = new Label();
+            lblSetupTitle.Text = "缺少 adb / fastboot";
+            lblSetupTitle.Location = new Point(20, 18);
+            lblSetupTitle.AutoSize = true;
+            lblSetupTitle.Font = fUiBold;
+            lblSetupTitle.ForeColor = theme.Text;
+            dlgSetup.Controls.Add(lblSetupTitle);
+
+            lblSetupBody = new Label();
+            lblSetupBody.Text = "安卓调试台依赖 Android platform-tools 才能和设备通信。\n"
+                + "点「立即下载」会拉取约 8 MB 的压缩包并自动解压到 bin\\ 目录。\n"
+                + "下载源先在腾讯云镜像和 Google 官方之间自动切换，失败会自动换下一个。\n\n"
+                + "内容归 Google 所有，遵循 Android SDK 许可协议。";
+            lblSetupBody.Location = new Point(20, 46);
+            lblSetupBody.Size = new Size(480, 100);
+            lblSetupBody.ForeColor = theme.Text;
+            dlgSetup.Controls.Add(lblSetupBody);
+
+            pbSetup = new ProgressBar();
+            pbSetup.Location = new Point(20, 156);
+            pbSetup.Size = new Size(480, 14);
+            pbSetup.Visible = false;
+            dlgSetup.Controls.Add(pbSetup);
+
+            lblSetupPct = new Label();
+            lblSetupPct.Location = new Point(20, 174);
+            lblSetupPct.Size = new Size(480, 20);
+            lblSetupPct.AutoSize = false;
+            lblSetupPct.Font = fSmall;
+            lblSetupPct.ForeColor = theme.Dim;
+            lblSetupPct.Text = "";
+            dlgSetup.Controls.Add(lblSetupPct);
+
+            btnSetupGo = new Button();
+            btnSetupGo.Text = "立即下载";
+            btnSetupGo.Location = new Point(20, 216);
+            btnSetupGo.Size = new Size(150, 36);
+            btnSetupGo.FlatStyle = FlatStyle.Flat;
+            btnSetupGo.FlatAppearance.BorderSize = 0;
+            btnSetupGo.BackColor = theme.RunBtn;
+            btnSetupGo.ForeColor = Color.White;
+            btnSetupGo.Font = fUi;
+            dlgSetup.Controls.Add(btnSetupGo);
+
+            btnSetupManual = new Button();
+            btnSetupManual.Text = "手动下载";
+            btnSetupManual.Location = new Point(182, 216);
+            btnSetupManual.Size = new Size(120, 36);
+            btnSetupManual.FlatStyle = FlatStyle.Flat;
+            btnSetupManual.FlatAppearance.BorderSize = 1;
+            btnSetupManual.FlatAppearance.BorderColor = theme.Border;
+            btnSetupManual.BackColor = theme.Btn;
+            btnSetupManual.ForeColor = theme.Text;
+            btnSetupManual.Font = fUi;
+            dlgSetup.Controls.Add(btnSetupManual);
+
+            btnSetupExit = new Button();
+            btnSetupExit.Text = "退出";
+            btnSetupExit.Location = new Point(314, 216);
+            btnSetupExit.Size = new Size(100, 36);
+            btnSetupExit.FlatStyle = FlatStyle.Flat;
+            btnSetupExit.FlatAppearance.BorderSize = 1;
+            btnSetupExit.FlatAppearance.BorderColor = theme.Border;
+            btnSetupExit.BackColor = theme.Btn;
+            btnSetupExit.ForeColor = theme.Text;
+            btnSetupExit.Font = fUi;
+            dlgSetup.Controls.Add(btnSetupExit);
+
+            btnSetupGo.Click += delegate { RunSetup(); };
+            btnSetupManual.Click += delegate
+            {
+                try { Process.Start(PT_PAGE); } catch { }
+                lblSetupBody.Text = "已打开官方下载页。解压后把 adb.exe、fastboot.exe、\n"
+                    + "AdbWinApi.dll、AdbWinUsbApi.dll 放进：\n"
+                    + Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin")
+                    + "\n然后点左边的「重新检测」。";
+                btnSetupGo.Text = "重新检测";
+                btnSetupGo.Enabled = true;
+            };
+            btnSetupExit.Click += delegate { dlgSetup.Close(); };
+
+            dlgSetup.Show(form);
+        }
+
+        private static void RunSetup()
+        {
+            if (setupBusy) { return; }
+            ResolveTools();
+            if (!toolDir.StartsWith("("))
+            {
+                FinishSetup("已找到 adb：" + toolDir);
+                return;
+            }
+            setupBusy = true;
+            btnSetupGo.Enabled = false;
+            btnSetupManual.Enabled = false;
+            pbSetup.Visible = true;
+            pbSetup.Style = ProgressBarStyle.Continuous;
+            pbSetup.Value = 0;
+            lblSetupPct.Text = "正在连接 Google…";
+            Thread t = new Thread(new ThreadStart(delegate { DownloadPlatformTools(); }));
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private static void DownloadPlatformTools()
+        {
+            string zip = Path.Combine(Path.GetTempPath(), "androidtool-pt.zip");
+            string dir = Path.Combine(Path.GetTempPath(), "androidtool-pt");
+            List<string> tried = new List<string>();
+            string lastError = null;
+
+            try
+            {
+                bool ok = false;
+                List<string[]> sources = new List<string[]>();
+                if (customPtSource != null && customPtSource.Trim().Length > 0)
+                {
+                    sources.Add(new string[] { "自定义", customPtSource.Trim() });
+                }
+                foreach (string[] s in PT_SOURCES) { sources.Add(s); }
+
+                foreach (string[] src in sources)
+                {
+                    string name = src[0], url = src[1];
+                    tried.Add(name);
+                    try
+                    {
+                        try { if (File.Exists(zip)) { File.Delete(zip); } } catch { }
+                        SetupProgress(0, "正在连接 " + name + " …");
+                        DownloadTo(url, zip, name);
+                        ValidateZip(zip);
+                        lastPtSource = name;
+                        ok = true;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastError = name + "：" + ex.Message;
+                    }
+                }
+                if (!ok) { throw new Exception(lastError ?? "所有镜像源都失败了"); }
+
+                SetupProgress(100, "解压中…");
+                if (Directory.Exists(dir)) { Directory.Delete(dir, true); }
+                ZipFile.ExtractToDirectory(zip, dir);
+
+                string inner = FindAdbFolder(dir);
+                if (inner == null) { throw new Exception("压缩包里没有找到 adb.exe"); }
+                if (!File.Exists(Path.Combine(inner, "fastboot.exe"))) { throw new Exception("压缩包里缺 fastboot.exe"); }
+
+                string binDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin");
+                Directory.CreateDirectory(binDir);
+                foreach (string f in Directory.GetFiles(inner))
+                {
+                    File.Copy(f, Path.Combine(binDir, Path.GetFileName(f)), true);
+                }
+
+                try { File.Delete(zip); } catch { }
+                try { Directory.Delete(dir, true); } catch { }
+                SetupFinished(true, null);
+            }
+            catch (Exception ex)
+            {
+                SetupFinished(false, ex.Message + "\n（已尝试：" + string.Join(" / ", tried.ToArray()) + "）");
+            }
+        }
+
+        // 校验：必须是真的 zip、体积合理、里面确实有 adb.exe
+        private static void ValidateZip(string path)
+        {
+            FileInfo fi = new FileInfo(path);
+            if (!fi.Exists || fi.Length < 1048576) { throw new Exception("文件大小异常（" + (fi.Exists ? (fi.Length / 1024) + " KB" : "未下载") + "）"); }
+            byte[] head = new byte[2];
+            using (FileStream fs = File.OpenRead(path)) { fs.Read(head, 0, 2); }
+            if (head[0] != 0x50 || head[1] != 0x4B) { throw new Exception("不是有效的 zip（可能被网络劫持或返回了网页）"); }
+            using (ZipArchive za = ZipFile.OpenRead(path))
+            {
+                bool hasAdb = false;
+                foreach (ZipArchiveEntry e in za.Entries)
+                {
+                    if (e.FullName.EndsWith("adb.exe", StringComparison.OrdinalIgnoreCase)) { hasAdb = true; break; }
+                }
+                if (!hasAdb) { throw new Exception("压缩包里没有 adb.exe"); }
+            }
+        }
+
+        private static string FindAdbFolder(string root)
+        {
+            if (File.Exists(Path.Combine(root, "adb.exe"))) { return root; }
+            try
+            {
+                foreach (string d in Directory.GetDirectories(root))
+                {
+                    if (File.Exists(Path.Combine(d, "adb.exe"))) { return d; }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static void DownloadTo(string url, string dest, string sourceName)
+        {
+            WebRequest req = WebRequest.Create(url);
+            req.Timeout = 60000;
+            try { ((HttpWebRequest)req).ReadWriteTimeout = 180000; } catch { }
+            if (proxyUrl != null && proxyUrl.Trim().Length > 0) { req.Proxy = new WebProxy(proxyUrl.Trim()); }
+            else { req.Proxy = null; }   // 显式直连，避免自动代理探测拖慢速度
+            using (WebResponse resp = req.GetResponse())
+            {
+                long total = resp.ContentLength;
+                using (Stream s = resp.GetResponseStream())
+                using (FileStream fs = new FileStream(dest, FileMode.Create, FileAccess.Write))
+                {
+                    byte[] buf = new byte[65536];
+                    long got = 0;
+                    int n;
+                    int lastPct = -1;
+                    while ((n = s.Read(buf, 0, buf.Length)) > 0)
+                    {
+                        fs.Write(buf, 0, n);
+                        got += n;
+                        int pct = total > 0 ? (int)(got * 100 / total) : -1;
+                        if (pct != lastPct)
+                        {
+                            lastPct = pct;
+                            string label = pct < 0
+                                ? string.Format("下载中  {0:N1} MB   ·  {1}", got / 1048576.0, sourceName)
+                                : string.Format("下载中 {0}%  {1:N1} / {2:N1} MB   ·  {3}", pct, got / 1048576.0, total / 1048576.0, sourceName);
+                            SetupProgress(pct, label);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void SetupProgress(int pct, string text)
+        {
+            if (dlgSetup == null || dlgSetup.IsDisposed) { return; }
+            try
+            {
+                dlgSetup.BeginInvoke(new Action(delegate
+                {
+                    if (pbSetup == null) { return; }
+                    if (pct >= 0) { pbSetup.Value = Math.Max(0, Math.Min(100, pct)); }
+                    lblSetupPct.Text = text;
+                }));
+            }
+            catch { }
+        }
+
+        private static void SetupFinished(bool ok, string error)
+        {
+            if (dlgSetup == null || dlgSetup.IsDisposed) { return; }
+            try
+            {
+                dlgSetup.BeginInvoke(new Action(delegate
+                {
+                    setupBusy = false;
+                    if (ok)
+                    {
+                        ResolveTools();
+                        FinishSetup("platform-tools 已就绪（下载源：" + lastPtSource + "）：" + toolDir);
+                        return;
+                    }
+                    pbSetup.Visible = false;
+                    lblSetupPct.Text = "";
+                    lblSetupBody.Text = "下载失败：" + error + "\n\n"
+                        + "可以点「重试」，或者点「手动下载」自己装到 bin\\ 里。\n"
+                        + "需要走代理的话，在 config.ini 里加一行：proxy=http://127.0.0.1:7897";
+                    lblSetupTitle.Text = "下载失败";
+                    lblSetupTitle.ForeColor = theme.Err;
+                    btnSetupGo.Text = "重试";
+                    btnSetupGo.Enabled = true;
+                    btnSetupManual.Enabled = true;
+                }));
+            }
+            catch { }
+        }
+
+        private static void FinishSetup(string message)
+        {
+            setupBusy = false;
+            AddOut(message, Role.Ok);
+            AddOut("现在可以直接输入命令了。", Role.Dim);
+            if (lblPath != null) { lblPath.Text = "组件目录：" + toolDir; }
+            if (dlgSetup != null && !dlgSetup.IsDisposed) { dlgSetup.Close(); }
+            RefreshStatusAsync();
         }
 
         // ================================================================

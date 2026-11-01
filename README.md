@@ -1,13 +1,14 @@
 # 安卓调试台 · AndroidTool
 
 Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体、可换背景配色，
-编译出来就是一个 44 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
+编译出来就是一个 52 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
 
 ![主界面](docs/main.png)
 
 ## 特性
 
 - **左侧快捷命令**：检测设备、版本信息、设备属性、重启到 Bootloader、重启系统、fastboot 设备、fastboot 重启
+- **首次启动自动装依赖**：检测到没有 adb 时，自动从镜像/官方源下载 platform-tools 并解压到 `bin\`
 - **命令控制台**：底部按模式输入（`adb shell` / `adb` / `fastboot`），以 adb / fastboot 开头的命令按原样执行，↑↓ 翻历史
 - **输出分色**：stdout 正文色、stderr 红色、结束时打印退出码（0 绿 / 非 0 红），可清空、可存日志
 - **主题**：8 个预设背景色 + 自定义取色器，按背景亮度自动推导整套配色，浅色底不会出现浅色字
@@ -17,13 +18,35 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体�
 
 ## 快速开始
 
-1. 到 [Releases](../../releases) 下载 `AndroidTool-v1.0.0.zip` 并解压
-2. 下载 [Android platform-tools](https://developer.android.com/tools/releases/platform-tools)，把
-   `adb.exe`、`fastboot.exe`、`AdbWinApi.dll`、`AdbWinUsbApi.dll` 放进 `bin\`
-3. 双击 `AndroidTool.exe`
+1. 到 [Releases](../../releases) 下载 `AndroidTool-v1.1.0.zip` 并解压
+2. 双击 `AndroidTool.exe`
+3. 首次启动会提示缺少 **Android platform-tools**，点「立即下载」即可，程序自动下载并解压到 `bin\`
+
+![首次启动](docs/setup.png)
+
+不想让程序联网就点「手动下载」跳转官方页面，把 `adb.exe`、`fastboot.exe`、
+`AdbWinApi.dll`、`AdbWinUsbApi.dll` 放进 `bin\`，再点「重新检测」。
 
 组件查找顺序：`exe 同级 bin\` → `上级 bin\` → `exe 所在目录` → `C:\platform-tools` → `PATH`。
 整个文件夹可以整体挪走，只要 `bin\` 跟着走。
+
+### 下载源
+
+程序不打包 platform-tools（分发受 Android SDK 许可限制），改为首次运行时按顺序尝试：
+
+| 顺序 | 源 | 说明 |
+|---|---|---|
+| 1 | 腾讯云镜像 `mirrors.cloud.tencent.com/AndroidSDK` | 与官方文件 SHA256 一致，国内通常最快 |
+| 2 | Google 官方 `dl.google.com/android/repository` | 原始来源 |
+| 3 | Google CDN `redirector.gvt1.com` | 官方备用线路 |
+
+任一源失败自动换下一个。下载后会校验：必须是有效 zip、体积合理、压缩包里确实有 `adb.exe`。
+想指定自己的镜像或走代理，在 `config.ini` 里加：
+
+```ini
+pt_source=https://your-mirror/platform-tools-latest-windows.zip
+proxy=http://127.0.0.1:7897
+```
 
 ## 字体
 
@@ -93,8 +116,8 @@ powershell -ExecutionPolicy Bypass -File scripts\hackios-boot.ps1 -Uefi <uefi.im
 
 ## 第三方组件
 
-代码本身只用到 .NET Framework，不含任何第三方二进制。开发与发布过程中用到的开源 / 免费组件及其许可，
-见 [THIRD-PARTY.md](THIRD-PARTY.md)。
+代码本身只用到 .NET Framework，不含任何第三方二进制。platform-tools 由用户在首次启动时
+从 Google 官方（或与官方同哈希的镜像）下载到本机，本仓库不包含、不分发。详见 [THIRD-PARTY.md](THIRD-PARTY.md)。
 
 ## 许可
 

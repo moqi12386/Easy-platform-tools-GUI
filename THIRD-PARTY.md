@@ -13,7 +13,10 @@
 
 | 组件 | 用途 | 许可 | 是否随仓库分发 |
 |---|---|---|---|
-| [Android platform-tools](https://developer.android.com/tools/releases/platform-tools)（adb / fastboot） | 与 Android 设备通信 | Android SDK 许可协议 / Apache-2.0 | 否，需自行下载 |
+| [Android platform-tools](https://developer.android.com/tools/releases/platform-tools)（adb / fastboot） | 与 Android 设备通信 | Android SDK 许可协议 / Apache-2.0 | 否。仅在用户点击「立即下载」后，由用户机器从 Google 官方地址（或与其 SHA256 一致的镜像）拉取到本地 `bin\`，本仓库不存储、不分发 |
+
+首次启动的下载顺序：腾讯云镜像 → Google 官方 → Google CDN。
+腾讯云镜像与官方文件的 SHA256 一致，仅作加速，二进制内容不变。
 
 ## 可选：字体
 

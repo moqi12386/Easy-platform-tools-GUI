@@ -25,6 +25,8 @@ $cscArgs = @(
     '/reference:System.dll'
     '/reference:System.Drawing.dll'
     '/reference:System.Windows.Forms.dll'
+    '/reference:System.IO.Compression.dll'
+    '/reference:System.IO.Compression.FileSystem.dll'
     (Join-Path $srcDir 'AndroidTool.cs')
 )
 
