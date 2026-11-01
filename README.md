@@ -1,13 +1,16 @@
 # 安卓调试台 · AndroidTool
 
 Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体、可换背景配色，
-编译出来就是一个 52 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
+编译出来就是一个 74 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
 
 ![主界面](docs/main.png)
 
 ## 特性
 
-- **左侧快捷命令**：检测设备、版本信息、设备属性、重启到 Bootloader、重启系统、fastboot 设备、fastboot 重启
+- **左侧快捷命令**：检测设备、版本信息、设备属性、重启到 Bootloader / Recovery / EDL、重启系统、fastboot 设备、fastboot 重启
+- **刷入镜像**：任选分区 + 任意 `.img`，二次确认后刷入，可选刷完重启
+- **线刷 ROM**：直接吃小米 fastboot 线刷包（`.tgz` / `.zip` / 已解压目录），自动解析 `flash_all.bat` 的刷写顺序
+- **备份基带**：把 modem / modemst1 / modemst2 / fsg / fsc 等分区导出成本地镜像，附 SHA256 与设备信息
 - **首次启动自动装依赖**：检测到没有 adb 时，自动从镜像/官方源下载 platform-tools 并解压到 `bin\`
 - **命令控制台**：底部按模式输入（`adb shell` / `adb` / `fastboot`），以 adb / fastboot 开头的命令按原样执行，↑↓ 翻历史
 - **输出分色**：stdout 正文色、stderr 红色、结束时打印退出码（0 绿 / 非 0 红），可清空、可存日志
@@ -47,6 +50,48 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体�
 pt_source=https://your-mirror/platform-tools-latest-windows.zip
 proxy=http://127.0.0.1:7897
 ```
+
+## 刷写与备份
+
+左侧「刷写与备份」一栏有三件工具，都是**破坏性操作，执行前会二次确认**。
+
+### 刷入镜像
+
+任选分区（内置 boot / recovery / dtbo / vbmeta / super / modem 等 40 个常用分区名，也可手填），
+挑一个 `.img` 刷入，可选刷完自动重启。
+
+![刷入镜像](docs/flashimg.png)
+
+### 线刷 ROM（小米 fastboot 包）
+
+直接选 `.tgz` / `.zip` 线刷包，或已解压的目录。程序会：
+
+1. 自动解压（用系统自带 `tar.exe`）
+2. 找到 `flash_all.bat`，**按它里面的顺序**解析出 `fastboot flash` / `erase` / `set_active` / `reboot`
+3. 列出全部操作供核对，再逐条执行
+
+没有 `flash_all.bat` 时退化为「把 `images\` 下每个 `.img` 刷到同名分区」。
+可勾选是否擦除 userdata、刷完是否重启。
+
+![线刷 ROM](docs/flashrom.png)
+
+### 备份基带
+
+勾选要备份的分区（默认 modem / modemst1 / modemst2 / fsg / fsc），导出到
+`backups\基带备份-时间戳\`，同时写一份 `备份说明.txt`，含设备型号、序列号、每个文件的大小与 SHA256。
+
+需要手机已 root（`adb shell su` 可用）。读取走
+`adb exec-out su -c "dd if=/dev/block/by-name/xxx bs=1M"`，不落临时文件，二进制安全。
+
+![备份基带](docs/backup.png)
+
+> 备份里含设备 NV / IMEI 等身份数据，能用来恢复**本机**，但不要外传。
+
+## 关于 EDL
+
+「重启到 EDL」先试 `adb reboot edl`，失败再试 `fastboot oem edl`。进入后手机黑屏无反应，
+设备管理器里出现 `Qualcomm HS-USB QDLoader 9008` 即为成功。
+多数机型进 EDL 需要已解锁 Bootloader 或厂商授权账号，失败时会如实报出来。
 
 ## 字体
 

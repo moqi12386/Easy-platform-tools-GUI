@@ -1,38 +1,45 @@
-# AndroidTool v1.1.0
+# AndroidTool v1.3.0 — 刷机功能补齐
 
-首个可用版本之后的功能更新：**首次启动自动安装 platform-tools**。
+从「命令台」升级成能干活的小工具：镜像刷写、线刷包、基带备份全部内置。
 
 ## 新增
 
-- **自动下载依赖**：启动时检测不到 adb，就弹窗询问，点「立即下载」后自动下载并解压到 `bin\`，
-  校验 zip 有效性、体积、包内是否真有 `adb.exe`，装完直接可用
-- **多源自动切换**：腾讯云镜像 → Google 官方 → Google CDN，逐个尝试，全失败才报错
-  （腾讯云镜像与官方文件 SHA256 一致，国内速度通常快一个数量级）
-- **自定义源与代理**：`config.ini` 支持 `pt_source=` 指定镜像、`proxy=` 指定 HTTP 代理
-- **TLS 1.2**：显式启用，避免 .NET Framework 默认协议在镜像站握手失败
+### 刷入镜像
+- 任选分区（内置 40 个常用分区名，也可手填）+ 任意 `.img`
+- 二次确认对话框列出分区、文件名、大小
+- 可选刷完自动重启
+
+### 线刷 ROM（小米 fastboot 包）
+- 直接选 `.tgz` / `.zip`，或已解压目录，自动用系统 `tar.exe` 解压
+- **按 `flash_all.bat` 里的原始顺序**解析 `fastboot flash` / `erase` / `set_active` / `reboot`
+- 执行前列出全部操作供核对；没有脚本时退化为按 `images\*.img` 同名分区刷
+- 可勾选擦除 userdata、刷完重启
+- 逐条执行并实时显示 `正在执行 5/42：flash xbl`，失败即停并报出具体命令
+
+### 备份基带
+- 默认备份 modem / modemst1 / modemst2 / fsg / fsc，另可勾 persist / bluetooth / dsp
+- 走 `adb exec-out su -c "dd ..."`，不落设备临时文件，二进制安全
+- 每个分区导出为 `.img`，附 SHA256 与设备型号/序列号，写入 `备份说明.txt`
+- 需要 root，没 root 会直接提示而不是静默失败
+
+### 重启到 Recovery / EDL
+- Recovery：`adb reboot recovery`
+- EDL：先 `adb reboot edl`，失败自动改试 `fastboot oem edl`，并说明 9008 端口特征
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `AndroidTool-v1.1.0.zip` | 解压即用，含 exe、启动 bat、说明 |
-| `AndroidTool.exe` | 单文件本体 |
+| `AndroidTool-v1.3.0.zip` | 解压即用 |
+| `AndroidTool.exe` | 单文件本体，74 KB |
 
-## 使用
+## 安全说明
 
-1. 解压，双击 `AndroidTool.exe`
-2. 首次启动点「立即下载」装 platform-tools（约 8 MB）
-3. 字体可选：MiSans / JetBrains Mono 放进 `assets\fonts\`，不放会回退微软雅黑
+刷写类操作全部带二次确认，且要先检测到 fastboot 设备才允许开始。
+线刷过程中断电/拔线有变砖风险，README 里有说明。
 
-## 命令行
-
-```bat
-AndroidTool.exe --version
-AndroidTool.exe --selftest
-AndroidTool.exe --run "adb devices -l"
-```
+备份文件含设备身份数据（NV/IMEI），只用于恢复本机，不要外传。
 
 ## 许可
 
-代码 MIT。platform-tools、MiSans、JetBrains Mono 遵循各自许可，**不随本仓库分发**，
-详见 [THIRD-PARTY.md](https://github.com/moqi12386/android-debug-console/blob/main/THIRD-PARTY.md)。
+代码 MIT。platform-tools、MiSans、JetBrains Mono 遵循各自许可，不随本仓库分发。

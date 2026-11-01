@@ -1,4 +1,4 @@
-// 安卓调试台 — adb / fastboot 图形化命令台
+﻿// 安卓调试台 — adb / fastboot 图形化命令台
 // 编译：powershell -ExecutionPolicy Bypass -File build.ps1
 // 依赖：.NET Framework 4.x（Windows 自带），无需 PowerShell 运行时。
 // 字体：assets\fonts\*.ttf（MiSans、JetBrains Mono），缺失时回退系统字体。
@@ -12,7 +12,9 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -26,7 +28,7 @@ namespace AndroidTool
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.1.0";
+        private const string AppVersion = "1.3.0";
         private const string AppRepo = "https://github.com/moqi12386/android-debug-console";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -249,6 +251,7 @@ namespace AndroidTool
         private static TextBox txtInput;
         private static Button btnRun, btnStop, btnClear, btnSave, btnSettings;
         private static readonly List<Button> menuButtons = new List<Button>();
+        private static readonly List<Label> sectionLabels = new List<Label>();
         private static Process proc;
         private static volatile bool running;
         private static readonly List<string> history = new List<string>();
@@ -531,9 +534,28 @@ namespace AndroidTool
             NewMenuButton(flowMenu, "版本信息", "adb version");
             NewMenuButton(flowMenu, "设备属性", "adb shell getprop ro.product.device");
             NewMenuButton(flowMenu, "重启到 Bootloader", "adb reboot bootloader");
+            NewMenuButton(flowMenu, "重启到 Recovery", "adb reboot recovery");
+            NewMenuButton(flowMenu, "重启到 EDL", "@edl");
             NewMenuButton(flowMenu, "重启系统", "adb reboot");
             NewMenuButton(flowMenu, "fastboot 设备", "fastboot devices");
             NewMenuButton(flowMenu, "fastboot 重启", "fastboot reboot");
+
+            NewSectionLabel(flowMenu, "刷写与备份");
+            NewMenuButton(flowMenu, "刷入镜像…", "@flashimg");
+            NewMenuButton(flowMenu, "线刷 ROM…", "@rom");
+            NewMenuButton(flowMenu, "备份基带…", "@backup");
+        }
+
+        private static void NewSectionLabel(FlowLayoutPanel host, string text)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.Size = new Size(160, 24);
+            l.Margin = new Padding(2, 10, 0, 2);
+            l.Font = fSmall;
+            l.TextAlign = ContentAlignment.BottomLeft;
+            host.Controls.Add(l);
+            sectionLabels.Add(l);
         }
 
         private static void BuildMain()
@@ -742,7 +764,15 @@ namespace AndroidTool
             b.TextAlign = ContentAlignment.MiddleLeft;
             b.Padding = new Padding(8, 0, 0, 0);
             b.Tag = cmd;
-            b.Click += delegate(object s, EventArgs e) { Execute(((Button)s).Tag.ToString()); };
+            b.Click += delegate(object s, EventArgs e)
+            {
+                string tag = ((Button)s).Tag.ToString();
+                if (tag == "@edl") { ExecuteEdl(); }
+                else if (tag == "@flashimg") { OpenFlashImage(); }
+                else if (tag == "@rom") { OpenFlashRom(); }
+                else if (tag == "@backup") { OpenBackup(); }
+                else { Execute(tag); }
+            };
             host.Controls.Add(b);
             menuButtons.Add(b);
         }
@@ -1298,6 +1328,8 @@ namespace AndroidTool
                 b.ForeColor = t.Text;
                 b.FlatAppearance.BorderColor = t.Border;
             }
+
+            foreach (Label l in sectionLabels) { l.ForeColor = t.Dim; }
         }
 
         private static Color RoleColor(Role r)
@@ -1620,6 +1652,891 @@ namespace AndroidTool
                 }
             }
             if (cur.Count > 0) { emit(DecodeLine(cur)); }
+        }
+
+        // ================================================================
+        //  工具窗体辅助
+        // ================================================================
+        private static Form NewToolDialog(string title, Size client)
+        {
+            Form f = new Form();
+            f.Text = title;
+            f.FormBorderStyle = FormBorderStyle.FixedDialog;
+            f.MaximizeBox = false;
+            f.MinimizeBox = false;
+            f.ShowInTaskbar = false;
+            f.StartPosition = FormStartPosition.CenterParent;
+            f.AutoScaleMode = AutoScaleMode.None;
+            f.ClientSize = client;
+            f.Font = fUi;
+            f.BackColor = theme.Panel;
+            try { f.Icon = form.Icon; } catch { }
+            return f;
+        }
+
+        private static Label DialogLabel(Form f, string text, int x, int y, int w)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.Location = new Point(x, y);
+            l.Size = new Size(w, 22);
+            l.ForeColor = theme.Text;
+            f.Controls.Add(l);
+            return l;
+        }
+
+        private static Button DialogButton(Form f, string text, int x, int y, int w, int h, bool primary)
+        {
+            Button b = new Button();
+            b.Text = text;
+            b.Location = new Point(x, y);
+            b.Size = new Size(w, h);
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = primary ? 0 : 1;
+            b.FlatAppearance.BorderColor = theme.Border;
+            b.BackColor = primary ? theme.RunBtn : theme.Btn;
+            b.ForeColor = primary ? Color.White : theme.Text;
+            b.Font = fUi;
+            f.Controls.Add(b);
+            return b;
+        }
+
+        private static TextBox DialogText(Form f, int x, int y, int w, string text)
+        {
+            TextBox t = new TextBox();
+            t.Location = new Point(x, y);
+            t.Size = new Size(w, 26);
+            t.Text = text;
+            t.Font = fUi;
+            t.BackColor = theme.EditBg;
+            t.ForeColor = theme.Text;
+            t.BorderStyle = BorderStyle.FixedSingle;
+            f.Controls.Add(t);
+            return t;
+        }
+
+        private static CheckBox DialogCheck(Form f, string text, int x, int y, bool value)
+        {
+            CheckBox c = new CheckBox();
+            c.Text = text;
+            c.Location = new Point(x, y);
+            c.AutoSize = true;
+            c.Checked = value;
+            c.ForeColor = theme.Text;
+            c.Font = fUi;
+            f.Controls.Add(c);
+            return c;
+        }
+
+        // 二进制输出落盘（adb exec-out dd）
+        private static bool RunBinary(string exe, string[] argv, string dest, out string message)
+        {
+            message = "";
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo(exe);
+                psi.Arguments = JoinQuoted(argv);
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.CreateNoWindow = true;
+
+                using (Process p = new Process())
+                {
+                    p.StartInfo = psi;
+                    p.Start();
+                    Task<string> err = p.StandardError.ReadToEndAsync();
+                    using (Stream s = p.StandardOutput.BaseStream)
+                    using (FileStream fs = new FileStream(dest, FileMode.Create, FileAccess.Write))
+                    {
+                        byte[] buf = new byte[65536];
+                        int n;
+                        while ((n = s.Read(buf, 0, buf.Length)) > 0) { fs.Write(buf, 0, n); }
+                    }
+                    if (!p.WaitForExit(600000)) { try { p.Kill(); } catch { } }
+                    string e = "";
+                    try { e = err.Result; } catch { }
+                    message = (e ?? "").Trim();
+                    return p.ExitCode == 0 && File.Exists(dest) && new FileInfo(dest).Length > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return false;
+            }
+        }
+
+        // 同步跑一条命令，返回是否成功
+        private static bool RunTask(string exe, string[] argv, out string output)
+        {
+            output = "";
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo(exe);
+                psi.Arguments = JoinQuoted(argv);
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.CreateNoWindow = true;
+                psi.StandardOutputEncoding = Encoding.UTF8;
+                psi.StandardErrorEncoding = Encoding.UTF8;
+
+                using (Process p = new Process())
+                {
+                    p.StartInfo = psi;
+                    p.Start();
+                    Task<string> err = p.StandardError.ReadToEndAsync();
+                    string o = p.StandardOutput.ReadToEnd();
+                    if (!p.WaitForExit(180000)) { try { p.Kill(); } catch { } }
+                    string e = "";
+                    try { e = err.Result; } catch { }
+                    output = (o + e).TrimEnd();
+                    return p.ExitCode == 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                output = ex.Message;
+                return false;
+            }
+        }
+
+        private static bool HasFastbootDevice()
+        {
+            string o;
+            if (!RunTask(fastbootPath, new string[] { "devices" }, out o)) { return false; }
+            return o.IndexOf("\tfastboot", StringComparison.OrdinalIgnoreCase) >= 0
+                || o.IndexOf(" fastboot", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        // ================================================================
+        //  EDL
+        // ================================================================
+        private static void ExecuteEdl()
+        {
+            if (running) { AddOut("（已有命令在运行，先停止）", Role.Dim); return; }
+            AddOut("> 重启到 EDL（9008 深刷模式）", Role.Cmd);
+
+            string o;
+            bool ok = RunTask(adbPath, new string[] { "reboot", "edl" }, out o);
+            string text = o ?? "";
+            string low = text.ToLowerInvariant();
+            if (!ok || low.Contains("error") || low.Contains("not found") || low.Contains("unknown"))
+            {
+                AddOut("adb 通道不可用，改用 fastboot oem edl", Role.Dim);
+                ok = RunTask(fastbootPath, new string[] { "oem", "edl" }, out o);
+                text = o ?? "";
+            }
+            if (text.Trim().Length > 0) { AddOut(text.TrimEnd(), ok ? Role.Text : Role.Err); }
+            AddOut(ok
+                ? "已请求进入 EDL：手机可能黑屏无反应，设备管理器里应出现 Qualcomm HS-USB QDLoader 9008"
+                : "进入 EDL 失败：多数机型需要已解锁 Bootloader，或厂商授权账号",
+                ok ? Role.Ok : Role.Err);
+            RefreshStatusAsync();
+        }
+
+        // ================================================================
+        //  刷入镜像
+        // ================================================================
+        private static readonly string[] PARTITIONS = new string[]
+        {
+            "boot", "init_boot", "recovery", "dtbo", "vbmeta", "vbmeta_system", "vbmeta_vendor",
+            "super", "system", "vendor", "product", "odm", "system_ext", "cust",
+            "modem", "dsp", "bluetooth", "persist", "misc", "logo", "cache", "userdata", "metadata",
+            "xbl", "xbl_config", "abl", "aop", "hyp", "tz", "keymaster", "devcfg", "featenabler",
+            "qupfw", "uefisecapp", "cmnlib", "cmnlib64", "imagefv", "multiimgoem", "shrm", "cpucp"
+        };
+
+        private static Form dlgFlashImage;
+        private static ComboBox cbPartition;
+        private static TextBox txtImgPath;
+        private static Label lblFlashStatus;
+        private static CheckBox chkFlashReboot;
+        private static Button btnFlashGo;
+
+        private static void OpenFlashImage()
+        {
+            if (dlgFlashImage != null && !dlgFlashImage.IsDisposed) { dlgFlashImage.Activate(); return; }
+
+            dlgFlashImage = NewToolDialog("刷入镜像", new Size(540, 276));
+
+            DialogLabel(dlgFlashImage, "分区", 20, 20, 60);
+            cbPartition = new ComboBox();
+            cbPartition.DropDownStyle = ComboBoxStyle.DropDown;
+            cbPartition.Location = new Point(90, 16);
+            cbPartition.Size = new Size(430, 26);
+            cbPartition.FlatStyle = FlatStyle.Flat;
+            cbPartition.BackColor = theme.EditBg;
+            cbPartition.ForeColor = theme.Text;
+            cbPartition.Font = fUi;
+            foreach (string p in PARTITIONS) { cbPartition.Items.Add(p); }
+            cbPartition.Text = "boot";
+            dlgFlashImage.Controls.Add(cbPartition);
+
+            DialogLabel(dlgFlashImage, "镜像", 20, 60, 60);
+            txtImgPath = DialogText(dlgFlashImage, 90, 56, 290, "");
+            Button btnBrowse = DialogButton(dlgFlashImage, "浏览…", 390, 54, 130, 28, false);
+            btnBrowse.Click += delegate
+            {
+                OpenFileDialog ofd = new OpenFileDialog();
+                ofd.Filter = "镜像文件 (*.img)|*.img|所有文件 (*.*)|*.*";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    txtImgPath.Text = ofd.FileName;
+                    lblFlashStatus.Text = string.Format("{0}　{1:N1} MB", Path.GetFileName(ofd.FileName), new FileInfo(ofd.FileName).Length / 1048576.0);
+                    lblFlashStatus.ForeColor = theme.Dim;
+                }
+            };
+            txtImgPath.TextChanged += delegate
+            {
+                string p = txtImgPath.Text.Trim();
+                if (File.Exists(p))
+                {
+                    lblFlashStatus.Text = string.Format("{0}　{1:N1} MB", Path.GetFileName(p), new FileInfo(p).Length / 1048576.0);
+                    lblFlashStatus.ForeColor = theme.Dim;
+                }
+            };
+
+            lblFlashStatus = new Label();
+            lblFlashStatus.Location = new Point(20, 96);
+            lblFlashStatus.Size = new Size(500, 22);
+            lblFlashStatus.ForeColor = theme.Dim;
+            lblFlashStatus.Font = fSmall;
+            dlgFlashImage.Controls.Add(lblFlashStatus);
+
+            chkFlashReboot = DialogCheck(dlgFlashImage, "刷完后重启到系统", 20, 130, true);
+
+            Label tip = new Label();
+            tip.Text = "提示：分区写错会导致无法开机。线刷包请用「线刷 ROM…」，不用逐个刷。";
+            tip.Location = new Point(20, 166);
+            tip.Size = new Size(500, 22);
+            tip.ForeColor = theme.Dim;
+            tip.Font = fSmall;
+            dlgFlashImage.Controls.Add(tip);
+
+            btnFlashGo = DialogButton(dlgFlashImage, "刷入", 20, 206, 140, 38, true);
+            btnFlashGo.Click += delegate { DoFlashImage(); };
+            Button btnClose = DialogButton(dlgFlashImage, "关闭", 172, 206, 100, 38, false);
+            btnClose.Click += delegate { dlgFlashImage.Close(); };
+
+            dlgFlashImage.Show(form);
+        }
+
+        private static void DoFlashImage()
+        {
+            string part = cbPartition.Text.Trim();
+            string img = txtImgPath.Text.Trim();
+
+            if (part.Length == 0) { lblFlashStatus.Text = "请填写分区名"; lblFlashStatus.ForeColor = theme.Err; return; }
+            if (!File.Exists(img)) { lblFlashStatus.Text = "找不到镜像文件"; lblFlashStatus.ForeColor = theme.Err; return; }
+            if (!HasFastbootDevice())
+            {
+                lblFlashStatus.Text = "没有检测到 fastboot 设备，请先进入 Bootloader";
+                lblFlashStatus.ForeColor = theme.Err;
+                return;
+            }
+
+            long size = new FileInfo(img).Length;
+            string msg = "即将执行：\n\nfastboot flash " + part + " " + Path.GetFileName(img)
+                + "\n\n大小：" + string.Format("{0:N1} MB", size / 1048576.0)
+                + "\n\n写错分区可能导致无法开机，确定继续？";
+            if (MessageBox.Show(dlgFlashImage, msg, "确认刷入", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+            {
+                return;
+            }
+
+            btnFlashGo.Enabled = false;
+            lblFlashStatus.Text = "正在刷入…";
+            lblFlashStatus.ForeColor = theme.Text;
+            AddOut("> fastboot flash " + part + " " + img, Role.Cmd);
+
+            Thread t = new Thread(new ThreadStart(delegate
+            {
+                string outp;
+                bool ok = RunTask(fastbootPath, new string[] { "flash", part, img }, out outp);
+                if (ok && chkFlashReboot.Checked)
+                {
+                    string o2;
+                    RunTask(fastbootPath, new string[] { "reboot" }, out o2);
+                }
+                string result = outp;
+                try
+                {
+                    dlgFlashImage.BeginInvoke(new Action(delegate
+                    {
+                        if (result.Length > 0) { AddOut(result, ok ? Role.Text : Role.Err); }
+                        AddOut(ok ? ("刷入完成：" + part) : ("刷入失败：" + part), ok ? Role.Ok : Role.Err);
+                        if (lblFlashStatus != null)
+                        {
+                            lblFlashStatus.Text = ok ? "完成" : "失败";
+                            lblFlashStatus.ForeColor = ok ? theme.Ok : theme.Err;
+                        }
+                        if (btnFlashGo != null) { btnFlashGo.Enabled = true; }
+                        RefreshStatusAsync();
+                    }));
+                }
+                catch { }
+            }));
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        // ================================================================
+        //  线刷 ROM（小米 fastboot 包）
+        // ================================================================
+        private static Form dlgFlashRom;
+        private static TextBox txtRomPath;
+        private static ListBox lstRomTasks;
+        private static Label lblRomInfo, lblRomStatus;
+        private static CheckBox chkEraseData, chkRomReboot;
+        private static Button btnRomGo;
+        private static List<string[]> romTasks = new List<string[]>();
+
+        private static void OpenFlashRom()
+        {
+            if (dlgFlashRom != null && !dlgFlashRom.IsDisposed) { dlgFlashRom.Activate(); return; }
+
+            dlgFlashRom = NewToolDialog("线刷 ROM", new Size(620, 470));
+
+            DialogLabel(dlgFlashRom, "刷机包", 20, 20, 70);
+            txtRomPath = DialogText(dlgFlashRom, 90, 16, 360, "");
+            Button btnBrowse = DialogButton(dlgFlashRom, "选择…", 458, 14, 140, 28, false);
+            btnBrowse.Click += delegate { BrowseRom(); };
+            Button btnFolder = DialogButton(dlgFlashRom, "选目录", 458, 48, 140, 28, false);
+            btnFolder.Click += delegate
+            {
+                FolderBrowserDialog fbd = new FolderBrowserDialog();
+                fbd.Description = "选择已解压的线刷包目录（含 images 子目录）";
+                if (fbd.ShowDialog() == DialogResult.OK) { txtRomPath.Text = fbd.SelectedPath; ParseRom(); }
+            };
+            txtRomPath.TextChanged += delegate { ParseRom(); };
+
+            lblRomInfo = new Label();
+            lblRomInfo.Location = new Point(20, 82);
+            lblRomInfo.Size = new Size(578, 22);
+            lblRomInfo.ForeColor = theme.Dim;
+            lblRomInfo.Font = fSmall;
+            dlgFlashRom.Controls.Add(lblRomInfo);
+
+            lstRomTasks = new ListBox();
+            lstRomTasks.Location = new Point(20, 108);
+            lstRomTasks.Size = new Size(578, 200);
+            lstRomTasks.Font = fSmall;
+            lstRomTasks.BackColor = theme.Output;
+            lstRomTasks.ForeColor = theme.Text;
+            lstRomTasks.BorderStyle = BorderStyle.FixedSingle;
+            lstRomTasks.HorizontalScrollbar = true;
+            dlgFlashRom.Controls.Add(lstRomTasks);
+
+            chkEraseData = DialogCheck(dlgFlashRom, "擦除 userdata（清空全部数据）", 20, 318, true);
+            chkRomReboot = DialogCheck(dlgFlashRom, "刷完自动重启", 300, 318, true);
+
+            lblRomStatus = new Label();
+            lblRomStatus.Location = new Point(20, 348);
+            lblRomStatus.Size = new Size(578, 22);
+            lblRomStatus.ForeColor = theme.Dim;
+            lblRomStatus.Font = fSmall;
+            dlgFlashRom.Controls.Add(lblRomStatus);
+
+            btnRomGo = DialogButton(dlgFlashRom, "开始线刷", 20, 388, 160, 40, true);
+            btnRomGo.Click += delegate { DoFlashRom(); };
+            Button btnClose = DialogButton(dlgFlashRom, "关闭", 192, 388, 100, 40, false);
+            btnClose.Click += delegate { dlgFlashRom.Close(); };
+
+            dlgFlashRom.Show(form);
+        }
+
+        private static void BrowseRom()
+        {
+            OpenFileDialog ofd = new OpenFileDialog();
+            ofd.Filter = "线刷包 (*.tgz;*.tar;*.gz;*.zip)|*.tgz;*.tar;*.gz;*.zip|所有文件 (*.*)|*.*";
+            if (ofd.ShowDialog() == DialogResult.OK)
+            {
+                txtRomPath.Text = ofd.FileName;
+                ParseRom();
+            }
+        }
+
+        private static void ParseRom()
+        {
+            romTasks = new List<string[]>();
+            if (lstRomTasks == null) { return; }
+            lstRomTasks.Items.Clear();
+            string path = txtRomPath.Text.Trim();
+
+            if (path.Length == 0 || (!Directory.Exists(path) && !File.Exists(path)))
+            {
+                lblRomInfo.Text = "选一个线刷包（.tgz / .zip）或已解压的目录";
+                lblRomInfo.ForeColor = theme.Dim;
+                return;
+            }
+
+            try
+            {
+                string dir = path;
+                if (!Directory.Exists(path))
+                {
+                    lblRomInfo.Text = "正在解压…";
+                    Application.DoEvents();
+                    dir = ExtractRom(path);
+                }
+
+                string imagesDir = Path.Combine(dir, "images");
+                if (!Directory.Exists(imagesDir)) { imagesDir = dir; }
+
+                string bat = null;
+                foreach (string f in Directory.GetFiles(dir, "*.bat")) { if (Path.GetFileName(f).StartsWith("flash_all")) { bat = f; break; } }
+
+                if (bat != null) { romTasks = ParseFlashScript(bat, dir); }
+                else
+                {
+                    foreach (string img in Directory.GetFiles(imagesDir, "*.img"))
+                    {
+                        romTasks.Add(new string[] { "flash", Path.GetFileNameWithoutExtension(img), img });
+                    }
+                }
+
+                foreach (string[] t in romTasks)
+                {
+                    string name = t[0] == "flash" ? ("flash  " + t[1]) : (t[0] + "  " + t[1]);
+                    string file = t[0] == "flash" ? Path.GetFileName(t[2]) : "";
+                    lstRomTasks.Items.Add(name.PadRight(28) + file);
+                }
+
+                lblRomInfo.Text = string.Format("{0}　·　共 {1} 个操作　·　脚本：{2}",
+                    Path.GetFileName(dir.TrimEnd('\\')) == "" ? dir : Path.GetFileName(dir.TrimEnd('\\')),
+                    romTasks.Count,
+                    bat == null ? "按 images 目录推断" : Path.GetFileName(bat));
+                lblRomInfo.ForeColor = theme.Ok;
+            }
+            catch (Exception ex)
+            {
+                romTasks = new List<string[]>();
+                lblRomInfo.Text = "解析失败：" + ex.Message;
+                lblRomInfo.ForeColor = theme.Err;
+            }
+        }
+
+        private static string ExtractRom(string archive)
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "androidtool-rom");
+            if (Directory.Exists(dir)) { Directory.Delete(dir, true); }
+            Directory.CreateDirectory(dir);
+
+            if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                ZipFile.ExtractToDirectory(archive, dir);
+            }
+            else
+            {
+                string tar = Path.Combine(Environment.SystemDirectory, "tar.exe");
+                string o;
+                if (!File.Exists(tar)) { throw new Exception("系统没有 tar.exe，无法解压 .tgz，请先手动解压"); }
+                bool ok = RunTask(tar, new string[] { "-xf", archive, "-C", dir }, out o);
+                if (!ok) { throw new Exception("解压失败：" + o); }
+            }
+
+            // 包里通常还有一层目录
+            string[] subs = Directory.GetDirectories(dir);
+            if (subs.Length == 1 && !Directory.Exists(Path.Combine(dir, "images")))
+            {
+                return subs[0];
+            }
+            return dir;
+        }
+
+        private static List<string[]> ParseFlashScript(string bat, string root)
+        {
+            List<string[]> tasks = new List<string[]>();
+            foreach (string raw in File.ReadAllLines(bat))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("::") || line.StartsWith("rem ", StringComparison.OrdinalIgnoreCase)) { continue; }
+                if (!line.StartsWith("fastboot", StringComparison.OrdinalIgnoreCase)) { continue; }
+
+                string rest = Regex.Replace(line, @"^fastboot\s+(%\*|\$\*)?\s*", "", RegexOptions.IgnoreCase).Trim();
+                string[] parts = rest.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 1) { continue; }
+
+                string cmd = parts[0].ToLowerInvariant();
+                if (cmd == "flash" && parts.Length >= 3)
+                {
+                    string file = parts[2].Trim('"');
+                    string full = Path.IsPathRooted(file) ? file : Path.Combine(root, file);
+                    if (!File.Exists(full)) { continue; }
+                    tasks.Add(new string[] { "flash", parts[1], full });
+                }
+                else if (cmd == "erase" && parts.Length >= 2)
+                {
+                    tasks.Add(new string[] { "erase", parts[1], "" });
+                }
+                else if (cmd == "set_active" && parts.Length >= 2)
+                {
+                    tasks.Add(new string[] { "set_active", parts[1], "" });
+                }
+                else if (cmd == "reboot")
+                {
+                    tasks.Add(new string[] { "reboot", "", "" });
+                }
+            }
+            return tasks;
+        }
+
+        private static void DoFlashRom()
+        {
+            if (romTasks == null || romTasks.Count == 0)
+            {
+                lblRomStatus.Text = "没有可执行的刷写操作，请先选择题机包";
+                lblRomStatus.ForeColor = theme.Err;
+                return;
+            }
+            if (!HasFastbootDevice())
+            {
+                lblRomStatus.Text = "没有检测到 fastboot 设备，请先进入 Bootloader";
+                lblRomStatus.ForeColor = theme.Err;
+                return;
+            }
+
+            int count = romTasks.Count;
+            string msg = "即将线刷 " + count + " 个操作" + (chkEraseData.Checked ? "，并擦除 userdata（数据全部丢失）" : "，保留 userdata")
+                + "。\n\n过程中断电或拔线可能变砖，请确保电量充足、全程别动数据线。\n\n确定开始？";
+            if (MessageBox.Show(dlgFlashRom, msg, "确认线刷", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+            {
+                return;
+            }
+
+            btnRomGo.Enabled = false;
+            AddOut("> 线刷开始，共 " + count + " 个操作", Role.Cmd);
+
+            bool erase = chkEraseData.Checked;
+            bool reboot = chkRomReboot.Checked;
+            List<string[]> tasks = new List<string[]>(romTasks);
+
+            Thread t = new Thread(new ThreadStart(delegate
+            {
+                int done = 0; int failed = 0; string lastError = "";
+                foreach (string[] task in tasks)
+                {
+                    string kind = task[0];
+                    string arg1 = task[1];
+                    string arg2 = task[2];
+
+                    if (kind == "erase" && arg1 == "userdata" && !erase) { done++; continue; }
+
+                    done++;
+                    int index = done;
+                    string label = kind == "flash" ? ("flash " + arg1) : (kind + " " + arg1);
+                    try
+                    {
+                        dlgFlashRom.BeginInvoke(new Action(delegate
+                        {
+                            lblRomStatus.Text = string.Format("正在执行 {0}/{1}：{2}", index, count, label);
+                            lblRomStatus.ForeColor = theme.Text;
+                        }));
+                    }
+                    catch { }
+
+                    string outp;
+                    bool ok;
+                    if (kind == "flash") { ok = RunTask(fastbootPath, new string[] { "flash", arg1, arg2 }, out outp); }
+                    else if (kind == "erase") { ok = RunTask(fastbootPath, new string[] { "erase", arg1 }, out outp); }
+                    else if (kind == "set_active") { ok = RunTask(fastbootPath, new string[] { "set_active", arg1 }, out outp); }
+                    else if (kind == "reboot") { RunTask(fastbootPath, new string[] { "reboot" }, out outp); ok = true; continue; }
+                    else { ok = true; outp = ""; }
+
+                    if (!ok)
+                    {
+                        failed++;
+                        lastError = label + "：" + outp;
+                        break;
+                    }
+                }
+
+                if (failed == 0 && reboot)
+                {
+                    string o2;
+                    RunTask(fastbootPath, new string[] { "reboot" }, out o2);
+                }
+
+                int okCount = done - failed;
+                bool success = failed == 0;
+                try
+                {
+                    dlgFlashRom.BeginInvoke(new Action(delegate
+                    {
+                        AddOut(success
+                            ? string.Format("线刷完成：{0}/{1} 个操作", okCount, count)
+                            : ("线刷中断，已完成 " + okCount + " 个，失败：" + lastError),
+                            success ? Role.Ok : Role.Err);
+                        if (lblRomStatus != null)
+                        {
+                            lblRomStatus.Text = success ? "完成" : "失败";
+                            lblRomStatus.ForeColor = success ? theme.Ok : theme.Err;
+                        }
+                        if (btnRomGo != null) { btnRomGo.Enabled = true; }
+                        RefreshStatusAsync();
+                    }));
+                }
+                catch { }
+            }));
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        // ================================================================
+        //  备份基带（modem / EFS）
+        // ================================================================
+        private static readonly string[][] BAK_PARTS = new string[][]
+        {
+            new string[] { "modem",     "基带固件（主体）",        "1" },
+            new string[] { "modemst1",  "EFS 分区 1（NV）",        "1" },
+            new string[] { "modemst2",  "EFS 分区 2（NV）",        "1" },
+            new string[] { "fsg",       "FSG（调制解调器配置）",   "1" },
+            new string[] { "fsc",       "FSC（网络锁计数）",       "1" },
+            new string[] { "persist",   "persist（传感器/校准）",  "0" },
+            new string[] { "bluetooth", "蓝牙固件",                "0" },
+            new string[] { "dsp",       "DSP 固件",                "0" }
+        };
+
+        private static Form dlgBak;
+        private static TextBox txtBakDir;
+        private static ListBox lstBakLog;
+        private static Label lblBakStatus;
+        private static Button btnBakGo, btnBakOpen;
+        private static CheckBox[] bakChecks;
+
+        private static void OpenBackup()
+        {
+            if (dlgBak != null && !dlgBak.IsDisposed) { dlgBak.Activate(); return; }
+
+            dlgBak = NewToolDialog("备份基带", new Size(640, 500));
+
+            DialogLabel(dlgBak, "输出目录", 20, 20, 80);
+            string defDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                "backups", "基带备份-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            txtBakDir = DialogText(dlgBak, 100, 16, 390, defDir);
+            Button btnPick = DialogButton(dlgBak, "选择…", 500, 14, 118, 28, false);
+            btnPick.Click += delegate
+            {
+                FolderBrowserDialog fbd = new FolderBrowserDialog();
+                fbd.Description = "选择备份保存目录";
+                if (fbd.ShowDialog() == DialogResult.OK)
+                {
+                    txtBakDir.Text = Path.Combine(fbd.SelectedPath, "基带备份-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+                }
+            };
+
+            Label lblSel = new Label();
+            lblSel.Text = "备份内容";
+            lblSel.Location = new Point(20, 54);
+            lblSel.ForeColor = theme.Text;
+            dlgBak.Controls.Add(lblSel);
+
+            bakChecks = new CheckBox[BAK_PARTS.Length];
+            for (int i = 0; i < BAK_PARTS.Length; i++)
+            {
+                string[] info = BAK_PARTS[i];
+                CheckBox c = new CheckBox();
+                c.Text = info[0] + "　" + info[1];
+                c.Location = new Point(20 + (i % 2) * 300, 78 + (i / 2) * 28);
+                c.AutoSize = true;
+                c.Checked = info[2] == "1";
+                c.ForeColor = theme.Text;
+                c.Font = fUi;
+                dlgBak.Controls.Add(c);
+                bakChecks[i] = c;
+            }
+
+            lstBakLog = new ListBox();
+            lstBakLog.Location = new Point(20, 200);
+            lstBakLog.Size = new Size(598, 180);
+            lstBakLog.Font = fSmall;
+            lstBakLog.BackColor = theme.Output;
+            lstBakLog.ForeColor = theme.Text;
+            lstBakLog.BorderStyle = BorderStyle.FixedSingle;
+            lstBakLog.HorizontalScrollbar = true;
+            dlgBak.Controls.Add(lstBakLog);
+
+            lblBakStatus = new Label();
+            lblBakStatus.Location = new Point(20, 388);
+            lblBakStatus.Size = new Size(598, 22);
+            lblBakStatus.ForeColor = theme.Dim;
+            lblBakStatus.Font = fSmall;
+            lblBakStatus.Text = "需要手机已 root（adb shell su 可用），备份过程请勿拔线。";
+            dlgBak.Controls.Add(lblBakStatus);
+
+            btnBakGo = DialogButton(dlgBak, "开始备份", 20, 424, 150, 40, true);
+            btnBakGo.Click += delegate { DoBackup(); };
+            btnBakOpen = DialogButton(dlgBak, "打开目录", 182, 424, 120, 40, false);
+            btnBakOpen.Enabled = false;
+            btnBakOpen.Click += delegate
+            {
+                try { Process.Start("explorer.exe", "\"" + txtBakDir.Text.Trim() + "\""); } catch { }
+            };
+            Button btnClose = DialogButton(dlgBak, "关闭", 314, 424, 100, 40, false);
+            btnClose.Click += delegate { dlgBak.Close(); };
+
+            dlgBak.Show(form);
+        }
+
+        private static bool HasRoot(out string info)
+        {
+            string o;
+            RunTask(adbPath, new string[] { "shell", "su", "-c", "id" }, out o);
+            info = o;
+            return o != null && o.IndexOf("uid=0", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void DoBackup()
+        {
+            string dir = txtBakDir.Text.Trim();
+            if (dir.Length == 0) { lblBakStatus.Text = "请选择输出目录"; lblBakStatus.ForeColor = theme.Err; return; }
+
+            List<string[]> picked = new List<string[]>();
+            for (int i = 0; i < BAK_PARTS.Length; i++)
+            {
+                if (bakChecks[i].Checked) { picked.Add(BAK_PARTS[i]); }
+            }
+            if (picked.Count == 0) { lblBakStatus.Text = "至少选一个分区"; lblBakStatus.ForeColor = theme.Err; return; }
+
+            string rootInfo;
+            AddOut("> 检查 root 权限…", Role.Cmd);
+            if (!HasRoot(out rootInfo))
+            {
+                lblBakStatus.Text = "没有 root 权限，无法读取分区（需要 Magisk / 内核 root）";
+                lblBakStatus.ForeColor = theme.Err;
+                if (rootInfo.Trim().Length > 0) { AddOut(rootInfo.TrimEnd(), Role.Err); }
+                return;
+            }
+            AddOut("root 可用", Role.Ok);
+
+            if (MessageBox.Show(dlgBak,
+                "即将备份 " + picked.Count + " 个分区到：\n" + dir + "\n\n备份文件包含设备身份与校准数据，请勿外传。\n\n开始？",
+                "确认备份", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            {
+                return;
+            }
+
+            btnBakGo.Enabled = false;
+            lstBakLog.Items.Clear();
+            lblBakStatus.Text = "备份中…";
+            lblBakStatus.ForeColor = theme.Text;
+            AddOut("> 开始备份基带，共 " + picked.Count + " 个分区", Role.Cmd);
+
+            Thread t = new Thread(new ThreadStart(delegate
+            {
+                int okCount = 0;
+                StringBuilder report = new StringBuilder();
+                try { Directory.CreateDirectory(dir); }
+                catch (Exception ex)
+                {
+                    ReportBak("无法创建目录：" + ex.Message, false, 0);
+                    return;
+                }
+
+                report.AppendLine("安卓调试台 基带备份");
+                report.AppendLine("时间：" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                report.AppendLine("设备：" + DeviceProp("ro.product.model") + " / " + DeviceProp("ro.serialno"));
+                report.AppendLine();
+
+                foreach (string[] part in picked)
+                {
+                    string name = part[0];
+                    string file = Path.Combine(dir, name + ".img");
+                    ReportBak("正在读取 " + name + " …", true, -1);
+                    string msg;
+                    bool ok = RunBinary(adbPath, new string[] { "exec-out", "su", "-c", "dd if=/dev/block/by-name/" + name + " bs=1M" }, file, out msg);
+                    long size = File.Exists(file) ? new FileInfo(file).Length : 0;
+                    if (ok && size > 0)
+                    {
+                        okCount++;
+                        string hash = Sha256File(file);
+                        ReportBak(string.Format("OK  {0,-10} {1,8:N2} MB  {2}", name, size / 1048576.0, hash.Substring(0, 16) + "…"), true, size);
+                        report.AppendLine(string.Format("{0,-10} {1,10:N0} 字节  sha256={2}", name, size, hash));
+                    }
+                    else
+                    {
+                        ReportBak("失败 " + name + (msg.Length > 0 ? ("：" + msg) : ""), false, 0);
+                        try { if (File.Exists(file) && size == 0) { File.Delete(file); } } catch { }
+                    }
+                }
+
+                try
+                {
+                    File.WriteAllText(Path.Combine(dir, "备份说明.txt"),
+                        report.ToString() + "\r\n注意：本目录含设备 NV / 基带数据，可用于恢复本机，但不要外传。\r\n",
+                        new UTF8Encoding(false));
+                }
+                catch { }
+
+                BakFinished(okCount, picked.Count, dir);
+            }));
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private static string DeviceProp(string key)
+        {
+            string o;
+            RunTask(adbPath, new string[] { "shell", "getprop", key }, out o);
+            return (o ?? "").Trim();
+        }
+
+        private static string Sha256File(string path)
+        {
+            try
+            {
+                using (SHA256 sha = SHA256.Create())
+                using (FileStream fs = File.OpenRead(path))
+                {
+                    byte[] h = sha.ComputeHash(fs);
+                    StringBuilder sb = new StringBuilder();
+                    foreach (byte b in h) { sb.Append(b.ToString("x2")); }
+                    return sb.ToString();
+                }
+            }
+            catch { return ""; }
+        }
+
+        private static void ReportBak(string line, bool ok, long size)
+        {
+            if (dlgBak == null || dlgBak.IsDisposed) { return; }
+            try
+            {
+                dlgBak.BeginInvoke(new Action(delegate
+                {
+                    if (lstBakLog != null)
+                    {
+                        lstBakLog.Items.Add(line);
+                        lstBakLog.TopIndex = Math.Max(0, lstBakLog.Items.Count - 1);
+                    }
+                    if (lblBakStatus != null) { lblBakStatus.Text = line; }
+                }));
+            }
+            catch { }
+        }
+
+        private static void BakFinished(int okCount, int total, string dir)
+        {
+            if (dlgBak == null || dlgBak.IsDisposed) { return; }
+            try
+            {
+                dlgBak.BeginInvoke(new Action(delegate
+                {
+                    bool all = okCount == total;
+                    if (lblBakStatus != null)
+                    {
+                        lblBakStatus.Text = string.Format("完成 {0}/{1} 个分区", okCount, total);
+                        lblBakStatus.ForeColor = all ? theme.Ok : theme.Err;
+                    }
+                    if (btnBakGo != null) { btnBakGo.Enabled = true; }
+                    if (btnBakOpen != null) { btnBakOpen.Enabled = okCount > 0; }
+                    AddOut(string.Format("基带备份完成：{0}/{1} 个分区 → {2}", okCount, total, dir),
+                        all ? Role.Ok : Role.Err);
+                }));
+            }
+            catch { }
         }
 
         // ================================================================
