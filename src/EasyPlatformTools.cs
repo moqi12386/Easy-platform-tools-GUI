@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.5.0";
+        private const string AppVersion = "1.6.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -420,6 +420,10 @@ namespace EasyPlatformTools
                     {
                         proxyUrl = val;
                     }
+                    else if (key == "lang")
+                    {
+                        Lang.Current = (val == "en") ? Lang.EN : Lang.ZH;
+                    }
                     else if (key == "pt_source")
                     {
                         customPtSource = val;
@@ -438,6 +442,7 @@ namespace EasyPlatformTools
                 sb.AppendLine("bg=" + ToHex(theme.Bg));
                 sb.AppendLine("font=" + fontName);
                 sb.AppendLine("size=" + fontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+                sb.AppendLine("lang=" + Lang.Current);
                 File.WriteAllText(ConfigPath, sb.ToString(), new UTF8Encoding(false));
             }
             catch { }
@@ -475,7 +480,9 @@ namespace EasyPlatformTools
             {
                 AddOut("Easy-platform-tools-GUI v" + AppVersion + "　·　adb / fastboot 命令控制台", Role.Cmd);
                 AddOut("组件目录：" + toolDir, Role.Dim);
-                AddOut("字体：" + ResolvedFontName() + " " + fontSize.ToString("0.#") + "pt　·　主题：" + ToHex(theme.Bg), Role.Dim);
+                AddOut(Lang.IsEn
+                    ? "Font: " + ResolvedFontName() + " " + fontSize.ToString("0.#") + "pt  ·  theme: " + ToHex(theme.Bg)
+                    : "字体：" + ResolvedFontName() + " " + fontSize.ToString("0.#") + "pt　·　主题：" + ToHex(theme.Bg), Role.Dim, false);
                 AddOut("左下角「设置」可换背景色和字体。", Role.Dim);
                 AddOut("", Role.Dim);
                 txtInput.Focus();
@@ -485,6 +492,7 @@ namespace EasyPlatformTools
 
             ApplyTheme(theme);
             ApplyFonts();
+            Lang.ApplyTo(form);
         }
 
         private static void BuildSidebar()
@@ -571,14 +579,14 @@ namespace EasyPlatformTools
             panelMain.Controls.Add(panelTop);
 
             lblStatus = new Label();
-            lblStatus.Text = "正在检测设备…";
+            SetLbl(lblStatus, "正在检测设备…");
             lblStatus.AutoSize = true;
             lblStatus.Location = new Point(14, 10);
             lblStatus.Font = fUiBold;
             panelTop.Controls.Add(lblStatus);
 
             lblPath = new Label();
-            lblPath.Text = "组件目录：" + toolDir;
+            SetLbl(lblPath, "组件目录：" + toolDir);
             lblPath.AutoSize = true;
             lblPath.Location = new Point(14, 32);
             lblPath.Font = fSmall;
@@ -802,7 +810,7 @@ namespace EasyPlatformTools
             dlgSettings.ShowInTaskbar = false;
             dlgSettings.StartPosition = FormStartPosition.Manual;
             dlgSettings.AutoScaleMode = AutoScaleMode.None;
-            dlgSettings.ClientSize = new Size(452, 372);
+            dlgSettings.ClientSize = new Size(452, 412);
             dlgSettings.Font = fUi;
             try { dlgSettings.Icon = form.Icon; } catch { }
 
@@ -893,7 +901,7 @@ namespace EasyPlatformTools
             lblPreview.BorderStyle = BorderStyle.FixedSingle;
             dlgSettings.Controls.Add(lblPreview);
 
-            Button btnClose = AddDlgButton("关闭", 348, 320, 88, 32);
+            Button btnClose = AddDlgButton("关闭", 348, 358, 88, 32);
             btnClose.Click += delegate { dlgSettings.Close(); };
 
             cbFont.SelectedIndexChanged += delegate
@@ -922,6 +930,34 @@ namespace EasyPlatformTools
                 form.Left + 30,
                 form.Bottom - dlgSettings.Height - 46);
             if (dlgSettings.Top < 0) { dlgSettings.Top = 40; }
+            AddDlgLabel("语言", 16, 300, true);
+
+            ComboBox cbLang = new ComboBox();
+            cbLang.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbLang.Location = new Point(16, 326);
+            cbLang.Size = new Size(180, 26);
+            cbLang.FlatStyle = FlatStyle.Flat;
+            cbLang.Font = fUi;
+            cbLang.Items.AddRange(new object[] { "中文", "English" });
+            cbLang.SelectedIndex = Lang.IsEn ? 1 : 0;
+            cbLang.SelectedIndexChanged += delegate
+            {
+                if (dlgLoading) { return; }
+                string want = cbLang.SelectedIndex == 1 ? Lang.EN : Lang.ZH;
+                if (want == Lang.Current) { return; }
+                Lang.Current = want;
+                SaveConfig();
+                string ask = Lang.IsEn
+                    ? "Language changed. Restart to apply?"
+                    : "语言已切换，需要重启程序生效。现在重启？";
+                if (MessageBox.Show(dlgSettings, ask, "Language / 语言", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    Application.Restart();
+                }
+            };
+            dlgSettings.Controls.Add(cbLang);
+
+            Lang.ApplyTo(dlgSettings);
             dlgSettings.Show(form);
         }
 
@@ -1065,6 +1101,7 @@ namespace EasyPlatformTools
             };
             btnSetupExit.Click += delegate { dlgSetup.Close(); };
 
+            Lang.ApplyTo(dlgSetup);
             dlgSetup.Show(form);
         }
 
@@ -1083,7 +1120,7 @@ namespace EasyPlatformTools
             pbSetup.Visible = true;
             pbSetup.Style = ProgressBarStyle.Continuous;
             pbSetup.Value = 0;
-            lblSetupPct.Text = "正在连接 Google…";
+            SetLbl(lblSetupPct, "正在连接 Google…");
             Thread t = new Thread(new ThreadStart(delegate { DownloadPlatformTools(); }));
             t.IsBackground = true;
             t.Start();
@@ -1269,7 +1306,7 @@ namespace EasyPlatformTools
             setupBusy = false;
             AddOut(message, Role.Ok);
             AddOut("现在可以直接输入命令了。", Role.Dim);
-            if (lblPath != null) { lblPath.Text = "组件目录：" + toolDir; }
+            if (lblPath != null) { SetLbl(lblPath, "组件目录：" + toolDir); }
             if (dlgSetup != null && !dlgSetup.IsDisposed) { dlgSetup.Close(); }
             RefreshStatusAsync();
         }
@@ -1350,12 +1387,15 @@ namespace EasyPlatformTools
         // ================================================================
         //  输出
         // ================================================================
-        private static void AddOut(string text, Role role)
+        private static void SetLbl(Label l, string s) { if (l != null) { l.Text = Lang.Tr(s); } }
+
+        private static void AddOut(string text, Role role, bool translate = true)
         {
             if (rt == null) { return; }
+            if (translate) { text = Lang.Tr(text); }
             if (rt.InvokeRequired)
             {
-                try { rt.BeginInvoke(new Action<string, Role>(AddOut), new object[] { text, role }); }
+                try { rt.BeginInvoke(new Action<string, Role, bool>(AddOut), new object[] { text, role, false }); }
                 catch { }
                 return;
             }
@@ -1457,7 +1497,7 @@ namespace EasyPlatformTools
         private static void PaintStatus()
         {
             if (lblStatus == null) { return; }
-            lblStatus.Text = statusText;
+            SetLbl(lblStatus, statusText);
             switch (statusState)
             {
                 case 1: lblStatus.ForeColor = theme.Ok; break;
@@ -1935,6 +1975,7 @@ namespace EasyPlatformTools
             Button btnClose = DialogButton(dlgFlashImage, "关闭", 172, 206, 100, 38, false);
             btnClose.Click += delegate { dlgFlashImage.Close(); };
 
+            Lang.ApplyTo(dlgFlashImage);
             dlgFlashImage.Show(form);
         }
 
@@ -1947,22 +1988,26 @@ namespace EasyPlatformTools
             if (!File.Exists(img)) { lblFlashStatus.Text = "找不到镜像文件"; lblFlashStatus.ForeColor = theme.Err; return; }
             if (!HasFastbootDevice())
             {
-                lblFlashStatus.Text = "没有检测到 fastboot 设备，请先进入 Bootloader";
+                SetLbl(lblFlashStatus, "没有检测到 fastboot 设备，请先进入 Bootloader");
                 lblFlashStatus.ForeColor = theme.Err;
                 return;
             }
 
             long size = new FileInfo(img).Length;
-            string msg = "即将执行：\n\nfastboot flash " + part + " " + Path.GetFileName(img)
-                + "\n\n大小：" + string.Format("{0:N1} MB", size / 1048576.0)
-                + "\n\n写错分区可能导致无法开机，确定继续？";
-            if (MessageBox.Show(dlgFlashImage, msg, "确认刷入", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+            string msg = Lang.IsEn
+                ? "About to run:\n\nfastboot flash " + part + " " + Path.GetFileName(img)
+                  + "\n\nSize: " + string.Format("{0:N1} MB", size / 1048576.0)
+                  + "\n\nFlashing the wrong partition can brick the device. Continue?"
+                : "即将执行：\n\nfastboot flash " + part + " " + Path.GetFileName(img)
+                  + "\n\n大小：" + string.Format("{0:N1} MB", size / 1048576.0)
+                  + "\n\n写错分区可能导致无法开机，确定继续？";
+            if (MessageBox.Show(dlgFlashImage, msg, Lang.IsEn ? "Confirm flash" : "确认刷入", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
             {
                 return;
             }
 
             btnFlashGo.Enabled = false;
-            lblFlashStatus.Text = "正在刷入…";
+            SetLbl(lblFlashStatus, "正在刷入…");
             lblFlashStatus.ForeColor = theme.Text;
             AddOut("> fastboot flash " + part + " " + img, Role.Cmd);
 
@@ -1984,7 +2029,7 @@ namespace EasyPlatformTools
                         AddOut(ok ? ("刷入完成：" + part) : ("刷入失败：" + part), ok ? Role.Ok : Role.Err);
                         if (lblFlashStatus != null)
                         {
-                            lblFlashStatus.Text = ok ? "完成" : "失败";
+                            SetLbl(lblFlashStatus, ok ? "完成" : "失败");
                             lblFlashStatus.ForeColor = ok ? theme.Ok : theme.Err;
                         }
                         if (btnFlashGo != null) { btnFlashGo.Enabled = true; }
@@ -2059,6 +2104,7 @@ namespace EasyPlatformTools
             Button btnClose = DialogButton(dlgFlashRom, "关闭", 192, 388, 100, 40, false);
             btnClose.Click += delegate { dlgFlashRom.Close(); };
 
+            Lang.ApplyTo(dlgFlashRom);
             dlgFlashRom.Show(form);
         }
 
@@ -2202,21 +2248,24 @@ namespace EasyPlatformTools
         {
             if (romTasks == null || romTasks.Count == 0)
             {
-                lblRomStatus.Text = "没有可执行的刷写操作，请先选择题机包";
+                SetLbl(lblRomStatus, "没有可执行的刷写操作，请先选择题机包");
                 lblRomStatus.ForeColor = theme.Err;
                 return;
             }
             if (!HasFastbootDevice())
             {
-                lblRomStatus.Text = "没有检测到 fastboot 设备，请先进入 Bootloader";
+                SetLbl(lblRomStatus, "没有检测到 fastboot 设备，请先进入 Bootloader");
                 lblRomStatus.ForeColor = theme.Err;
                 return;
             }
 
             int count = romTasks.Count;
-            string msg = "即将线刷 " + count + " 个操作" + (chkEraseData.Checked ? "，并擦除 userdata（数据全部丢失）" : "，保留 userdata")
-                + "。\n\n过程中断电或拔线可能变砖，请确保电量充足、全程别动数据线。\n\n确定开始？";
-            if (MessageBox.Show(dlgFlashRom, msg, "确认线刷", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+            string msg = Lang.IsEn
+                ? "About to flash " + count + " steps" + (chkEraseData.Checked ? ", erasing userdata (all data lost)" : ", keeping userdata")
+                  + ".\n\nUnplugging or a power loss can brick the device.\n\nStart?"
+                : "即将线刷 " + count + " 个操作" + (chkEraseData.Checked ? "，并擦除 userdata（数据全部丢失）" : "，保留 userdata")
+                  + "。\n\n过程中断电或拔线可能变砖，请确保电量充足、全程别动数据线。\n\n确定开始？";
+            if (MessageBox.Show(dlgFlashRom, msg, Lang.IsEn ? "Confirm flashing" : "确认线刷", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
             {
                 return;
             }
@@ -2246,7 +2295,7 @@ namespace EasyPlatformTools
                     {
                         dlgFlashRom.BeginInvoke(new Action(delegate
                         {
-                            lblRomStatus.Text = string.Format("正在执行 {0}/{1}：{2}", index, count, label);
+                            SetLbl(lblRomStatus, string.Format("正在执行 {0}/{1}：{2}", index, count, label));
                             lblRomStatus.ForeColor = theme.Text;
                         }));
                     }
@@ -2286,7 +2335,7 @@ namespace EasyPlatformTools
                             success ? Role.Ok : Role.Err);
                         if (lblRomStatus != null)
                         {
-                            lblRomStatus.Text = success ? "完成" : "失败";
+                            SetLbl(lblRomStatus, success ? "完成" : "失败");
                             lblRomStatus.ForeColor = success ? theme.Ok : theme.Err;
                         }
                         if (btnRomGo != null) { btnRomGo.Enabled = true; }
@@ -2319,7 +2368,7 @@ namespace EasyPlatformTools
             lblPartsInfo.Size = new Size(640, 22);
             lblPartsInfo.ForeColor = theme.Dim;
             lblPartsInfo.Font = fSmall;
-            lblPartsInfo.Text = "正在连接…";
+            SetLbl(lblPartsInfo, "正在连接…");
             dlgParts.Controls.Add(lblPartsInfo);
 
             lvParts = new ListView();
@@ -2366,6 +2415,7 @@ namespace EasyPlatformTools
             Button btnClose = DialogButton(dlgParts, "关闭", 598, 446, 62, 40, false);
             btnClose.Click += delegate { dlgParts.Close(); };
 
+            Lang.ApplyTo(dlgParts);
             dlgParts.Show(form);
             if (deviceParts.Count > 0) { FillPartitions(); }
             StartReadPartitions();
@@ -2375,7 +2425,7 @@ namespace EasyPlatformTools
         {
             if (btnPartsLoad == null) { return; }
             btnPartsLoad.Enabled = false;
-            lblPartsInfo.Text = "正在读取 fastboot getvar all …";
+            SetLbl(lblPartsInfo, "正在读取 fastboot getvar all …");
             lblPartsInfo.ForeColor = theme.Text;
 
             Thread t = new Thread(new ThreadStart(delegate
@@ -2390,7 +2440,7 @@ namespace EasyPlatformTools
                         if (ok) { FillPartitions(); }
                         else if (lblPartsInfo != null)
                         {
-                            lblPartsInfo.Text = "读取失败：" + error;
+                            SetLbl(lblPartsInfo, "读取失败：" + error);
                             lblPartsInfo.ForeColor = theme.Err;
                         }
                     }));
@@ -2492,7 +2542,7 @@ namespace EasyPlatformTools
             lvParts.EndUpdate();
             if (lblPartsInfo != null)
             {
-                lblPartsInfo.Text = "共 " + deviceParts.Count + " 个分区（fastboot getvar all）";
+                SetLbl(lblPartsInfo, "共 " + deviceParts.Count + " 个分区（fastboot getvar all）");
                 lblPartsInfo.ForeColor = theme.Ok;
             }
         }
@@ -2601,7 +2651,7 @@ namespace EasyPlatformTools
             lblBakStatus.Size = new Size(598, 22);
             lblBakStatus.ForeColor = theme.Dim;
             lblBakStatus.Font = fSmall;
-            lblBakStatus.Text = "需要手机已 root（adb shell su 可用），备份过程请勿拔线。";
+            SetLbl(lblBakStatus, "需要手机已 root（adb shell su 可用），备份过程请勿拔线。");
             dlgBak.Controls.Add(lblBakStatus);
 
             btnBakGo = DialogButton(dlgBak, "开始备份", 20, 424, 150, 40, true);
@@ -2615,6 +2665,7 @@ namespace EasyPlatformTools
             Button btnClose = DialogButton(dlgBak, "关闭", 314, 424, 100, 40, false);
             btnClose.Click += delegate { dlgBak.Close(); };
 
+            Lang.ApplyTo(dlgBak);
             dlgBak.Show(form);
         }
 
@@ -2642,7 +2693,7 @@ namespace EasyPlatformTools
             AddOut("> 检查 root 权限…", Role.Cmd);
             if (!HasRoot(out rootInfo))
             {
-                lblBakStatus.Text = "没有 root 权限，无法读取分区（需要 Magisk / 内核 root）";
+                SetLbl(lblBakStatus, "没有 root 权限，无法读取分区（需要 Magisk / 内核 root）");
                 lblBakStatus.ForeColor = theme.Err;
                 if (rootInfo.Trim().Length > 0) { AddOut(rootInfo.TrimEnd(), Role.Err); }
                 return;
@@ -2650,15 +2701,17 @@ namespace EasyPlatformTools
             AddOut("root 可用", Role.Ok);
 
             if (MessageBox.Show(dlgBak,
-                "即将备份 " + picked.Count + " 个分区到：\n" + dir + "\n\n备份文件包含设备身份与校准数据，请勿外传。\n\n开始？",
-                "确认备份", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+                Lang.IsEn
+                    ? "Back up " + picked.Count + " partitions to:\n" + dir + "\n\nThese files contain device identity and calibration data. Do not share.\n\nStart?"
+                    : "即将备份 " + picked.Count + " 个分区到：\n" + dir + "\n\n备份文件包含设备身份与校准数据，请勿外传。\n\n开始？",
+                Lang.IsEn ? "Confirm backup" : "确认备份", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
             {
                 return;
             }
 
             btnBakGo.Enabled = false;
             lstBakLog.Items.Clear();
-            lblBakStatus.Text = "备份中…";
+            SetLbl(lblBakStatus, "备份中…");
             lblBakStatus.ForeColor = theme.Text;
             AddOut("> 开始备份基带，共 " + picked.Count + " 个分区", Role.Cmd);
 
@@ -2765,7 +2818,7 @@ namespace EasyPlatformTools
                     bool all = okCount == total;
                     if (lblBakStatus != null)
                     {
-                        lblBakStatus.Text = string.Format("完成 {0}/{1} 个分区", okCount, total);
+                        SetLbl(lblBakStatus, string.Format("完成 {0}/{1} 个分区", okCount, total));
                         lblBakStatus.ForeColor = all ? theme.Ok : theme.Err;
                     }
                     if (btnBakGo != null) { btnBakGo.Enabled = true; }

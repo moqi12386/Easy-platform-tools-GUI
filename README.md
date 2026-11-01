@@ -1,7 +1,7 @@
 # Easy-platform-tools-GUI
 
 Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体、可换背景配色，
-编译出来就是一个 81 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
+编译出来就是一个 98 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
 
 ![主界面](docs/main.png)
 
@@ -100,6 +100,18 @@ proxy=http://127.0.0.1:7897
 「重启到 EDL」先试 `adb reboot edl`，失败再试 `fastboot oem edl`。进入后手机黑屏无反应，
 设备管理器里出现 `Qualcomm HS-USB QDLoader 9008` 即为成功。
 多数机型进 EDL 需要已解锁 Bootloader 或厂商授权账号，失败时会如实报出来。
+
+## 界面语言 / Language
+
+左下角「设置 / Settings」里有语言下拉：**中文 / English**，切换后程序自动重启生效，
+选择写进 `config.ini` 的 `lang=` 项。
+
+| 中文 | English |
+|---|---|
+| ![中文](docs/main.png) | ![English](docs/main-en.png) |
+
+翻译覆盖主窗口、设置、首次启动向导、读分区表、刷入镜像、线刷 ROM、备份基带
+全部界面与提示；未收录的文案会原样显示中文，不会报错。
 
 ## 字体
 

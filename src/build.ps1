@@ -27,6 +27,7 @@ $cscArgs = @(
     '/reference:System.Windows.Forms.dll'
     '/reference:System.IO.Compression.dll'
     '/reference:System.IO.Compression.FileSystem.dll'
+    (Join-Path $srcDir 'Lang.cs')
     (Join-Path $srcDir 'EasyPlatformTools.cs')
 )
 
