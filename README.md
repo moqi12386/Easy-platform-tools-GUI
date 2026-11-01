@@ -1,6 +1,6 @@
 # Easy-platform-tools-GUI
 
-Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体、可换背景配色，
+Windows 上的 adb / fastboot 图形化命令台。深色界面、、可换背景配色，
 编译出来就是一个 98 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
 
 ![主界面](docs/main.png)
