@@ -28,7 +28,7 @@ namespace AndroidTool
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.3.0";
+        private const string AppVersion = "1.4.0";
         private const string AppRepo = "https://github.com/moqi12386/android-debug-console";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -541,6 +541,7 @@ namespace AndroidTool
             NewMenuButton(flowMenu, "fastboot 重启", "fastboot reboot");
 
             NewSectionLabel(flowMenu, "刷写与备份");
+            NewMenuButton(flowMenu, "读分区表…", "@parts");
             NewMenuButton(flowMenu, "刷入镜像…", "@flashimg");
             NewMenuButton(flowMenu, "线刷 ROM…", "@rom");
             NewMenuButton(flowMenu, "备份基带…", "@backup");
@@ -771,6 +772,7 @@ namespace AndroidTool
                 else if (tag == "@flashimg") { OpenFlashImage(); }
                 else if (tag == "@rom") { OpenFlashRom(); }
                 else if (tag == "@backup") { OpenBackup(); }
+                else if (tag == "@parts") { OpenPartitions(); }
                 else { Execute(tag); }
             };
             host.Controls.Add(b);
@@ -1870,8 +1872,21 @@ namespace AndroidTool
             cbPartition.BackColor = theme.EditBg;
             cbPartition.ForeColor = theme.Text;
             cbPartition.Font = fUi;
-            foreach (string p in PARTITIONS) { cbPartition.Items.Add(p); }
-            cbPartition.Text = "boot";
+            if (deviceParts.Count > 0)
+            {
+                foreach (string[] p in deviceParts) { cbPartition.Items.Add(p[0]); }
+                cbPartition.Text = "boot";
+                for (int i = 0; i < deviceParts.Count; i++)
+                {
+                    if (deviceParts[i][0] == "boot") { cbPartition.Text = "boot"; break; }
+                }
+                if (cbPartition.Items.IndexOf(cbPartition.Text) < 0) { cbPartition.Text = deviceParts[0][0]; }
+            }
+            else
+            {
+                foreach (string p in PARTITIONS) { cbPartition.Items.Add(p); }
+                cbPartition.Text = "boot";
+            }
             dlgFlashImage.Controls.Add(cbPartition);
 
             DialogLabel(dlgFlashImage, "镜像", 20, 60, 60);
@@ -2282,6 +2297,229 @@ namespace AndroidTool
             }));
             t.IsBackground = true;
             t.Start();
+        }
+
+        // ================================================================
+        //  读分区表（fastboot getvar all）
+        // ================================================================
+        private static readonly List<string[]> deviceParts = new List<string[]>();
+        private static Form dlgParts;
+        private static ListView lvParts;
+        private static Label lblPartsInfo;
+        private static Button btnPartsLoad;
+
+        private static void OpenPartitions()
+        {
+            if (dlgParts != null && !dlgParts.IsDisposed) { dlgParts.Activate(); return; }
+
+            dlgParts = NewToolDialog("分区表", new Size(680, 520));
+
+            lblPartsInfo = new Label();
+            lblPartsInfo.Location = new Point(20, 16);
+            lblPartsInfo.Size = new Size(640, 22);
+            lblPartsInfo.ForeColor = theme.Dim;
+            lblPartsInfo.Font = fSmall;
+            lblPartsInfo.Text = "正在连接…";
+            dlgParts.Controls.Add(lblPartsInfo);
+
+            lvParts = new ListView();
+            lvParts.Location = new Point(20, 44);
+            lvParts.Size = new Size(640, 386);
+            lvParts.View = View.Details;
+            lvParts.FullRowSelect = true;
+            lvParts.MultiSelect = false;
+            lvParts.HideSelection = false;
+            lvParts.BackColor = theme.Output;
+            lvParts.ForeColor = theme.Text;
+            lvParts.Font = fSmall;
+            lvParts.Columns.Add("分区", 250);
+            lvParts.Columns.Add("大小", 120, HorizontalAlignment.Right);
+            lvParts.Columns.Add("类型", 170);
+            lvParts.Columns.Add("原始值", 90);
+            dlgParts.Controls.Add(lvParts);
+
+            btnPartsLoad = DialogButton(dlgParts, "读取 / 刷新", 20, 446, 140, 40, true);
+            btnPartsLoad.Click += delegate { StartReadPartitions(); };
+
+            Button btnUse = DialogButton(dlgParts, "用于刷入镜像", 172, 446, 150, 40, false);
+            btnUse.Click += delegate
+            {
+                if (lvParts.SelectedItems.Count == 0) { return; }
+                string name = lvParts.SelectedItems[0].Text;
+                if (dlgFlashImage == null || dlgFlashImage.IsDisposed) { OpenFlashImage(); }
+                if (cbPartition != null) { cbPartition.Text = name; }
+                dlgParts.Close();
+            };
+
+            Button btnCopy = DialogButton(dlgParts, "复制列表", 334, 446, 120, 40, false);
+            btnCopy.Click += delegate
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (string[] p in deviceParts) { sb.AppendLine(p[0] + "\t" + p[1] + "\t" + p[2]); }
+                try { Clipboard.SetText(sb.ToString()); lblPartsInfo.Text = "已复制 " + deviceParts.Count + " 行到剪贴板"; }
+                catch { }
+            };
+
+            Button btnCsv = DialogButton(dlgParts, "导出 CSV", 466, 446, 120, 40, false);
+            btnCsv.Click += delegate { ExportPartitionsCsv(); };
+
+            Button btnClose = DialogButton(dlgParts, "关闭", 598, 446, 62, 40, false);
+            btnClose.Click += delegate { dlgParts.Close(); };
+
+            dlgParts.Show(form);
+            if (deviceParts.Count > 0) { FillPartitions(); }
+            StartReadPartitions();
+        }
+
+        private static void StartReadPartitions()
+        {
+            if (btnPartsLoad == null) { return; }
+            btnPartsLoad.Enabled = false;
+            lblPartsInfo.Text = "正在读取 fastboot getvar all …";
+            lblPartsInfo.ForeColor = theme.Text;
+
+            Thread t = new Thread(new ThreadStart(delegate
+            {
+                string error = "";
+                bool ok = ReadPartitions(out error);
+                try
+                {
+                    dlgParts.BeginInvoke(new Action(delegate
+                    {
+                        if (btnPartsLoad != null) { btnPartsLoad.Enabled = true; }
+                        if (ok) { FillPartitions(); }
+                        else if (lblPartsInfo != null)
+                        {
+                            lblPartsInfo.Text = "读取失败：" + error;
+                            lblPartsInfo.ForeColor = theme.Err;
+                        }
+                    }));
+                }
+                catch { }
+            }));
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private static bool ReadPartitions(out string error)
+        {
+            error = "";
+            if (!HasFastbootDevice()) { error = "没有检测到 fastboot 设备，请先进入 Bootloader"; return false; }
+
+            string o;
+            RunTask(fastbootPath, new string[] { "getvar", "all" }, out o);
+            List<string[]> parts = ParseGetvar(o);
+            if (parts.Count == 0) { error = "getvar all 里没有解析到分区信息"; return false; }
+
+            deviceParts.Clear();
+            deviceParts.AddRange(parts);
+            return true;
+        }
+
+        private static List<string[]> ParseGetvar(string text)
+        {
+            Dictionary<string, string> sizes = new Dictionary<string, string>();
+            Dictionary<string, string> types = new Dictionary<string, string>();
+
+            if (text != null)
+            {
+                foreach (string raw in text.Split('\n'))
+                {
+                    Match m = Regex.Match(raw.Trim(), @"partition-(size|type):\s*([^:\s]+):\s*(\S+)");
+                    if (!m.Success) { continue; }
+                    string kind = m.Groups[1].Value;
+                    string name = m.Groups[2].Value;
+                    string val = m.Groups[3].Value;
+                    if (kind == "size") { sizes[name] = val; }
+                    else { types[name] = val; }
+                }
+            }
+
+            List<string> names = new List<string>();
+            foreach (string k in sizes.Keys) { if (!names.Contains(k)) { names.Add(k); } }
+            foreach (string k in types.Keys) { if (!names.Contains(k)) { names.Add(k); } }
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+
+            List<string[]> list = new List<string[]>();
+            foreach (string n in names)
+            {
+                string s = sizes.ContainsKey(n) ? sizes[n] : "";
+                string t = types.ContainsKey(n) ? types[n] : "";
+                list.Add(new string[] { n, s, t });
+            }
+            return list;
+        }
+
+        private static long ParseHexSize(string v)
+        {
+            if (string.IsNullOrEmpty(v)) { return -1; }
+            v = v.Trim();
+            try
+            {
+                if (v.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Convert.ToInt64(v.Substring(2), 16);
+                }
+                long n;
+                if (long.TryParse(v, out n)) { return n; }
+            }
+            catch { }
+            return -1;
+        }
+
+        private static string HumanSize(long bytes)
+        {
+            if (bytes < 0) { return "—"; }
+            if (bytes >= 1073741824L) { return (bytes / 1073741824.0).ToString("N2") + " GB"; }
+            if (bytes >= 1048576L) { return (bytes / 1048576.0).ToString("N1") + " MB"; }
+            if (bytes >= 1024L) { return (bytes / 1024.0).ToString("N0") + " KB"; }
+            return bytes + " B";
+        }
+
+        private static void FillPartitions()
+        {
+            if (lvParts == null) { return; }
+            lvParts.BeginUpdate();
+            lvParts.Items.Clear();
+            foreach (string[] p in deviceParts)
+            {
+                ListViewItem it = new ListViewItem(p[0]);
+                it.SubItems.Add(HumanSize(ParseHexSize(p[1])));
+                it.SubItems.Add(p[2]);
+                it.SubItems.Add(p[1]);
+                lvParts.Items.Add(it);
+            }
+            lvParts.EndUpdate();
+            if (lblPartsInfo != null)
+            {
+                lblPartsInfo.Text = "共 " + deviceParts.Count + " 个分区（fastboot getvar all）";
+                lblPartsInfo.ForeColor = theme.Ok;
+            }
+        }
+
+        private static void ExportPartitionsCsv()
+        {
+            if (deviceParts.Count == 0) { return; }
+            SaveFileDialog dlg = new SaveFileDialog();
+            dlg.Filter = "CSV (*.csv)|*.csv";
+            dlg.FileName = "partitions-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv";
+            if (dlg.ShowDialog() != DialogResult.OK) { return; }
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("partition,size_bytes,size_human,type");
+            foreach (string[] p in deviceParts)
+            {
+                long b = ParseHexSize(p[1]);
+                sb.AppendLine(p[0] + "," + (b < 0 ? "" : b.ToString()) + "," + HumanSize(b) + "," + p[2]);
+            }
+            try
+            {
+                File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(true));
+                if (lblPartsInfo != null) { lblPartsInfo.Text = "已导出：" + dlg.FileName; }
+            }
+            catch (Exception ex)
+            {
+                if (lblPartsInfo != null) { lblPartsInfo.Text = "导出失败：" + ex.Message; }
+            }
         }
 
         // ================================================================

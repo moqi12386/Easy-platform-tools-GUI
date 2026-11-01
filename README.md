@@ -1,13 +1,14 @@
 # 安卓调试台 · AndroidTool
 
 Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体、可换背景配色，
-编译出来就是一个 74 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
+编译出来就是一个 81 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
 
 ![主界面](docs/main.png)
 
 ## 特性
 
 - **左侧快捷命令**：检测设备、版本信息、设备属性、重启到 Bootloader / Recovery / EDL、重启系统、fastboot 设备、fastboot 重启
+- **读分区表**：`fastboot getvar all` 列出真实分区名与大小，一键带入刷写对话框
 - **刷入镜像**：任选分区 + 任意 `.img`，二次确认后刷入，可选刷完重启
 - **线刷 ROM**：直接吃小米 fastboot 线刷包（`.tgz` / `.zip` / 已解压目录），自动解析 `flash_all.bat` 的刷写顺序
 - **备份基带**：把 modem / modemst1 / modemst2 / fsg / fsc 等分区导出成本地镜像，附 SHA256 与设备信息
@@ -21,7 +22,7 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、MiSans 字体�
 
 ## 快速开始
 
-1. 到 [Releases](../../releases) 下载 `AndroidTool-v1.1.0.zip` 并解压
+1. 到 [Releases](../../releases) 下载 `AndroidTool-v1.4.0.zip` 并解压
 2. 双击 `AndroidTool.exe`
 3. 首次启动会提示缺少 **Android platform-tools**，点「立即下载」即可，程序自动下载并解压到 `bin\`
 
@@ -53,11 +54,18 @@ proxy=http://127.0.0.1:7897
 
 ## 刷写与备份
 
-左侧「刷写与备份」一栏有三件工具，都是**破坏性操作，执行前会二次确认**。
+左侧「刷写与备份」一栏有四件工具，写盘类操作都会先弹确认。
+
+### 读分区表
+
+`fastboot getvar all` 拉出这台设备真实的分区列表（名称 / 大小 / 类型），可复制、导出 CSV，
+选中一行点「用于刷入镜像」会直接带进刷写对话框——不用再手打分区的名字，也就不会打错。
+
+![分区表](docs/parts.png)
 
 ### 刷入镜像
 
-任选分区（内置 boot / recovery / dtbo / vbmeta / super / modem 等 40 个常用分区名，也可手填），
+任选分区（读过分区表就用真实分区名，否则用内置的 40 个常用名，也可以手填），
 挑一个 `.img` 刷入，可选刷完自动重启。
 
 ![刷入镜像](docs/flashimg.png)

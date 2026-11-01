@@ -1,44 +1,37 @@
-# AndroidTool v1.3.0 — 刷机功能补齐
+# AndroidTool v1.4.0 — 读分区表
 
-从「命令台」升级成能干活的小工具：镜像刷写、线刷包、基带备份全部内置。
+给刷写加一层保险：刷之前先把这台设备**真实的分区**拉出来看。
 
-## 新增
+## 新增：读分区表
 
-### 刷入镜像
-- 任选分区（内置 40 个常用分区名，也可手填）+ 任意 `.img`
-- 二次确认对话框列出分区、文件名、大小
-- 可选刷完自动重启
+- 跑 `fastboot getvar all`，解析 `partition-size` / `partition-type`
+- 列表展示：分区名、大小（自动换算 MB/GB）、类型、原始十六进制值
+- **复制列表**到剪贴板、**导出 CSV**
+- 选中某行点「用于刷入镜像」，直接把分区名带进刷写对话框——不用手打，也就不会打错
 
-### 线刷 ROM（小米 fastboot 包）
-- 直接选 `.tgz` / `.zip`，或已解压目录，自动用系统 `tar.exe` 解压
-- **按 `flash_all.bat` 里的原始顺序**解析 `fastboot flash` / `erase` / `set_active` / `reboot`
-- 执行前列出全部操作供核对；没有脚本时退化为按 `images\*.img` 同名分区刷
-- 可勾选擦除 userdata、刷完重启
-- 逐条执行并实时显示 `正在执行 5/42：flash xbl`，失败即停并报出具体命令
+![分区表](https://github.com/moqi12386/android-debug-console/raw/main/docs/parts.png)
 
-### 备份基带
-- 默认备份 modem / modemst1 / modemst2 / fsg / fsc，另可勾 persist / bluetooth / dsp
-- 走 `adb exec-out su -c "dd ..."`，不落设备临时文件，二进制安全
-- 每个分区导出为 `.img`，附 SHA256 与设备型号/序列号，写入 `备份说明.txt`
-- 需要 root，没 root 会直接提示而不是静默失败
+## 连带改进
 
-### 重启到 Recovery / EDL
-- Recovery：`adb reboot recovery`
-- EDL：先 `adb reboot edl`，失败自动改试 `fastboot oem edl`，并说明 9008 端口特征
+- 读过分区表后，「刷入镜像」的分区下拉框会用**真实分区名**替代内置的 40 个通用名
+- 没读过也能用，只是候选来自内置列表
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `AndroidTool-v1.3.0.zip` | 解压即用 |
-| `AndroidTool.exe` | 单文件本体，74 KB |
+| `AndroidTool-v1.4.0.zip` | 解压即用 |
+| `AndroidTool.exe` | 单文件本体，81 KB |
 
-## 安全说明
+## 完整功能一览
 
-刷写类操作全部带二次确认，且要先检测到 fastboot 设备才允许开始。
-线刷过程中断电/拔线有变砖风险，README 里有说明。
-
-备份文件含设备身份数据（NV/IMEI），只用于恢复本机，不要外传。
+| 分类 | 功能 |
+|---|---|
+| 常用 | 检测设备、版本信息、设备属性、重启到 Bootloader / Recovery / EDL、重启系统 |
+| 刷写 | 读分区表、刷入镜像、线刷 ROM（小米 fastboot 包） |
+| 备份 | 备份基带（modem / EFS），附 SHA256 |
+| 控制台 | adb shell / adb / fastboot 三档模式，历史记录，输出分色，存日志 |
+| 外观 | 8 套配色 + 自定义取色，MiSans / JetBrains Mono 字体，4 档字号 |
 
 ## 许可
 
