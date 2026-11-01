@@ -1,0 +1,18 @@
+# 构建产物
+AndroidTool.exe
+dist/
+
+# 运行时生成
+config.ini
+logs/
+*.log
+
+# 组件与字体（体积大 / 授权限制，不随仓库分发）
+bin/
+assets/fonts/*.ttf
+assets/fonts/*.otf
+
+# 编辑器
+.vs/
+*.user
+*.suo
