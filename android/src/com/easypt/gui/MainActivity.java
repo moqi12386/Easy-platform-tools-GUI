@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.0.0";
+    private static final String VER = "2.1.0";
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
     private int themeIdx = 0;
     private float scale = 1.0f;
     private String lang = "zh";
+    private int btnAlpha = 90;
 
     private int cBg, cPanel, cText, cDim, cAccent, cOk, cErr, cBtn, cRun, cInput, cOut;
 
@@ -105,6 +106,7 @@ public class MainActivity extends Activity {
         themeIdx = store.getInt("theme", 0);
         scale = store.getFloat("scale", 1.0f);
         lang = store.getString("lang", "zh");
+        btnAlpha = store.getInt("alpha", 90);
         pendingPart = store.getString("part", "boot");
         applyColors();
 
@@ -216,7 +218,7 @@ public class MainActivity extends Activity {
         slp.topMargin = dp(8);
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
-        scroll.setBackgroundColor(hasWall() ? Color.argb(205, Color.red(cOut), Color.green(cOut), Color.blue(cOut)) : cOut);
+        scroll.setBackgroundColor(Color.argb(hasWall() ? (Math.max(120, btnAlpha) * 255 / 100) : 255, Color.red(cOut), Color.green(cOut), Color.blue(cOut)));
 
         logView = new TextView(this);
         logView.setTextColor(cText);
@@ -291,12 +293,35 @@ public class MainActivity extends Activity {
         b.setAllCaps(false);
         b.setTextSize(13 * scale);
         b.setTextColor(cText);
-        b.setBackgroundColor(cBtn);
+        b.setBackground(pill(cBtn, 10));
         b.setPadding(dp(10), dp(6), dp(10), dp(6));
         b.setMinHeight(dp(46));
         b.setMinimumHeight(dp(46));
         b.setGravity(Gravity.CENTER);
         return b;
+    }
+
+    /** 圆角 + 可调不透明的按钮/卡片底 */
+    private android.graphics.drawable.GradientDrawable pill(int baseColor, int radiusDp) {
+        int a = Math.max(0, Math.min(100, btnAlpha)) * 255 / 100;
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        g.setColor(Color.argb(a, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor)));
+        g.setCornerRadius(dp(radiusDp));
+        g.setStroke(Math.max(1, dp(1)), Color.argb(Math.min(255, a + 25), Color.red(cDim), Color.green(cDim), Color.blue(cDim)));
+        return g;
+    }
+
+    /** 真实屏幕分辨率（含状态栏/导航栏） */
+    private int[] screenSize() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowMetrics wm = getWindowManager().getMaximumWindowMetrics();
+            android.graphics.Rect r = wm.getBounds();
+            return new int[]{ r.width(), r.height() };
+        }
+        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getRealMetrics(dm);
+        return new int[]{ dm.widthPixels, dm.heightPixels };
     }
 
     private Button smallBtn(String text, View.OnClickListener l) {
@@ -455,6 +480,29 @@ public class MainActivity extends Activity {
         }
         box.addView(sizes);
 
+        box.addView(label(T("按键透明度", "Button opacity")));
+        LinearLayout alphaRow = new LinearLayout(this);
+        alphaRow.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView tvAlpha = new TextView(this);
+        tvAlpha.setText(btnAlpha + "%");
+        tvAlpha.setTextColor(cText);
+        tvAlpha.setTextSize(13 * scale);
+        tvAlpha.setWidth(dp(56));
+        android.widget.SeekBar sb = new android.widget.SeekBar(this);
+        sb.setMax(100);
+        sb.setProgress(btnAlpha);
+        sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) { tvAlpha.setText(p + "%"); }
+            public void onStartTrackingTouch(android.widget.SeekBar s) { }
+            public void onStopTrackingTouch(android.widget.SeekBar s) {
+                btnAlpha = s.getProgress();
+                store.edit().putInt("alpha", btnAlpha).apply();
+                recreate();
+            }
+        });
+        alphaRow.addView(tvAlpha);
+        alphaRow.addView(sb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(alphaRow);
         box.addView(label(T("语言", "Language")));
         LinearLayout langs = new LinearLayout(this);
         Button zh = smallBtn("中文", new View.OnClickListener() {
@@ -871,15 +919,25 @@ public class MainActivity extends Activity {
     }
 
     private void showCrop(final android.graphics.Bitmap bmp) {
-        int h = (int) (getResources().getDisplayMetrics().heightPixels * 0.58f);
+        // 裁剪框严格用屏幕比例的尺寸，避免拉伸
+        int[] scr = screenSize();
+        float aspect = (float) scr[0] / scr[1];
+
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int availW = (int) (dm.widthPixels * 0.92f);
+        int availH = (int) (dm.heightPixels * 0.62f);
+        int fw = availW;
+        int fh = (int) (fw / aspect);
+        if (fh > availH) { fh = availH; fw = (int) (fh * aspect); }
+
         final CropView cv = new CropView(this);
         cv.setBitmap(bmp);
-        cv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h));
-        cv.setMinimumHeight(h);
+        cv.setLayoutParams(new ViewGroup.LayoutParams(fw, fh));
+        cv.setMinimumHeight(fh);
 
         android.widget.FrameLayout wrap = new android.widget.FrameLayout(this);
-        wrap.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h));
-        wrap.addView(cv, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h));
+        wrap.setLayoutParams(new ViewGroup.LayoutParams(fw, fh));
+        wrap.addView(cv, new android.widget.FrameLayout.LayoutParams(fw, fh));
 
         new AlertDialog.Builder(this)
                 .setTitle(T("拖动 / 双指缩放，框内即壁纸", "Drag / pinch — the frame becomes the wallpaper"))

@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "2.0.0";
+        private const string AppVersion = "2.1.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -44,6 +44,17 @@ namespace EasyPlatformTools
         //  主题
         // ================================================================
         /// <summary>按窗体坐标贴同一张壁纸的面板，解决 WinForms 不支持真透明的问题</summary>
+        /// <summary>支持半透明底的平面按钮</summary>
+        private sealed class AlphaButton : Button
+        {
+            public AlphaButton()
+            {
+                SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+                FlatStyle = FlatStyle.Flat;
+                FlatAppearance.BorderSize = 1;
+            }
+        }
+
         private sealed class WallPanel : Panel
         {
             public static Bitmap Wall;
@@ -303,6 +314,7 @@ namespace EasyPlatformTools
         private static string customPtSource = "";
         private static string remoteToken = "";
         private static string wallpaperPath = "";
+        private static int btnAlpha = 100;
         private static string lastPtSource = "";
 
         private enum Role { Text, Cmd, Err, Ok, Dim, Warn }
@@ -451,6 +463,11 @@ namespace EasyPlatformTools
                     {
                         Lang.Current = (val == "en") ? Lang.EN : Lang.ZH;
                     }
+                    else if (key == "alpha")
+                    {
+                        int a;
+                        if (int.TryParse(val, out a)) { btnAlpha = Math.Max(0, Math.Min(100, a)); }
+                    }
                     else if (key == "wall")
                     {
                         wallpaperPath = val;
@@ -480,6 +497,7 @@ namespace EasyPlatformTools
                 sb.AppendLine("lang=" + Lang.Current);
                 sb.AppendLine("token=" + remoteToken);
                 sb.AppendLine("wall=" + wallpaperPath);
+                sb.AppendLine("alpha=" + btnAlpha);
                 File.WriteAllText(ConfigPath, sb.ToString(), new UTF8Encoding(false));
             }
             catch { }
@@ -563,7 +581,7 @@ namespace EasyPlatformTools
             flowMenu.AutoScroll = true;
             side.Controls.Add(flowMenu, 0, 1);
 
-            btnSettings = new Button();
+            btnSettings = new AlphaButton();
             btnSettings.Text = "⚙  设置";
             btnSettings.Dock = DockStyle.Fill;
             btnSettings.Margin = new Padding(0, 8, 4, 0);
@@ -653,7 +671,7 @@ namespace EasyPlatformTools
             txtInput.BorderStyle = BorderStyle.FixedSingle;
             panelBottom.Controls.Add(txtInput);
 
-            btnRun = new Button();
+            btnRun = new AlphaButton();
             btnRun.Text = "执行";
             btnRun.Size = new Size(84, 28);
             btnRun.Location = new Point(600, 14);
@@ -663,7 +681,7 @@ namespace EasyPlatformTools
             btnRun.Font = fUi;
             panelBottom.Controls.Add(btnRun);
 
-            btnStop = new Button();
+            btnStop = new AlphaButton();
             btnStop.Text = "停止";
             btnStop.Size = new Size(58, 28);
             btnStop.Location = new Point(690, 14);
@@ -674,7 +692,7 @@ namespace EasyPlatformTools
             btnStop.Font = fUi;
             panelBottom.Controls.Add(btnStop);
 
-            btnClear = new Button();
+            btnClear = new AlphaButton();
             btnClear.Text = "清空";
             btnClear.Size = new Size(58, 24);
             btnClear.Location = new Point(600, 52);
@@ -683,7 +701,7 @@ namespace EasyPlatformTools
             btnClear.Font = fSmall;
             panelBottom.Controls.Add(btnClear);
 
-            btnSave = new Button();
+            btnSave = new AlphaButton();
             btnSave.Text = "存日志";
             btnSave.Size = new Size(64, 24);
             btnSave.Location = new Point(668, 52);
@@ -801,7 +819,7 @@ namespace EasyPlatformTools
 
         private static void NewMenuButton(FlowLayoutPanel host, string text, string cmd)
         {
-            Button b = new Button();
+            Button b = new AlphaButton();
             b.Text = text;
             b.Size = new Size(160, 30);
             b.AutoEllipsis = true;
@@ -850,7 +868,7 @@ namespace EasyPlatformTools
             dlgSettings.ShowInTaskbar = false;
             dlgSettings.StartPosition = FormStartPosition.Manual;
             dlgSettings.AutoScaleMode = AutoScaleMode.None;
-            dlgSettings.ClientSize = new Size(452, 476);
+            dlgSettings.ClientSize = new Size(452, 540);
             dlgSettings.Font = fUi;
             try { dlgSettings.Icon = form.Icon; } catch { }
 
@@ -941,7 +959,7 @@ namespace EasyPlatformTools
             lblPreview.BorderStyle = BorderStyle.FixedSingle;
             dlgSettings.Controls.Add(lblPreview);
 
-            Button btnClose = AddDlgButton("关闭", 348, 422, 88, 32);
+            Button btnClose = AddDlgButton("关闭", 348, 486, 88, 32);
             btnClose.Click += delegate { dlgSettings.Close(); };
 
             cbFont.SelectedIndexChanged += delegate
@@ -1030,6 +1048,37 @@ namespace EasyPlatformTools
                 lblWall.Text = "（无）";
             };
 
+            AddDlgLabel("按键透明度", 16, 420, true);
+            TrackBar tbAlpha = new TrackBar();
+            tbAlpha.Minimum = 0;
+            tbAlpha.Maximum = 100;
+            tbAlpha.TickFrequency = 10;
+            tbAlpha.SmallChange = 5;
+            tbAlpha.LargeChange = 10;
+            tbAlpha.Value = btnAlpha;
+            tbAlpha.Location = new Point(120, 414);
+            tbAlpha.Width = 220;
+            dlgSettings.Controls.Add(tbAlpha);
+
+            Label lblAlphaVal = new Label();
+            lblAlphaVal.Text = btnAlpha + "%";
+            lblAlphaVal.Location = new Point(350, 422);
+            lblAlphaVal.AutoSize = true;
+            lblAlphaVal.ForeColor = theme.Dim;
+            lblAlphaVal.Font = fSmall;
+            dlgSettings.Controls.Add(lblAlphaVal);
+
+            tbAlpha.Scroll += delegate
+            {
+                btnAlpha = tbAlpha.Value;
+                lblAlphaVal.Text = btnAlpha + "%";
+                ApplyTheme(theme);
+            };
+            tbAlpha.MouseCaptureChanged += delegate
+            {
+                btnAlpha = tbAlpha.Value;
+                SaveConfig();
+            };
             Lang.ApplyTo(dlgSettings);
             dlgSettings.Show(form);
         }
@@ -1397,6 +1446,12 @@ namespace EasyPlatformTools
         }
 
         /// <summary>壁纸：把原图压暗后铺满窗体，面板设为透明让壁纸透出来</summary>
+        private static Color WithAlpha(Color c)
+        {
+            if (btnAlpha >= 100) { return c; }
+            return Color.FromArgb(Math.Max(0, Math.Min(100, btnAlpha)) * 255 / 100, c.R, c.G, c.B);
+        }
+
         private static void ApplyWallpaper(Theme t)
         {
             bool on = !string.IsNullOrEmpty(wallpaperPath) && File.Exists(wallpaperPath);
@@ -1421,9 +1476,12 @@ namespace EasyPlatformTools
                     using (Graphics g = Graphics.FromImage(bmp))
                     {
                         g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                        g.DrawImage(src, 0, 0, w, h);
+                        double sc = Math.Max((double)w / src.Width, (double)h / src.Height);
+                        int dw = (int)Math.Ceiling(src.Width * sc);
+                        int dh = (int)Math.Ceiling(src.Height * sc);
+                        g.DrawImage(src, new Rectangle((w - dw) / 2, (h - dh) / 2, dw, dh));
                         // 压暗，保证文字可读
-                        using (SolidBrush veil = new SolidBrush(Color.FromArgb(60, t.Output)))
+                        using (SolidBrush veil = new SolidBrush(Color.FromArgb(0, t.Output)))
                         {
                             g.FillRectangle(veil, 0, 0, w, h);
                         }
@@ -1433,7 +1491,7 @@ namespace EasyPlatformTools
                     form.BackgroundImageLayout = ImageLayout.Stretch;
                 }
                 WallPanel.Wall = (Bitmap)form.BackgroundImage;
-                WallPanel.Veil = Color.FromArgb(t.Dark ? 150 : 130, t.Output);
+                WallPanel.Veil = Color.FromArgb(t.Dark ? 120 : 110, t.Output);
                 panelLeft.Invalidate();
                 panelTop.Invalidate();
                 panelBottom.Invalidate();
@@ -1471,21 +1529,21 @@ namespace EasyPlatformTools
 
             btnRun.BackColor = t.RunBtn;
             btnStop.BackColor = t.StopBtn;
-            btnClear.BackColor = t.Btn;
+            btnClear.BackColor = WithAlpha(t.Btn);
             btnClear.ForeColor = t.Text;
-            btnSave.BackColor = t.Btn;
+            btnSave.BackColor = WithAlpha(t.Btn);
             btnSave.ForeColor = t.Text;
 
             if (btnSettings != null)
             {
-                btnSettings.BackColor = t.Btn;
+                btnSettings.BackColor = WithAlpha(t.Btn);
                 btnSettings.ForeColor = t.Text;
                 btnSettings.FlatAppearance.BorderColor = t.Border;
             }
 
             foreach (Button b in menuButtons)
             {
-                b.BackColor = t.Btn;
+                b.BackColor = WithAlpha(t.Btn);
                 b.ForeColor = t.Text;
                 b.FlatAppearance.BorderColor = t.Border;
             }

@@ -1,39 +1,40 @@
-# Easy-platform-tools-GUI v2.0.0 — 自定义壁纸
+# Easy-platform-tools-GUI v2.1.0 — 按键透明度 + 壁纸不再拉伸
 
-两端都能把任意图片设成界面背景。
+真机截图暴露了两个问题：壁纸被纵向拉长、按键底板不透光。这版一起修。
 
-## 桌面版
+## 壁纸拉伸修复
 
-- 设置 → **背景图** → 选择图片…，支持 jpg / png / bmp
-- 图片按窗口大小等比铺满，自动压暗保证文字可读
-- 侧栏 / 顶栏 / 底栏改为自绘面板，**按窗体坐标对齐贴同一张图**，看上去是一整张背景
-- 存进 `config.ini` 的 `wall=`，下次启动自动加载；点「移除」恢复纯色
+| 端 | 之前 | 现在 |
+|---|---|---|
+| Android | 裁剪框按对话框高度比例（58% 屏高），裁出来的图比例和屏幕不一致，铺回去就变形 | 先取**本机真实分辨率**（`getMaximumWindowMetrics` / `getRealMetrics`，含状态栏与导航栏），按屏幕宽高比摆好裁剪框，裁出的图正好铺满 |
+| 桌面版 | `DrawImage` 直接拉伸到窗口尺寸 | **等比铺满 + 居中裁切**（cover），窗口比例怎么变都不变形 |
 
-![壁纸](https://github.com/moqi12386/Easy-platform-tools-GUI/raw/main/docs/wallpaper.png)
+## 按键透明度
 
-## Android 版
+两端设置里都新增「按键透明度」滑杆（0–100%），实时生效：
 
-- 设置 → **背景图** → 选择图片…
-- 进入裁剪界面：**单指拖动、双指缩放**，框内部分就是最终壁纸
-- 确认后裁好的图存到应用私有目录，重启自动加载；「清除」恢复纯色
-- 设了壁纸后，日志区自动变成半透明，背景从下面透出来
+- **桌面版**：`AlphaButton` 开启 `SupportsTransparentBackColor`，底板用带 alpha 的颜色，
+  透出下面的壁纸；数值存进 `config.ini` 的 `alpha=`
+- **Android**：按钮底改成 `GradientDrawable`（圆角 + alpha），顺带把原来的直角方块变圆角；
+  日志区透明度也跟着这个值走
 
-## 其它
+## 界面其它
 
-- 两版版本号统一到 2.0.0
+- Android 按钮从直角改成 10dp 圆角 + 1dp 描边，视觉上更轻
+- 桌面版壁纸的压暗层从「位图里压一遍 + 面板再压一遍」减为只压一次，壁纸能看清了
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `EasyPT.apk` | Android 2.0.0，44 KB，minSdk 26 |
-| `Easy-platform-tools-GUI-v2.0.0.zip` | Windows 桌面版 |
-| `Easy-platform-tools-GUI.exe` | 桌面版单文件，107 KB |
+| `EasyPT.apk` | Android 2.1.0，44 KB，minSdk 26 |
+| `Easy-platform-tools-GUI-v2.1.0.zip` | Windows 桌面版 |
+| `Easy-platform-tools-GUI.exe` | 桌面版单文件，108 KB |
 
 ## 说明
 
-桌面版壁纸已在 Windows 上截图验证；Android 版裁剪界面按逻辑实现，
-同样没有真机对照（开发机没有测试设备）。
+壁纸与透明度都已在 Windows 端截图核对；Android 端的裁剪比例与圆角按钮在真机（MIX 2S）上验证过壁纸能正常显示，
+这次的调整还没有你那边的新截图确认。
 
 ## 许可
 
