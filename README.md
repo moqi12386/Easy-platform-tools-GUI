@@ -113,6 +113,33 @@ proxy=http://127.0.0.1:7897
 翻译覆盖主窗口、设置、首次启动向导、读分区表、刷入镜像、线刷 ROM、备份基带
 全部界面与提示；未收录的文案会原样显示中文，不会报错。
 
+## Android 版
+
+同一个仓库里带一个 Android App（`android/`），三种模式在设置里自由切换：
+
+| 模式 | 干什么 | 前提 |
+|---|---|---|
+| **OTG 主机** | 手机 A 用 OTG 线刷手机 B：读分区表、刷镜像、擦除、重启 | 目标机进 fastboot；本机需支持 USB Host |
+| **本机 root** | 不用电脑，直接备份基带、刷自己分区、进 Recovery / EDL | 本机需 root |
+| **遥控 PC** | 手机当遥控器，指挥电脑上的桌面版干活 | 同一 Wi-Fi，电脑开着并启动遥控服务 |
+
+OTG 模式是**自己实现的 fastboot 协议**（USB bulk 传输 + 64 字节命令包），不依赖 adb、不需要 root。
+遥控模式在桌面版「遥控服务…」里启动，配对码 6 位，服务只接受带正确 `X-Token` 的请求。
+
+### 安装
+
+下载 Release 里的 `EasyPT.apk` 直接安装（minSdk 26 / Android 8.0+）。
+自签名 APK，首次安装需允许「未知来源」。
+
+### 自己编译
+
+```bat
+powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
+```
+
+不需要 Gradle：脚本直接用 `aapt2` + `javac` + `d8` + `apksigner` 打包，
+默认找 `C:\Users\35923\android-build` 下的 build-tools / platform / jdk。
+
 ## 字体
 
 仓库**不包含**字体文件（授权原因）。想要截图里的效果，把字体放进 `assets\fonts\` 即可，

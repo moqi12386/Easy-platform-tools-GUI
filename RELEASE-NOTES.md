@@ -1,33 +1,50 @@
-# Easy-platform-tools-GUI v1.6.0 — 中英文切换
+# Easy-platform-tools-GUI v1.7.0 — 增加 Android 版
 
-界面上所有文案都做了英文版，左下角设置里一键切换。
+桌面版之外，现在有同名的 Android App：`EasyPT.apk`。三种模式在 App 内自由切换。
 
-## 新增
+## Android App
 
-- **语言切换**：设置窗里新增「语言 / Language」下拉，中文 ⇄ English，切换后程序自动重启生效
-- 选择写入 `config.ini` 的 `lang=` 项，下次启动直接按该语言显示
-- 翻译覆盖：主窗口、设置、首次启动向导、读分区表、刷入镜像、线刷 ROM、备份基带
-  的全部按钮、标签、状态栏、确认弹窗与提示
-- 未收录的文案会原样显示中文，不会出现空白或异常
+| 模式 | 干什么 | 前提 |
+|---|---|---|
+| **OTG 主机** | 手机 A 用 OTG 线刷手机 B：读分区表、刷镜像、擦除、重启 | 目标机进 fastboot |
+| **本机 root** | 不用电脑，直接备份基带、刷自己分区、进 Recovery / EDL | 本机需 root |
+| **遥控 PC** | 手机当遥控器，指挥电脑上的桌面版 | 同一 Wi-Fi，电脑开服务 |
 
-## 截图
+- **OTG 模式是自己实现的 fastboot 协议**：USB bulk 传输 + 64 字节命令包（`FASTBOOT` + 命令），
+  处理 `OKAY` / `FAIL` / `INFO` / `DATA` 响应，下载镜像走 `download:` 分包传输。不依赖 adb，不需要 root。
+- **本机模式**用 `su` + `dd` 直接读写 `/dev/block/by-name/*`。
+- **遥控模式**走 HTTP，配对码 6 位，靠 `X-Token` 头校验。
+- 界面与桌面版同一套配色，全部用系统控件，无第三方依赖，APK 仅 28 KB。
 
-| 中文 | English |
-|---|---|
-| ![zh](https://github.com/moqi12386/Easy-platform-tools-GUI/raw/main/docs/main.png) | ![en](https://github.com/moqi12386/Easy-platform-tools-GUI/raw/main/docs/main-en.png) |
+## 桌面版新增
 
-## 实现方式
-
-`src/Lang.cs` 是一张独立翻译表：精确匹配处理静态文案（按钮、标签），
-正则模板处理带变量的消息（`── 退出码 0 ──` → `── exit code 0 ──`）。
-主程序逻辑没有因为多语言改动，只是把显示层的文字过一遍 `Lang.Tr()`。
+- 侧栏新增「遥控服务…」：启动一个内置 HTTP 服务（TcpListener 手写，非管理员也能跑），
+  显示本机 IP 和 6 位配对码，手机 App 填进去即可用
+- 接口：`/api/status`、`/api/run`、`/api/partitions`、`/api/flash`、`/api/reboot`，
+  全部要求 `X-Token` 匹配
+- 配对码存进 `config.ini` 的 `token=`，可一键更换
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `Easy-platform-tools-GUI-v1.6.0.zip` | 解压即用 |
-| `Easy-platform-tools-GUI.exe` | 单文件本体，98 KB |
+| `EasyPT.apk` | Android 版，28 KB，minSdk 26 |
+| `Easy-platform-tools-GUI-v1.7.0.zip` | Windows 桌面版，解压即用 |
+| `Easy-platform-tools-GUI.exe` | 桌面版单文件，107 KB |
+
+## 自己编译 APK
+
+```bat
+powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
+```
+
+不依赖 Gradle：`aapt2` 链接清单 → `javac` 编译 → `d8` 转 dex → `zipalign` → `apksigner` 签名。
+
+## 说明
+
+Android 版**没有在真机上跑过**（开发机没连手机，也没有 OTG 测试条件），
+OTG 协议和 root 路径是按规范实现并做了静态校验的，第一次用时请注意：
+先用「读分区表」确认能正常通信，再尝试写入操作。
 
 ## 许可
 

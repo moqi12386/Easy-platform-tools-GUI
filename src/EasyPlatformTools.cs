@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.6.0";
+        private const string AppVersion = "1.7.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -277,6 +277,7 @@ namespace EasyPlatformTools
         private static volatile bool setupBusy;
         private static string proxyUrl = "";
         private static string customPtSource = "";
+        private static string remoteToken = "";
         private static string lastPtSource = "";
 
         private enum Role { Text, Cmd, Err, Ok, Dim, Warn }
@@ -313,6 +314,7 @@ namespace EasyPlatformTools
             ResolveTools();
             LoadFonts();
             LoadConfig();
+            if (string.IsNullOrEmpty(remoteToken)) { remoteToken = new Random().Next(100000, 999999).ToString(); SaveConfig(); }
 
             // .NET Framework 默认可能只协商 TLS 1.0，镜像站普遍要求 1.2
             try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; } catch { }
@@ -424,6 +426,10 @@ namespace EasyPlatformTools
                     {
                         Lang.Current = (val == "en") ? Lang.EN : Lang.ZH;
                     }
+                    else if (key == "token")
+                    {
+                        remoteToken = val;
+                    }
                     else if (key == "pt_source")
                     {
                         customPtSource = val;
@@ -443,6 +449,7 @@ namespace EasyPlatformTools
                 sb.AppendLine("font=" + fontName);
                 sb.AppendLine("size=" + fontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("lang=" + Lang.Current);
+                sb.AppendLine("token=" + remoteToken);
                 File.WriteAllText(ConfigPath, sb.ToString(), new UTF8Encoding(false));
             }
             catch { }
@@ -553,6 +560,8 @@ namespace EasyPlatformTools
             NewMenuButton(flowMenu, "刷入镜像…", "@flashimg");
             NewMenuButton(flowMenu, "线刷 ROM…", "@rom");
             NewMenuButton(flowMenu, "备份基带…", "@backup");
+            NewSectionLabel(flowMenu, "手机遥控");
+            NewMenuButton(flowMenu, "遥控服务…", "@remote");
         }
 
         private static void NewSectionLabel(FlowLayoutPanel host, string text)
@@ -781,6 +790,7 @@ namespace EasyPlatformTools
                 else if (tag == "@rom") { OpenFlashRom(); }
                 else if (tag == "@backup") { OpenBackup(); }
                 else if (tag == "@parts") { OpenPartitions(); }
+                else if (tag == "@remote") { OpenRemote(); }
                 else { Execute(tag); }
             };
             host.Controls.Add(b);
@@ -2830,6 +2840,109 @@ namespace EasyPlatformTools
             catch { }
         }
 
+        // ================================================================
+        //  手机遥控服务
+        // ================================================================
+        public static string AdbPathPublic { get { return adbPath; } }
+        public static string FastbootPathPublic { get { return fastbootPath; } }
+        public static string VersionPublic { get { return AppVersion; } }
+        public static List<string[]> ParseGetvarPublic(string text) { return ParseGetvar(text); }
+
+        public static bool RunConsoleCommand(string text, out string output)
+        {
+            output = "";
+            if (string.IsNullOrEmpty(text)) { return false; }
+            string[] tokens = SplitArgs(text);
+            if (tokens.Length == 0) { return false; }
+            string exe;
+            string[] argv;
+            if (!BuildInvocation(tokens, "adb shell", out exe, out argv)) { return false; }
+            return RunTask(exe, argv, out output);
+        }
+
+        private static Form dlgRemote;
+        private static Label lblRemoteInfo, lblRemoteStatus;
+
+        private static void OpenRemote()
+        {
+            if (dlgRemote != null && !dlgRemote.IsDisposed) { dlgRemote.Activate(); return; }
+
+            dlgRemote = NewToolDialog("手机遥控服务", new Size(520, 300));
+
+            lblRemoteInfo = new Label();
+            lblRemoteInfo.Location = new Point(20, 18);
+            lblRemoteInfo.Size = new Size(480, 90);
+            lblRemoteInfo.Font = fSmall;
+            lblRemoteInfo.ForeColor = theme.Text;
+            dlgRemote.Controls.Add(lblRemoteInfo);
+
+            lblRemoteStatus = new Label();
+            lblRemoteStatus.Location = new Point(20, 116);
+            lblRemoteStatus.Size = new Size(480, 22);
+            lblRemoteStatus.Font = fSmall;
+            lblRemoteStatus.ForeColor = theme.Dim;
+            dlgRemote.Controls.Add(lblRemoteStatus);
+
+            Button btnToggle = DialogButton(dlgRemote, "启动服务", 20, 156, 140, 40, true);
+            btnToggle.Click += delegate
+            {
+                if (RemoteServer.Running)
+                {
+                    RemoteServer.Stop();
+                    btnToggle.Text = "启动服务";
+                    SetLbl(lblRemoteStatus, "已停止");
+                    lblRemoteStatus.ForeColor = theme.Dim;
+                }
+                else
+                {
+                    if (RemoteServer.Start(8765, remoteToken))
+                    {
+                        btnToggle.Text = "停止服务";
+                        string ip = RemoteServer.LocalIp();
+                        SetLbl(lblRemoteStatus, "运行中：http://" + ip + ":8765");
+                        lblRemoteStatus.ForeColor = theme.Ok;
+                    }
+                    else
+                    {
+                        SetLbl(lblRemoteStatus, "启动失败：" + RemoteServer.LastError);
+                        lblRemoteStatus.ForeColor = theme.Err;
+                    }
+                }
+                RefreshRemoteInfo();
+            };
+
+            Button btnCopy = DialogButton(dlgRemote, "复制配对码", 172, 156, 130, 40, false);
+            btnCopy.Click += delegate
+            {
+                try { Clipboard.SetText(remoteToken); SetLbl(lblRemoteStatus, "配对码已复制"); } catch { }
+            };
+
+            Button btnClose = DialogButton(dlgRemote, "关闭", 314, 156, 90, 40, false);
+            btnClose.Click += delegate { dlgRemote.Close(); };
+
+            Button btnReload = DialogButton(dlgRemote, "换一个配对码", 20, 206, 160, 34, false);
+            btnReload.Click += delegate
+            {
+                remoteToken = new Random().Next(100000, 999999).ToString();
+                SaveConfig();
+                RefreshRemoteInfo();
+                SetLbl(lblRemoteStatus, "配对码已更换，需要重启服务才生效");
+            };
+
+            RefreshRemoteInfo();
+            dlgRemote.FormClosed += delegate { if (RemoteServer.Running) { } };
+            dlgRemote.Show(form);
+        }
+
+        private static void RefreshRemoteInfo()
+        {
+            if (lblRemoteInfo == null) { return; }
+            string ip = RemoteServer.LocalIp();
+            lblRemoteInfo.Text = "手机和电脑连同一个 Wi-Fi，在手机 App 的「遥控 PC」模式里填：\n\n"
+                + "    地址：  " + ip + ":8765\n"
+                + "    配对码：" + remoteToken + "\n\n"
+                + "服务只响应这台电脑上的 adb / fastboot，命令不会离开本机。";
+        }
         // ================================================================
         //  无界面模式（自检 / 单条命令）
         // ================================================================
