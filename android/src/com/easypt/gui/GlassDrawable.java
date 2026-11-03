@@ -15,20 +15,26 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 
 /**
- * 液态玻璃：实时把「控件背后那块壁纸」降采样 + 多次盒滤成模糊底，再叠一层镜面边（边缘放大取样的环），
- * 最后加顶部高光和 1px 亮边。模糊强度 0–100 可调，0 等于不模糊。
+ * 液态玻璃。
+ *
+ * 模糊不在 draw() 里算：壁纸加载时预生成 4 级「降采样 + 盒滤」的小图（1/3、1/6、1/12、1/24），
+ * draw() 只按控件当前屏幕位置从对应级别里取一块画上去，成本就是一次 drawBitmap，
+ * 所以滚动时每帧重画也不掉帧。
+ *
+ * 再叠三层液态特征：边缘的放大环（折射）、顶部高光、底部压暗。
  */
 public class GlassDrawable extends Drawable {
 
+    /** 全局模糊强度（0–100），设置里改完 invalidate 一次即可 */
+    public static int BLUR = 80;
+    /** 全局浓度（0–100）：面板不透明度，越高壁纸越看不清 */
+    public static int CONC = 45;
+
     private final View host;
-    private Bitmap wall;
+    private Bitmap[] levels;          // 预模糊的壁纸，从清晰到最糊
+    private int[] factors = { 3, 6, 12, 24 };
     private float radius;
     private int tint = 0x14FFFFFF;
-    /** 全局模糊强度（0–100），设置里改了立刻生效 */
-    public static int BLUR = 80;
-    /** 全局玻璃浓度（0–100）：越高越不透明，壁纸越看不清 */
-    public static int CONC = 45;
-    private int blurPct = -1;
     private float borderPx;
     private int borderColor = 0x66FFFFFF;
     private boolean lens = true;
@@ -38,22 +44,32 @@ public class GlassDrawable extends Drawable {
     private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF box = new RectF();
     private final Rect src = new Rect();
-    private final Rect dst = new Rect();
     private final Path clip = new Path();
     private final Path ring = new Path();
     private final Matrix mx = new Matrix();
 
-    public GlassDrawable(View host, float radiusPx) {
+    public GlassDrawable(View host) {
         this.host = host;
-        this.radius = radiusPx;
     }
 
-    public GlassDrawable wall(Bitmap b) { this.wall = b; return this; }
+    /** levels 是按 factor 逐级降采样+盒滤后的壁纸；factors 与之一一对应 */
+    public GlassDrawable wall(Bitmap[] levelBitmaps, int[] downFactors) {
+        this.levels = levelBitmaps;
+        if (downFactors != null && levelBitmaps != null && downFactors.length == levelBitmaps.length) {
+            this.factors = downFactors;
+        }
+        return this;
+    }
+
+    public GlassDrawable wall(Bitmap single) {
+        this.levels = single == null ? null : new Bitmap[]{ single };
+        this.factors = new int[]{ 1 };
+        return this;
+    }
+
+    public GlassDrawable radius(float r) { this.radius = r; return this; }
 
     public GlassDrawable tint(int color) { this.tint = color; return this; }
-
-    /** 0 = 不模糊，100 = 最糊 */
-    public GlassDrawable blur(int pct) { this.blurPct = Math.max(0, Math.min(100, pct)); return this; }
 
     public GlassDrawable border(float px, int color) {
         this.borderPx = px;
@@ -74,24 +90,26 @@ public class GlassDrawable extends Drawable {
         int save = c.save();
         c.clipPath(clip);
 
-        Bitmap small = null;
-        if (wall != null) { small = blurredSample(b); }
+        int idx = levelIndex();
+        Bitmap lv = (levels != null && levels.length > 0)
+                ? levels[Math.min(idx, levels.length - 1)] : null;
+        int factor = factors[Math.min(idx, factors.length - 1)];
 
-        if (small != null) {
-            c.drawBitmap(small, null, box, bmpPaint);
+        if (lv != null) {
+            drawFromLevel(c, lv, factor);
         } else {
-            fillPaint.setColor(tint & 0x00FFFFFF | 0x66000000);
+            fillPaint.setColor((tint & 0x00FFFFFF) | 0x66000000);
             c.drawRect(box, fillPaint);
         }
 
         // 主题色按浓度压上去
-        fillPaint.setShader(null);
         int a = Math.max(0, Math.min(100, CONC)) * 255 / 100;
+        fillPaint.setShader(null);
         fillPaint.setColor((tint & 0x00FFFFFF) | (a << 24));
         c.drawRect(box, fillPaint);
 
-        // 镜面边：把同一块图放大一点，只留在边缘那一圈，做出「透镜」的折射感
-        if (lens && small != null) {
+        // 边缘放大环：透镜的折射感
+        if (lens && lv != null) {
             float w = Math.min(dp(13), Math.min(box.width(), box.height()) * 0.30f);
             float r2 = Math.max(1, radius - w);
             ring.reset();
@@ -105,26 +123,25 @@ public class GlassDrawable extends Drawable {
             mx.reset();
             mx.setScale(1.30f, 1.30f, box.centerX(), box.centerY());
             c.concat(mx);
-            c.drawBitmap(small, null, box, bmpPaint);
+            drawFromLevel(c, lv, factor);
             c.restoreToCount(s2);
-            // 边缘再补一点白，像玻璃的反光
             fillPaint.setColor(0x08FFFFFF);
             c.drawPath(ring, fillPaint);
         }
 
-        // 顶部高光（从左上打下来的光）
+        // 顶部高光
         fillPaint.setShader(new LinearGradient(box.left, box.top, box.left, box.top + box.height() * 0.5f,
                 0x1EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
         c.drawRect(box, fillPaint);
         fillPaint.setShader(null);
 
-        // 左上斜向反光条
-        fillPaint.setShader(new LinearGradient(box.left, box.top, box.left + box.width() * 0.55f, box.top + box.height(),
-                0x22FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        // 左上斜向反光
+        fillPaint.setShader(new LinearGradient(box.left, box.top, box.left + box.width() * 0.55f,
+                box.top + box.height(), 0x22FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
         c.drawRect(box, fillPaint);
         fillPaint.setShader(null);
 
-        // 底部一点点压暗，玻璃的厚度感
+        // 底部压暗
         fillPaint.setShader(new LinearGradient(box.left, box.bottom, box.left, box.bottom - box.height() * 0.35f,
                 0x14000000, 0x00000000, Shader.TileMode.CLAMP));
         c.drawRect(box, fillPaint);
@@ -142,55 +159,30 @@ public class GlassDrawable extends Drawable {
         }
     }
 
-    /** 取控件背后那块壁纸，按 blurPct 降采样 + 盒滤 */
-    private Bitmap blurredSample(Rect b) {
-        int[] loc = new int[2];
-        host.getLocationOnScreen(loc);
-        int x = Math.max(0, loc[0]);
-        int y = Math.max(0, loc[1]);
-        int w = Math.min(b.width(), wall.getWidth() - x);
-        int h = Math.min(b.height(), wall.getHeight() - y);
-        if (w <= 0 || h <= 0) { return null; }
-
-        int pct = blurPct >= 0 ? blurPct : BLUR;
-        int factor = 1 + Math.round(pct * 0.24f);   // 1..25
-        int bw = Math.max(2, w / factor);
-        int bh = Math.max(2, h / factor);
-        Bitmap small = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-        Canvas sc = new Canvas(small);
-        src.set(x, y, x + w, y + h);
-        dst.set(0, 0, bw, bh);
-        sc.drawBitmap(wall, src, dst, bmpPaint);
-        if (factor > 2) { boxBlur(small, 1); }
-        return small;
+    /** 0..100 映射到 3 级：最低级也有 1/6 的模糊，不会退回原图 */
+    private int levelIndex() {
+        int p = Math.max(0, Math.min(100, BLUR));
+        if (p < 40) { return 1; }
+        if (p < 70) { return 2; }
+        return 3;
     }
 
-    /** 3x3 盒滤，把降采样的锯齿抹平 */
-    private static void boxBlur(Bitmap bmp, int passes) {
-        int w = bmp.getWidth(), h = bmp.getHeight();
-        int[] px = new int[w * h];
-        bmp.getPixels(px, 0, w, 0, 0, w, h);
-        int[] out = new int[w * h];
-        for (int p = 0; p < passes; p++) {
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int r = 0, g = 0, bl = 0, a = 0, n = 0;
-                    for (int dy = -1; dy <= 1; dy++) {
-                        int yy = y + dy;
-                        if (yy < 0 || yy >= h) { continue; }
-                        for (int dx = -1; dx <= 1; dx++) {
-                            int xx = x + dx;
-                            if (xx < 0 || xx >= w) { continue; }
-                            int c = px[yy * w + xx];
-                            a += (c >>> 24); r += (c >> 16) & 0xFF; g += (c >> 8) & 0xFF; bl += c & 0xFF;
-                            n++;
-                        }
-                    }
-                    out[y * w + x] = ((a / n) << 24) | ((r / n) << 16) | ((g / n) << 8) | (bl / n);
-                }
-            }
-        }
-        bmp.setPixels(out, 0, w, 0, 0, w, h);
+    /** 从预模糊图里取「屏幕上这块位置」对应的部分，铺到控件里 */
+    private void drawFromLevel(Canvas c, Bitmap lv, int factor) {
+        int[] loc = new int[2];
+        host.getLocationOnScreen(loc);
+        float f = factor;
+        float sx = loc[0] / f;
+        float sy = loc[1] / f;
+        float sw = box.width() / f;
+        float sh = box.height() / f;
+        int x0 = Math.max(0, Math.round(sx));
+        int y0 = Math.max(0, Math.round(sy));
+        int x1 = Math.min(lv.getWidth(), Math.round(sx + sw));
+        int y1 = Math.min(lv.getHeight(), Math.round(sy + sh));
+        if (x1 - x0 < 1 || y1 - y0 < 1) { return; }
+        src.set(x0, y0, x1, y1);
+        c.drawBitmap(lv, src, box, bmpPaint);
     }
 
     private float dp(float v) {

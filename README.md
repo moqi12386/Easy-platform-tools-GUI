@@ -13,6 +13,7 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、、可换背�
 - **线刷 ROM**：直接吃小米 fastboot 线刷包（`.tgz` / `.zip` / 已解压目录），自动解析 `flash_all.bat` 的刷写顺序
 - **备份基带**：把 modem / modemst1 / modemst2 / fsg / fsc 等分区导出成本地镜像，附 SHA256 与设备信息
 - **首次启动自动装依赖**：检测到没有 adb 时，自动从镜像/官方源下载 platform-tools 并解压到 `bin\`
+- **拖文件进窗口**：从资源管理器把 `.img` / `.tgz` / 任意文件拖进主窗口，路径自动填到命令框；拖到各工具对话框的路径框也会直接填上
 - **命令控制台**：底部按模式输入（`adb shell` / `adb` / `fastboot`），以 adb / fastboot 开头的命令按原样执行，↑↓ 翻历史
 - **输出分色**：stdout 正文色、stderr 红色、结束时打印退出码（0 绿 / 非 0 红），可清空、可存日志
 - **主题**：8 个预设背景色 + 自定义取色器，按背景亮度自动推导整套配色，浅色底不会出现浅色字
@@ -202,7 +203,7 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 | **原生** | 10 dp 圆角、半透明底、你选的边框 | `PillDrawable` |
 | **Material** | 24 dp 药丸、底色往主色带、2 dp 投影、按下有水波纹 | `RippleDrawable` + `setElevation` |
 | **MIUIX** | 单列列表：左边标题、右边 `›`、52 dp 行高，设置页也分成卡片 | 自绘 `ChevronDrawable` |
-| **液态玻璃** | 底栏和卡片是实时模糊的玻璃，**按钮是实心的**（不把壁纸透上来） | `GlassDrawable` + `PillDrawable` |
+| **液态玻璃** | 卡片、按钮、底栏都是玻璃：预模糊壁纸 + 透镜边 + 高光 | `GlassDrawable` |
 
 ![四种样式](docs/styles.png)
 
@@ -239,9 +240,11 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 
 ### 玻璃是怎么画的
 
-不是 `RenderEffect`（那个只能糊自己、糊不了背后的壁纸，还要 API 31）。每块玻璃在每次重绘时现取
-**它自己背后**那块壁纸：按模糊强度降采样（1×–25×）+ 一次 3×3 盒滤，再拉伸回控件大小。
-所以滚动、换壁纸、挪位置都对得上，模糊程度改了立刻重画。
+先把壁纸按 1/3、1/6、1/12、1/24 烤成 4 张模糊小图（各做一次 3×3 盒滤），存在内存里。
+`draw()` 里只做一件事：按控件**当前屏幕位置**从对应级别里取一块 `drawBitmap` 出来。
+
+所以滚动时每帧重画也不掉帧（一次绘制 vs 以前的「新建位图 + 盒滤」）。
+每块玻璃糊的都是它自己背后那块，换壁纸、滚动、挪位置都对得上。
 
 叠在模糊底之上的是三层「液态」特征：
 

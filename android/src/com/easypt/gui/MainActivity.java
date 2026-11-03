@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.12.0";
+    private static final String VER = "2.13.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -91,13 +91,15 @@ public class MainActivity extends Activity {
     private int styleIdx = ST_NATIVE;
     private boolean borderOn = true, borderRain = true;
     private int borderColor = 0xFFFFFFFF, borderDp = 2, borderAlphaPct = 100;
-    private int blurPct = 80;
+    private int blurPct = 70;
     private int glassPct = 45;
     private int backdrop = 0;    // 壁纸平均色（无壁纸时 = 主题底色）
     private android.graphics.Bitmap wallBmp = null;
     private final java.util.HashMap<Button, Integer> themed = new java.util.HashMap<Button, Integer>();
     private final java.util.HashSet<Button> listRows = new java.util.HashSet<Button>();
     private final java.util.ArrayList<View> glassViews = new java.util.ArrayList<View>();
+    private android.graphics.Bitmap[] wallLevels;
+    private static final int[] LEVEL_DIV = { 3, 6, 12, 24 };
 
     private int cBg, cPanel, cText, cDim, cAccent, cOk, cErr, cBtn, cRun, cInput, cOut;
 
@@ -136,8 +138,8 @@ public class MainActivity extends Activity {
         borderColor = store.getInt("bCol", 0xFFFFFFFF);
         borderDp = store.getInt("bDp", 2);
         borderAlphaPct = store.getInt("bA", 100);
-        blurPct = store.getInt("blur", 80);
-        glassPct = store.getInt("gconc", 45);
+        blurPct = store.getInt("blurv", 70);
+        glassPct = store.getInt("gconcv", 45);
         GlassDrawable.BLUR = blurPct;
         GlassDrawable.CONC = glassPct;
         pendingPart = store.getString("part", "boot");
@@ -336,6 +338,7 @@ public class MainActivity extends Activity {
         if (wallBmp != null) {
             rootView.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
             backdrop = averageColor(wallBmp);
+            buildWallLevels();
         } else {
             rootView.setBackgroundColor(cBg);
             backdrop = cOut;
@@ -441,8 +444,8 @@ public class MainActivity extends Activity {
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
         if (isGlass()) {
-            scroll.setBackground(new GlassDrawable(scroll, dp(18))
-                    .wall(hasWall() ? wallBmp : null)
+            scroll.setBackground(new GlassDrawable(scroll).radius(dp(18))
+                    .wall(wallLevels, LEVEL_DIV)
                     .tint(Color.argb(hasWall() ? 0x22 : 0x80, Color.red(cOut), Color.green(cOut), Color.blue(cOut)))
                     .border(dp(1), 0x2EFFFFFF));
             glassViews.add(scroll);
@@ -499,8 +502,8 @@ public class MainActivity extends Activity {
         input.setTextSize(14 * scale);
         input.setSingleLine(true);
         if (isGlass()) {
-            input.setBackground(new GlassDrawable(input, dp(16))
-                    .wall(hasWall() ? wallBmp : null)
+            input.setBackground(new GlassDrawable(input).radius(dp(16))
+                    .wall(wallLevels, LEVEL_DIV)
                     .tint(Color.argb(0x33, Color.red(cInput), Color.green(cInput), Color.blue(cInput)))
                     .border(dp(1), 0x33FFFFFF));
             glassViews.add(input);
@@ -540,8 +543,8 @@ public class MainActivity extends Activity {
         int barTint = Color.argb(isGlass() ? (hasWall() ? 0x55 : 0xDA) : 0xF2,
                 Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel));
         if (isGlass()) {
-            navBar.setBackground(new GlassDrawable(navBar, dp(33))
-                    .wall(hasWall() ? wallBmp : null)
+            navBar.setBackground(new GlassDrawable(navBar).radius(dp(33))
+                    .wall(wallLevels, LEVEL_DIV)
                     .tint(barTint)
                     .border(dp(1), 0x59FFFFFF));
             navBar.setElevation(dp(18));
@@ -642,8 +645,8 @@ public class MainActivity extends Activity {
 
     private Drawable thumbBg() {
         if (isGlass()) {
-            return new GlassDrawable(navThumb, dp(28))
-                    .wall(hasWall() ? wallBmp : null)
+            return new GlassDrawable(navThumb).radius(dp(28))
+                    .wall(wallLevels, LEVEL_DIV)
                     .tint(0x26FFFFFF)
                     .border(dp(1), 0x66FFFFFF);
         }
@@ -802,16 +805,58 @@ public class MainActivity extends Activity {
         return isGlass() && wallBmp != null ? blend(fgColor(), cPanel, 0.15) : cAccent;
     }
 
+    /** 预先烤好 4 级模糊壁纸（1/3、1/6、1/12、1/24），draw() 时只做一次 drawBitmap */
+    private void buildWallLevels() {
+        if (wallBmp == null) { wallLevels = null; return; }
+        wallLevels = new android.graphics.Bitmap[LEVEL_DIV.length];
+        android.graphics.Paint fp = new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+        for (int i = 0; i < LEVEL_DIV.length; i++) {
+            int d = LEVEL_DIV[i];
+            int w = Math.max(4, wallBmp.getWidth() / d);
+            int h = Math.max(4, wallBmp.getHeight() / d);
+            android.graphics.Bitmap small = android.graphics.Bitmap.createBitmap(
+                    w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(small);
+            cv.drawBitmap(wallBmp, new android.graphics.Rect(0, 0, wallBmp.getWidth(), wallBmp.getHeight()),
+                    new android.graphics.Rect(0, 0, w, h), fp);
+            boxBlur3(small);
+            wallLevels[i] = small;
+        }
+    }
+
+    /** 3x3 盒滤一次，把降采样的方块感抹掉 */
+    private static void boxBlur3(android.graphics.Bitmap bmp) {
+        int w = bmp.getWidth(), h = bmp.getHeight();
+        int[] px = new int[w * h];
+        bmp.getPixels(px, 0, w, 0, 0, w, h);
+        int[] out = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int r = 0, g = 0, b = 0, a = 0, n = 0;
+                for (int dy = -1; dy <= 1; dy++) {
+                    int yy = y + dy;
+                    if (yy < 0 || yy >= h) { continue; }
+                    for (int dx = -1; dx <= 1; dx++) {
+                        int xx = x + dx;
+                        if (xx < 0 || xx >= w) { continue; }
+                        int c = px[yy * w + xx];
+                        a += (c >>> 24); r += (c >> 16) & 0xFF; g += (c >> 8) & 0xFF; b += c & 0xFF;
+                        n++;
+                    }
+                }
+                out[y * w + x] = ((a / n) << 24) | ((r / n) << 16) | ((g / n) << 8) | (b / n);
+            }
+        }
+        bmp.setPixels(out, 0, w, 0, 0, w, h);
+    }
     /** 按样式造按钮底 */
     private Drawable buttonBg(View host, int baseColor) {
         int base = fillBase(baseColor);
         if (isGlass()) {
-            // 按钮在液态玻璃下是**实心**的：不把壁纸透上来，只有底栏和卡片才是玻璃
-            int solid = blend(cPanel, base, 0.55);
-            solid = blend(solid, Color.WHITE, 0.06);
-            PillDrawable p = new PillDrawable(0xFF000000 | (solid & 0x00FFFFFF), dp(radiusDp()));
-            p.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
-            return p;
+            return new GlassDrawable(host).radius(dp(radiusDp()))
+                    .wall(wallLevels, LEVEL_DIV)
+                    .tint(Color.argb(0x18, Color.red(base), Color.green(base), Color.blue(base)))
+                    .border(dp(Math.max(1, borderDp)), borderAlphaPct >= 40 ? 0x66FFFFFF : 0x33FFFFFF);
         }
         int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
         PillDrawable p = new PillDrawable(
@@ -1182,7 +1227,7 @@ public class MainActivity extends Activity {
             public void onStopTrackingTouch(android.widget.SeekBar s) {
                 blurPct = s.getProgress();
                 GlassDrawable.BLUR = blurPct;
-                store.edit().putInt("blur", blurPct).apply();
+                store.edit().putInt("blurv", blurPct).apply();
             }
         });
         blRow.addView(tvBl);
@@ -1218,7 +1263,7 @@ public class MainActivity extends Activity {
             public void onStopTrackingTouch(android.widget.SeekBar s) {
                 glassPct = s.getProgress();
                 GlassDrawable.CONC = glassPct;
-                store.edit().putInt("gconc", glassPct).apply();
+                store.edit().putInt("gconcv", glassPct).apply();
             }
         });
         gcRow.addView(tvGc);
@@ -1363,8 +1408,8 @@ public class MainActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(14));
         if (isGlass()) {
-            c.setBackground(new GlassDrawable(c, dp(20))
-                    .wall(hasWall() ? wallBmp : null)
+            c.setBackground(new GlassDrawable(c).radius(dp(20))
+                    .wall(wallLevels, LEVEL_DIV)
                     .tint(Color.argb(hasWall() ? 0x33 : 0xCC, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
                     .border(dp(1), 0x40FFFFFF));
             c.setElevation(dp(8));
@@ -1708,8 +1753,8 @@ public class MainActivity extends Activity {
 
     private Drawable menuBg() {
         if (isGlass()) {
-            return new GlassDrawable(rootView, dp(22))
-                    .wall(hasWall() ? wallBmp : null)
+            return new GlassDrawable(rootView).radius(dp(22))
+                    .wall(wallLevels, LEVEL_DIV)
                     .tint(Color.argb(0xE8, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
                     .border(dp(1), 0x40FFFFFF);
         }
@@ -1749,11 +1794,10 @@ public class MainActivity extends Activity {
     /** 可点的「一行」：圆角底，右侧箭头，用来唤起 showMenu */
     private Drawable menuRowBg(int radiusDp) {
         if (isGlass()) {
-            // 同样：可点的一行也是实心
-            int solid = blend(cPanel, cBtn, 0.55);
-            PillDrawable p = new PillDrawable(0xFF000000 | (solid & 0x00FFFFFF), dp(radiusDp));
-            p.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
-            return p;
+            return new GlassDrawable(rootView).radius(dp(radiusDp))
+                    .wall(wallLevels, LEVEL_DIV)
+                    .tint(Color.argb(0x24, Color.red(cBtn), Color.green(cBtn), Color.blue(cBtn)))
+                    .border(dp(Math.max(1, borderDp)), borderOn ? (borderRain ? 0x66FFFFFF : borderColor) : 0x33FFFFFF);
         }
         int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
         PillDrawable p = new PillDrawable(Color.argb(a, Color.red(fillBase(cBtn)), Color.green(fillBase(cBtn)), Color.blue(fillBase(cBtn))), dp(radiusDp));

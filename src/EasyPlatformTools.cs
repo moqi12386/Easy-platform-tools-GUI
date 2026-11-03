@@ -1,4 +1,4 @@
-﻿// Easy-platform-tools-GUI — adb / fastboot 图形化命令台
+// Easy-platform-tools-GUI — adb / fastboot 图形化命令台
 // 编译：powershell -ExecutionPolicy Bypass -File build.ps1
 // 依赖：.NET Framework 4.x（Windows 自带），无需 PowerShell 运行时。
 // 字体：assets\fonts\*.ttf（MiSans、JetBrains Mono），缺失时回退系统字体。
@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "2.4.0";
+        private const string AppVersion = "2.5.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -532,6 +532,23 @@ namespace EasyPlatformTools
             BuildSidebar();
             BuildMain();
 
+            // 从资源管理器把文件拖进窗口：路径自动填到命令框
+            form.AllowDrop = true;
+            form.DragEnter += delegate(object s, DragEventArgs e)
+            {
+                e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            };
+            form.DragDrop += delegate(object s, DragEventArgs e)
+            {
+                string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files == null || files.Length == 0) { return; }
+                if (txtInput == null) { return; }
+                txtInput.Text = QuotePath(files[0]);
+                txtInput.Focus();
+                txtInput.SelectionStart = txtInput.TextLength;
+                AddOut("拖入文件：" + files[0], Role.Dim);
+            };
+
             form.Shown += delegate
             {
                 AddOut("Easy-platform-tools-GUI v" + AppVersion + "　·　adb / fastboot 命令控制台", Role.Cmd);
@@ -670,6 +687,18 @@ namespace EasyPlatformTools
             txtInput.Size = new Size(600, 26);
             txtInput.Font = fInput;
             txtInput.BorderStyle = BorderStyle.FixedSingle;
+            txtInput.AllowDrop = true;
+            txtInput.DragEnter += delegate(object s, DragEventArgs e)
+            {
+                e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            };
+            txtInput.DragDrop += delegate(object s, DragEventArgs e)
+            {
+                string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files == null || files.Length == 0) { return; }
+                txtInput.Text = QuotePath(files[0]);
+                txtInput.SelectionStart = txtInput.TextLength;
+            };
             panelBottom.Controls.Add(txtInput);
 
             btnRun = new AlphaButton();
@@ -2056,8 +2085,30 @@ namespace EasyPlatformTools
             t.BackColor = theme.EditBg;
             t.ForeColor = theme.Text;
             t.BorderStyle = BorderStyle.FixedSingle;
+            // 从资源管理器拖文件进来，自动填路径
+            t.AllowDrop = true;
+            t.DragEnter += delegate(object s, DragEventArgs e)
+            {
+                e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            };
+            t.DragDrop += delegate(object s, DragEventArgs e)
+            {
+                string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files == null || files.Length == 0) { return; }
+                t.Text = files[0];
+                t.SelectionStart = t.TextLength;
+            };
             f.Controls.Add(t);
             return t;
+        }
+
+        /// <summary>带空格/中文的路径加引号，方便直接拼进命令行</summary>
+        private static string QuotePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) { return path; }
+            return path.IndexOf(' ') >= 0 || path.IndexOf('"') >= 0
+                ? "\"" + path + "\""
+                : path;
         }
 
         private static CheckBox DialogCheck(Form f, string text, int x, int y, bool value)
