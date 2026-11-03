@@ -100,55 +100,28 @@ public class GlassDrawable extends Drawable {
         int factor = factors[Math.min(idx, factors.length - 1)];
 
         if (lv != null) {
-            int s0 = c.save();
-            lensMatrix(c);
             drawFromLevel(c, lv, factor);
-            c.restoreToCount(s0);
         } else {
             fillPaint.setColor((tint & 0x00FFFFFF) | 0x66000000);
             c.drawRect(box, fillPaint);
         }
 
         // 主题色按浓度压上去
-        int a = fixedAlpha >= 0 ? fixedAlpha : Math.max(0, Math.min(100, CONC)) * 255 / 100;
+        int conc = Math.max(25, Math.min(100, CONC));   // 保底 25%，否则面板全透明
         fillPaint.setShader(null);
+        int a = fixedAlpha >= 0 ? fixedAlpha : conc * 255 / 100;
         fillPaint.setColor((tint & 0x00FFFFFF) | (a << 24));
         c.drawRect(box, fillPaint);
 
-        // 边缘放大环：透镜的折射感
-        if (lens && lv != null) {
-            float w = Math.min(dp(13), Math.min(box.width(), box.height()) * 0.30f);
-            float r2 = Math.max(1, radius - w);
-            ring.reset();
-            ring.addRoundRect(box, radius, radius, Path.Direction.CW);
-            Path inner = new Path();
-            inner.addRoundRect(new RectF(box.left + w, box.top + w, box.right - w, box.bottom - w),
-                    r2, r2, Path.Direction.CW);
-            ring.op(inner, Path.Op.DIFFERENCE);
-            int s2 = c.save();
-            c.clipPath(ring);
-            lensMatrix(c);
-            drawFromLevel(c, lv, factor);
-            c.restoreToCount(s2);
-            fillPaint.setColor(0x0AFFFFFF);
-            c.drawPath(ring, fillPaint);
-        }
-
-        // 顶部高光
-        fillPaint.setShader(new LinearGradient(box.left, box.top, box.left, box.top + box.height() * 0.5f,
-                0x1EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
-        c.drawRect(box, fillPaint);
-        fillPaint.setShader(null);
-
-        // 左上斜向反光
-        fillPaint.setShader(new LinearGradient(box.left, box.top, box.left + box.width() * 0.55f,
-                box.top + box.height(), 0x22FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        // 整块只有一层：一点顶部高光和底部压暗，不做内外圈
+        fillPaint.setShader(new LinearGradient(box.left, box.top, box.left, box.top + box.height() * 0.45f,
+                0x14FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
         c.drawRect(box, fillPaint);
         fillPaint.setShader(null);
 
         // 底部压暗
-        fillPaint.setShader(new LinearGradient(box.left, box.bottom, box.left, box.bottom - box.height() * 0.35f,
-                0x14000000, 0x00000000, Shader.TileMode.CLAMP));
+        fillPaint.setShader(new LinearGradient(box.left, box.bottom, box.left, box.bottom - box.height() * 0.30f,
+                0x0C000000, 0x00000000, Shader.TileMode.CLAMP));
         c.drawRect(box, fillPaint);
         fillPaint.setShader(null);
 
@@ -164,19 +137,11 @@ public class GlassDrawable extends Drawable {
         }
     }
 
-    /** 整块玻璃用同一套「放大 1.25」取样：内层和边缘看起来是一整块透镜 */
-    private void lensMatrix(Canvas c) {
-        mx.reset();
-        mx.setScale(1.25f, 1.25f, box.centerX(), box.centerY());
-        c.concat(mx);
-    }
 
-    /** 0..100 映射到 3 级：最低级也有 1/6 的模糊，不会退回原图 */
+    /** 始终保底 1/12 的模糊：滑杆只在这之上加码，不会退回原图 */
     private int levelIndex() {
         int p = Math.max(0, Math.min(100, BLUR));
-        if (p < 40) { return 1; }
-        if (p < 70) { return 2; }
-        return 3;
+        return p < 55 ? 2 : 3;
     }
 
     /** 从预模糊图里取「屏幕上这块位置」对应的部分，铺到控件里 */

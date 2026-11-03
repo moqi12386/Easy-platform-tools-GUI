@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.14.0";
+    private static final String VER = "2.15.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -616,6 +616,7 @@ public class MainActivity extends Activity {
                     navThumb.setX(Math.max(min, Math.min(max, startX + (ev.getX() - downX))));
                     float k = Math.min(0.14f, Math.abs(ev.getX() - downX) / dp(500));
                     navThumb.setScaleX(1f + k);
+                    navThumb.invalidate();   // 位置变了，玻璃要重新取样
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
@@ -849,42 +850,25 @@ public class MainActivity extends Activity {
         }
         bmp.setPixels(out, 0, w, 0, 0, w, h);
     }
-    /** 进度条换成 MIUIX 那种：圆头粗轨道 + 白色圆拇指 */
     /** 进度条填充色：玻璃下固定用 MIUI 蓝，否则用主题主色 */
     private int seekAccent() {
         if (isGlass()) { return 0xFF3D7EFF; }
         if (styleIdx == ST_MIUIX) { return 0xFF5B8DFF; }
         return cAccent;
     }
+
+    /** 进度条换成 MIUIX 那种：圆头粗轨道 + 白色圆拇指 */
     private void styleSeek(android.widget.SeekBar sb) {
-        int trackH = dp(12);
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setCornerRadius(trackH / 2f);
-        bg.setColor(blend(cPanel, cText, 0.18));
-
-        android.graphics.drawable.GradientDrawable fg = new android.graphics.drawable.GradientDrawable();
-        fg.setCornerRadius(trackH / 2f);
-        fg.setColor(seekAccent());
-
-        android.graphics.drawable.ClipDrawable clip = new android.graphics.drawable.ClipDrawable(
-                fg, Gravity.LEFT, android.graphics.drawable.ClipDrawable.HORIZONTAL);
-
-        android.graphics.drawable.LayerDrawable ld =
-                new android.graphics.drawable.LayerDrawable(new Drawable[]{ bg, clip });
-        int inset = dp(9);
-        ld.setLayerInset(0, 0, inset, 0, inset);
-        ld.setLayerInset(1, 0, inset, 0, inset);
-        sb.setProgressDrawable(ld);
-
+        sb.setProgressDrawable(new BarDrawable(seekAccent(), 0x4D000000, dp(16)));
         android.graphics.drawable.GradientDrawable th = new android.graphics.drawable.GradientDrawable();
         th.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         th.setColor(0xFFF4F7FB);
-        th.setSize(dp(20), dp(20));
+        th.setSize(dp(26), dp(26));
         sb.setThumb(th);
         sb.setThumbOffset(0);
         sb.setSplitTrack(false);
-        sb.setMinimumHeight(dp(30));
-        sb.setMaxHeight(dp(30));
+        sb.setMinimumHeight(dp(34));
+        sb.setMaxHeight(dp(34));
     }
     /** 按样式造按钮底 */
     private Drawable buttonBg(View host, int baseColor) {
