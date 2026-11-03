@@ -140,6 +140,7 @@ OTG 模式是**自己实现的 fastboot 协议**（USB bulk 传输 + 64 字节�
 | 8 套配色 / 字号 / 中英文 | ✅ | ✅ |
 | 遥控服务（被控端） | ✅ | —（App 是控制端） |
 | 按键边框（彩虹 / 自定义色 + 粗细 + 不透明度） | — | ✅ |
+| 界面样式（原生 / Material / MIUIX / 液态玻璃） | — | ✅ |
 
 差别只在形态：桌面版连 USB 用 adb/fastboot 命令，Android 版要么自己说 fastboot 协议（OTG），
 要么用 root 直接读写分区（本机），要么让电脑代劳（遥控）。
@@ -190,6 +191,38 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 面板也不至于糊成一片。设置存在 SharedPreferences（`bOn` / `bRain` / `bCol` / `bDp` / `bA`），重启保留。
 
 ![按键边框](docs/border.png)
+
+## 界面样式（Android 2.6.0）
+
+设置 → 界面样式，四套外壳随时切，换完自动重建界面（模式、配色、边框、壁纸都保留）：
+
+| 样式 | 长什么样 | 实现 |
+|---|---|---|
+| **原生** | 就是之前那套：10 dp 圆角、半透明底、你选的边框 | `PillDrawable` |
+| **Material** | 24 dp 药丸、底色往主色带、2 dp 投影、按下有水波纹 | `RippleDrawable` + `setElevation` |
+| **MIUIX** | 单列列表：左边标题、右边 `›`、52 dp 行高、16 dp 圆角 | 自绘 `ChevronDrawable` |
+| **液态玻璃** | 磨砂半透、顶部高光、白色细边，工具条和输入框收进**底部 dock** | `GlassDrawable` |
+
+![四种样式](docs/styles.png)
+
+### 玻璃是真模糊吗
+
+不是 `RenderEffect`（那个只能糊自己、糊不了背后的壁纸，还要 API 31）。
+做法是把壁纸在控件背后那一块缩到 1/8 再拉回来，等效一次低通滤波，裁到圆角里，
+上面叠薄雾和顶部高光。所以每块玻璃糊的都是**它自己背后**的那块图，滚动、换壁纸都对得上，
+也不会额外吃 GPU。没设壁纸时退化成半透明纯色，不会出现空白块。
+
+### 借鉴的开源项目
+
+样式是按各家设计语言自己重画的，**没有拷贝代码**：
+
+| 项目 | 借了什么 |
+|---|---|
+| [compose-miuix-ui/miuix](https://github.com/compose-miuix-ui/miuix) | MIUIX 列表行规范（行高、左右留白、箭头位置） |
+| [Glasmio](https://github.com/NEORUAA/Glasmio) | 液态玻璃的层次：底色 / 模糊 / 雾 / 高光 / 描边 |
+| [liquid-glass-compose](https://github.com/muhammadalkady/liquid-glass-compose) | AGSL 折射的思路（本项目只用简化版，没上 shader） |
+
+这几个都是 Compose 库，本项目不走 Gradle、不引依赖，所以只参考观感。
 
 ## 字体
 

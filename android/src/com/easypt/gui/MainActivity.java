@@ -14,6 +14,7 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.net.Uri;
@@ -63,7 +64,10 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.5.0";
+    private static final String VER = "2.6.0";
+
+    /** 界面样式 */
+    private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
 
     /** 边框预设色（默认第 0 个之外，默认用彩虹） */
     private static final int[] BD_PRESETS = {
@@ -81,11 +85,13 @@ public class MainActivity extends Activity {
     private float scale = 1.0f;
     private String lang = "zh";
     private int btnAlpha = 90;
+    private int styleIdx = ST_NATIVE;
     private boolean borderOn = true, borderRain = true;
     private int borderColor = 0xFFFFFFFF, borderDp = 2, borderAlphaPct = 100;
     private int backdrop = 0;    // 壁纸平均色（无壁纸时 = 主题底色）
     private android.graphics.Bitmap wallBmp = null;
     private final java.util.HashMap<Button, Integer> themed = new java.util.HashMap<Button, Integer>();
+    private final java.util.HashSet<Button> listRows = new java.util.HashSet<Button>();
 
     private int cBg, cPanel, cText, cDim, cAccent, cOk, cErr, cBtn, cRun, cInput, cOut;
 
@@ -95,7 +101,7 @@ public class MainActivity extends Activity {
     private UsbDevice pendingDevice;
     private String pendingPart = "boot";
 
-    private TextView logView, statusView;
+    private TextView logView, statusView, titleView;
     private Spinner modeSpinner;
     private GridLayout grid;
     private EditText input;
@@ -119,6 +125,7 @@ public class MainActivity extends Activity {
         scale = store.getFloat("scale", 1.0f);
         lang = store.getString("lang", "zh");
         btnAlpha = store.getInt("alpha", 90);
+        styleIdx = store.getInt("style", ST_NATIVE);
         borderOn = store.getBoolean("bOn", true);
         borderRain = store.getBoolean("bRain", true);
         borderColor = store.getInt("bCol", 0xFFFFFFFF);
@@ -261,14 +268,14 @@ public class MainActivity extends Activity {
         while (it.hasNext()) { Button b = it.next(); if (b.getParent() == null) { it.remove(); } }
         for (Button b : themed.keySet()) {
             int baseColor = themed.get(b);
-            int local = backdrop;
-            if (wallBmp != null) {
-                int[] loc = new int[2];
-                b.getLocationOnScreen(loc);
-                local = averageRegion(wallBmp, loc[0], loc[1], b.getWidth(), b.getHeight());
-            }
-            b.setBackground(pill(baseColor, 10));
-            b.setTextColor(textOn(blendOver(baseColor, btnAlpha, local)));
+            styleBtn(b, baseColor, listRows.contains(b));
+        }
+        if (titleView != null && wallBmp != null) {
+            titleView.setTextColor(textOn(localBackdrop(titleView)));
+        }
+        if (statusView != null && wallBmp != null) {
+            int bg = localBackdrop(statusView);
+            statusView.setTextColor(blend(textOn(bg), bg, 0.30));
         }
     }
 
@@ -317,6 +324,7 @@ public class MainActivity extends Activity {
         title.setTextColor(cText);
         title.setTextSize(18 * scale);
         title.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView = title;
         root.addView(title);
 
         LinearLayout row = new LinearLayout(this);
@@ -356,7 +364,17 @@ public class MainActivity extends Activity {
         slp.topMargin = dp(8);
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
-        scroll.setBackgroundColor(Color.argb(hasWall() ? Math.min(235, Math.max(150, btnAlpha)) : 255, Color.red(cOut), Color.green(cOut), Color.blue(cOut)));
+        if (isGlass()) {
+            scroll.setBackground(new GlassDrawable(scroll, dp(18),
+                    Color.argb(hasWall() ? 0x66 : 0xCC, Color.red(cOut), Color.green(cOut), Color.blue(cOut)))
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(1), 0x2EFFFFFF));
+        } else if (styleIdx == ST_MIUIX) {
+            scroll.setBackground(new PillDrawable(Color.argb(Math.min(255, Math.max(150, btnAlpha) * 255 / 100),
+                    Color.red(cOut), Color.green(cOut), Color.blue(cOut)), dp(18)));
+        } else {
+            scroll.setBackgroundColor(Color.argb(hasWall() ? Math.min(235, Math.max(150, btnAlpha)) : 255, Color.red(cOut), Color.green(cOut), Color.blue(cOut)));
+        }
 
         logView = new TextView(this);
         logView.setTextColor(cText);
@@ -368,13 +386,13 @@ public class MainActivity extends Activity {
         root.addView(scroll);
 
         ScrollView gridScroll = new ScrollView(this);
-        int gridH = (int) (getResources().getDisplayMetrics().heightPixels * 0.40);
+        int gridH = (int) (getResources().getDisplayMetrics().heightPixels * (styleIdx == ST_MIUIX ? 0.47 : 0.40));
         LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH);
         glp.topMargin = dp(6);
         gridScroll.setLayoutParams(glp);
 
         grid = new GridLayout(this);
-        grid.setColumnCount(2);
+        grid.setColumnCount(styleIdx == ST_MIUIX ? 1 : 2);
         grid.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         gridScroll.addView(grid);
         root.addView(gridScroll);
@@ -395,7 +413,6 @@ public class MainActivity extends Activity {
         tools.addView(smallBtn(T("关于", "About"), new View.OnClickListener() {
             public void onClick(View v) { showAbout(); }
         }), tlp);
-        root.addView(tools);
 
         LinearLayout inputRow = new LinearLayout(this);
         inputRow.setPadding(0, dp(6), 0, 0);
@@ -406,7 +423,19 @@ public class MainActivity extends Activity {
         input.setTextColor(cText);
         input.setTextSize(14 * scale);
         input.setSingleLine(true);
-        input.setBackgroundColor(cInput);
+        if (isGlass()) {
+            input.setBackground(new GlassDrawable(input, dp(16),
+                    Color.argb(0x4D, Color.red(cInput), Color.green(cInput), Color.blue(cInput)))
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(1), 0x33FFFFFF));
+            input.setPadding(dp(14), dp(4), dp(14), dp(4));
+        } else if (styleIdx == ST_MATERIAL) {
+            input.setBackground(new PillDrawable(Color.argb(0xE6,
+                    Color.red(cInput), Color.green(cInput), Color.blue(cInput)), dp(16)));
+            input.setPadding(dp(14), dp(4), dp(14), dp(4));
+        } else {
+            input.setBackgroundColor(cInput);
+        }
         input.setMinHeight(dp(46));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0, dp(48), 1f);
         ilp.setMargins(dp(4), 0, dp(6), 0);
@@ -414,14 +443,30 @@ public class MainActivity extends Activity {
 
         Button runBtn = smallBtn(T("执行", "Run"));
         themed.put(runBtn, cRun);
-        runBtn.setBackground(pill(cRun, 10));
-        runBtn.setTextColor(textOn(blendOver(cRun, btnAlpha, backdrop)));
+        styleBtn(runBtn, cRun);
         runBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(84), dp(48)));
         runBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { runTyped(); }
         });
         inputRow.addView(runBtn);
-        root.addView(inputRow);
+
+        // 液态玻璃：把工具条 + 输入行装进一块浮起来的磨砂底栏
+        LinearLayout dock = new LinearLayout(this);
+        dock.setOrientation(LinearLayout.VERTICAL);
+        dock.addView(tools);
+        dock.addView(inputRow);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (isGlass()) {
+            dock.setPadding(dp(7), dp(8), dp(7), dp(7));
+            dock.setBackground(new GlassDrawable(dock, dp(24),
+                    Color.argb(hasWall() ? 0x44 : 0xB0, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(1), 0x59FFFFFF));
+            dock.setElevation(dp(14));
+            dlp.setMargins(dp(2), dp(10), dp(2), dp(2));
+        }
+        root.addView(dock, dlp);
 
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             public android.view.WindowInsets onApplyWindowInsets(View v, android.view.WindowInsets insets) {
@@ -450,22 +495,100 @@ public class MainActivity extends Activity {
         b.setText(text);
         b.setAllCaps(false);
         b.setTextSize(13 * scale);
-        themed.put(b, cBtn);
-        b.setTextColor(textOn(blendOver(cBtn, btnAlpha, backdrop)));
-        b.setBackground(pill(cBtn, 10));
-        b.setPadding(dp(10), dp(6), dp(10), dp(6));
         b.setMinHeight(dp(46));
         b.setMinimumHeight(dp(46));
-        b.setGravity(Gravity.CENTER);
+        themed.put(b, cBtn);
+        styleBtn(b, cBtn);
         return b;
+    }
+
+    // ---------------- 界面样式 ----------------
+
+    private int radiusDp() {
+        switch (styleIdx) {
+            case ST_MATERIAL: return 24;
+            case ST_MIUIX: return 16;
+            case ST_GLASS: return 22;
+            default: return 10;
+        }
+    }
+
+    /** 按钮底的不透明度：Material 更实，玻璃几乎是透的 */
+    private int fillPct() {
+        switch (styleIdx) {
+            case ST_MATERIAL: return Math.max(btnAlpha, 88);
+            case ST_MIUIX: return Math.max(btnAlpha, 62);
+            case ST_GLASS: return 22;
+            default: return btnAlpha;
+        }
+    }
+
+    /** Material 把底色往主色上带一点，其余样式照原样 */
+    private int fillBase(int baseColor) {
+        if (styleIdx == ST_MATERIAL) { return blend(baseColor, cAccent, 0.30); }
+        return baseColor;
+    }
+
+    private boolean isGlass() { return styleIdx == ST_GLASS; }
+
+    /** 按样式造按钮底 */
+    private Drawable buttonBg(View host, int baseColor) {
+        int base = fillBase(baseColor);
+        if (isGlass()) {
+            int tint = Color.argb(hasWall() ? 0x3A : 0x59,
+                    Color.red(base), Color.green(base), Color.blue(base));
+            return new GlassDrawable(host, dp(radiusDp()), tint)
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(Math.max(1, borderDp)), borderAlphaPct >= 40 ? 0x66FFFFFF : 0x33FFFFFF);
+        }
+        int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
+        PillDrawable p = new PillDrawable(
+                Color.argb(a, Color.red(base), Color.green(base), Color.blue(base)), dp(radiusDp()));
+        p.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
+        if (styleIdx == ST_MATERIAL) {
+            PillDrawable mask = new PillDrawable(0xFFFFFFFF, dp(radiusDp()));
+            return new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x33FFFFFF), p, mask);
+        }
+        return p;
+    }
+
+    /** 统一套样式：底色、字色、对齐、箭头、阴影；listRow=true 才用 MIUIX 的列表行外观 */
+    private void styleBtn(Button b, int baseColor) {
+        styleBtn(b, baseColor, false);
+    }
+
+    private void styleBtn(Button b, int baseColor, boolean listRow) {
+        b.setBackground(buttonBg(b, baseColor));
+        b.setTextColor(textOn(blendOver(fillBase(baseColor), fillPct(), localBackdrop(b))));
+        if (styleIdx == ST_MIUIX && listRow) {
+            b.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+            b.setPadding(dp(18), 0, dp(38), 0);
+            b.setTextSize(15 * scale);
+            b.setCompoundDrawablesWithIntrinsicBounds(null, null,
+                    new ChevronDrawable(dp(18), cDim, dp(2)), null);
+            b.setCompoundDrawablePadding(dp(8));
+        } else {
+            b.setGravity(Gravity.CENTER);
+            b.setPadding(dp(10), dp(6), dp(10), dp(6));
+            b.setTextSize((styleIdx == ST_MATERIAL || isGlass() ? 14 : 13) * scale);
+            b.setCompoundDrawablesWithIntrinsicBounds(null, null, null, null);
+        }
+        b.setAllCaps(false);
+        b.setElevation(styleIdx == ST_MATERIAL ? dp(2) : isGlass() ? dp(8) : 0);
+    }
+
+    private int localBackdrop(View v) {
+        if (wallBmp == null || v == null) { return backdrop; }
+        int[] loc = new int[2];
+        v.getLocationOnScreen(loc);
+        return averageRegion(wallBmp, loc[0], loc[1], Math.max(1, v.getWidth()), Math.max(1, v.getHeight()));
     }
 
     /** 圆角 + 可调不透明的按钮底，外挂一圈自定义边框 */
     private PillDrawable pill(int baseColor, int radiusDp) {
         return pill(baseColor, radiusDp, false);
-    }
-
-    /** plain=true：给设置面板里的小控件用，不带边框 */
+    }    /** plain=true：给设置面板里的小控件用，不带边框 */
     private PillDrawable pill(int baseColor, int radiusDp, boolean plain) {
         int a = Math.max(0, Math.min(100, btnAlpha)) * 255 / 100;
         PillDrawable g = new PillDrawable(
@@ -499,14 +622,17 @@ public class MainActivity extends Activity {
 
     private void act(String label, final Runnable r) {
         Button b = smallBtn(label);
+        listRows.add(b);
+        styleBtn(b, cBtn, true);
         b.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { r.run(); }
         });
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
         lp.width = 0;
-        lp.height = dp(48);
+        lp.height = dp(styleIdx == ST_MIUIX ? 52 : 48);
         lp.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-        lp.setMargins(dp(4), dp(4), dp(4), dp(4));
+        int m = styleIdx == ST_MIUIX ? 3 : 4;
+        lp.setMargins(dp(4), dp(m), dp(4), dp(m));
         b.setLayoutParams(lp);
         grid.addView(b);
     }
@@ -618,6 +744,27 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(16), dp(8), dp(16), dp(8));
+
+        box.addView(label(T("界面样式", "UI style")));
+        String[] sNames = { T("原生", "Native"), "Material", "MIUIX", T("液态玻璃", "Liquid glass") };
+        for (int rowI = 0; rowI < 2; rowI++) {
+            LinearLayout sr = new LinearLayout(this);
+            for (int col = 0; col < 2; col++) {
+                final int k = rowI * 2 + col;
+                Button sb2 = smallBtn((k == styleIdx ? "● " : "") + sNames[k]);
+                if (k == styleIdx) { sb2.setTextColor(cAccent); }
+                sb2.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        store.edit().putInt("style", k).apply();
+                        recreate();
+                    }
+                });
+                LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(0, dp(46), 1f);
+                slp2.setMargins(dp(2), dp(2), dp(2), dp(2));
+                sr.addView(sb2, slp2);
+            }
+            box.addView(sr);
+        }
 
         box.addView(label(T("按键透明度", "Button opacity")));
         LinearLayout alphaRow = new LinearLayout(this);
