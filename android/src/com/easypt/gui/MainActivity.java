@@ -14,6 +14,7 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
@@ -27,6 +28,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -37,6 +39,7 @@ import android.widget.GridLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.PopupWindow;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -64,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.7.0";
+    private static final String VER = "2.8.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -102,7 +105,6 @@ public class MainActivity extends Activity {
     private String pendingPart = "boot";
 
     private TextView logView, statusView, titleView;
-    private Spinner modeSpinner;
     private GridLayout grid;
     private EditText input;
     private SpannableStringBuilder logBuf = new SpannableStringBuilder();
@@ -313,7 +315,9 @@ public class MainActivity extends Activity {
     private LinearLayout rootView, homePage;
     private View settingsPage;
     private FrameLayout pageHost, navBar, navThumb;
-    private TextView navHome, navSet;
+    private android.animation.ValueAnimator navAnim;
+    private TextView navHome, navSet, modeValue;
+    private LinearLayout modeRow;
     private EditText setHost, setToken, setPart;
     private int page = 0;
 
@@ -387,24 +391,37 @@ public class MainActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(4));
-
-        modeSpinner = new Spinner(this);
-        ArrayAdapter<String> ad = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, new String[]{
-                T("OTG 主机：刷别人", "OTG host: flash another"),
-                T("本机 root：管自己", "Local root: manage itself"),
-                T("遥控 PC", "Remote PC")
-        });
-        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        modeSpinner.setAdapter(ad);
-        modeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(android.widget.AdapterView<?> p, View v, int pos, long id) {
-                if (mode != pos) { applyMode(pos); }
+        row.setPadding(dp(14), 0, dp(12), 0);
+        row.setMinimumHeight(dp(54));
+        row.setBackground(menuRowBg(dp(16)));
+        modeRow = row;
+        modeValue = new TextView(this);
+        modeValue.setTextSize((isGlass() ? 14 : 14) * scale);
+        modeValue.setTextColor(fgColor());
+        row.addView(modeValue, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView modeChev = new TextView(this);
+        modeChev.setText("›");
+        modeChev.setTextSize(20 * scale);
+        modeChev.setTextColor(fgDim());
+        row.addView(modeChev);
+        row.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showMenu(v, new String[]{
+                                T("OTG 主机", "OTG host"),
+                                T("本机 root", "Local root"),
+                                T("遥控 PC", "Remote PC")},
+                        new String[]{
+                                T("用 OTG 线刷另一台手机", "Flash another phone over OTG"),
+                                T("备份 / 刷写自己，需要 root", "Backup or flash this phone, needs root"),
+                                T("指挥电脑上的桌面版干活", "Drive the desktop app over Wi-Fi")},
+                        mode, new Pick() {
+                            public void onPick(int i) { applyMode(i); }
+                        });
             }
-            public void onNothingSelected(android.widget.AdapterView<?> p) { }
         });
-        row.addView(modeSpinner, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        page.addView(row);
+        page.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+        updateModeRow();
 
         statusView = new TextView(this);
         statusView.setTextColor(fgDim());
@@ -506,7 +523,7 @@ public class MainActivity extends Activity {
 
     /** 底栏：主页 / 设置，玻璃样式下是一整块磨砂 + 会滑动的玻璃滑块 */
     private View buildNav() {
-        navBar = new FrameLayout(this);
+        navBar = new NavBar(this);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(66));
         blp.topMargin = dp(6);
         navBar.setLayoutParams(blp);
@@ -546,8 +563,60 @@ public class MainActivity extends Activity {
         return navBar;
     }
 
-    private TextView navItem(String text, final int idx) {
-        TextView t = new TextView(this);
+    /** 底栏容器：点按选 tab，也可以按住左右拖滑块 */
+    private class NavBar extends FrameLayout {
+        private float downX, startX;
+
+        NavBar(Context c) { super(c); }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = ev.getX();
+                    startX = navThumb == null ? 0 : navThumb.getX();
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (navThumb != null && Math.abs(ev.getX() - downX) > dp(7)) {
+                        if (navAnim != null) { navAnim.cancel(); }
+                        return true;
+                    }
+                    break;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            if (navThumb == null) { return true; }
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = ev.getX();
+                    startX = navThumb.getX();
+                    if (navAnim != null) { navAnim.cancel(); }
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float min = dp(5);
+                    float max = Math.max(min, getWidth() - dp(5) - navThumb.getWidth());
+                    navThumb.setX(Math.max(min, Math.min(max, startX + (ev.getX() - downX))));
+                    float k = Math.min(0.14f, Math.abs(ev.getX() - downX) / dp(500));
+                    navThumb.setScaleX(1f + k);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    navThumb.setScaleX(1f);
+                    float center = navThumb.getX() + navThumb.getWidth() / 2f;
+                    int target = center < getWidth() / 2f ? 0 : 1;
+                    showPage(target);
+                    return true;
+                }
+            }
+            return true;
+        }
+    }
+
+    private TextView navItem(String text, final int idx) {        TextView t = new TextView(this);
         t.setText(text);
         t.setTextSize(14 * scale);
         t.setGravity(Gravity.CENTER);
@@ -609,6 +678,7 @@ public class MainActivity extends Activity {
                 navThumb.setScaleX(1f + (isGlass() ? 0.22f : 0.05f) * s);
             }
         });
+        navAnim = a;
         a.start();
     }
 
@@ -828,7 +898,7 @@ public class MainActivity extends Activity {
     private void applyMode(int m) {
         mode = m;
         store.edit().putInt("mode", m).apply();
-        if (modeSpinner.getSelectedItemPosition() != m) { modeSpinner.setSelection(m); }
+        updateModeRow();
         grid.removeAllViews();
         lastParts.clear();
 
@@ -948,21 +1018,18 @@ public class MainActivity extends Activity {
         // 1) 界面样式
         LinearLayout cStyle = card(T("界面样式", "UI style"));
         String[] sNames = { T("原生", "Native"), "Material", "MIUIX", T("液态玻璃", "Liquid glass") };
-        for (int rowI = 0; rowI < 2; rowI++) {
-            LinearLayout sr = new LinearLayout(this);
-            for (int c = 0; c < 2; c++) {
-                final int k = rowI * 2 + c;
-                Button sb2 = smallBtn((k == styleIdx ? "● " : "") + sNames[k]);
-                if (k == styleIdx) { sb2.setTextColor(cAccent); }
-                sb2.setOnClickListener(new View.OnClickListener() {
-                    public void onClick(View v) { store.edit().putInt("style", k).apply(); recreate(); }
+        String[] sSubs = { T("圆角半透，最朴素", "Rounded and translucent"),
+                T("药丸 + 主色 + 投影", "Pills, accent tint, elevation"),
+                T("单列列表 + 右侧箭头", "List rows with chevrons"),
+                T("磨砂玻璃 + 玻璃底栏", "Frosted glass with glass bar") };
+        LinearLayout styleRow = menuRow(T("当前样式", "Current style"), sNames[styleIdx], new View.OnClickListener() {
+            public void onClick(View v) {
+                showMenu(v, sNames, sSubs, styleIdx, new Pick() {
+                    public void onPick(int i) { store.edit().putInt("style", i).apply(); recreate(); }
                 });
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
-                lp.setMargins(dp(2), dp(2), dp(2), dp(2));
-                sr.addView(sb2, lp);
             }
-            cStyle.addView(sr);
-        }
+        });
+        cStyle.addView(styleRow);
         col.addView(cStyle, cardLp());
 
         // 2) 按键透明度
@@ -1093,29 +1160,30 @@ public class MainActivity extends Activity {
 
         // 5) 字号 + 语言
         LinearLayout cText2 = card(T("字体与语言", "Text & language"));
-        LinearLayout sizes = new LinearLayout(this);
-        String[] names = { T("小", "Small"), T("标准", "Normal"), T("大", "Large") };
-        float[] vals = { 0.9f, 1.0f, 1.15f };
-        for (int i = 0; i < 3; i++) {
-            final float v = vals[i];
-            Button b = smallBtn(names[i], new View.OnClickListener() {
-                public void onClick(View x) { store.edit().putFloat("scale", v).apply(); recreate(); }
-            });
-            sizes.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        }
-        cText2.addView(sizes);
+        final String[] sizeNames = { T("小", "Small"), T("标准", "Normal"), T("大", "Large") };
+        final float[] sizeVals = { 0.9f, 1.0f, 1.15f };
+        int curSize = 1;
+        for (int i = 0; i < 3; i++) { if (Math.abs(sizeVals[i] - scale) < 0.01f) { curSize = i; } }
+        cText2.addView(menuRow(T("字号", "Font size"), sizeNames[curSize], new View.OnClickListener() {
+            public void onClick(View v) {
+                showMenu(v, sizeNames, new String[]{"", "", ""}, curSizePick(), new Pick() {
+                    public void onPick(int i) { store.edit().putFloat("scale", sizeVals[i]).apply(); recreate(); }
+                });
+            }
+        }));
 
-        LinearLayout langs = new LinearLayout(this);
-        langs.setPadding(0, dp(4), 0, 0);
-        Button zh = smallBtn("中文", new View.OnClickListener() {
-            public void onClick(View v) { store.edit().putString("lang", "zh").apply(); recreate(); }
-        });
-        Button en = smallBtn("English", new View.OnClickListener() {
-            public void onClick(View v) { store.edit().putString("lang", "en").apply(); recreate(); }
-        });
-        langs.addView(zh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        langs.addView(en, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        cText2.addView(langs);
+        final String[] langNames = { "中文", "English" };
+        cText2.addView(menuRow(T("语言", "Language"), langNames["en".equals(lang) ? 1 : 0],
+                new View.OnClickListener() {
+                    public void onClick(View v) {
+                        showMenu(v, langNames, new String[]{"", ""}, "en".equals(lang) ? 1 : 0, new Pick() {
+                            public void onPick(int i) {
+                                store.edit().putString("lang", i == 0 ? "zh" : "en").apply();
+                                recreate();
+                            }
+                        });
+                    }
+                }));
         col.addView(cText2, cardLp());
 
         // 6) 遥控 PC
@@ -1400,18 +1468,225 @@ public class MainActivity extends Activity {
     }
 
     private void chooseMode(final boolean first) {
-        String[] items = {
-                T("OTG 主机：用 OTG 线刷另一台手机", "OTG host: flash another phone"),
-                T("本机 root：备份/刷写自己", "Local root: manage this phone"),
-                T("遥控 PC：指挥电脑上的桌面版", "Remote: drive the desktop app")
+        final String[] items = {
+                T("OTG 主机", "OTG host"),
+                T("本机 root", "Local root"),
+                T("遥控 PC", "Remote PC")
         };
-        AlertDialog.Builder b = new AlertDialog.Builder(this)
-                .setTitle(T("选择使用模式", "Choose mode"))
-                .setItems(items, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int which) { applyMode(which); }
+        final String[] subs = {
+                T("用 OTG 线刷另一台手机", "Flash another phone over OTG"),
+                T("备份 / 刷写自己，需要 root", "Backup or flash this phone, needs root"),
+                T("指挥电脑上的桌面版干活", "Drive the desktop app over Wi-Fi")
+        };
+        final View anchor = modeRow != null ? modeRow : navBar;
+        if (anchor == null) { return; }
+        anchor.post(new Runnable() {
+            public void run() {
+                showMenu(anchor, items, subs, mode, new Pick() {
+                    public void onPick(int i) { applyMode(i); }
                 });
-        b.setCancelable(!first);
-        b.show();
+            }
+        });
+    }
+
+    // ---------------- MIUIX 风格弹窗 ----------------
+
+    private interface Pick { void onPick(int i); }
+
+    /** 圆角的浮层选项列表：标题 + 副标题，选中项染主色并打勾 */
+    private void showMenu(final View anchor, String[] items, String[] subs, int selected, final Pick cb) {
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(8), dp(10), dp(8), dp(10));
+        box.setBackground(menuBg());
+        box.setElevation(dp(20));
+
+        final PopupWindow pw = new PopupWindow(box,
+                Math.min(dp(300), getResources().getDisplayMetrics().widthPixels - dp(56)),
+                ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        pw.setOutsideTouchable(true);
+        pw.setFocusable(true);
+        pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        if (Build.VERSION.SDK_INT >= 21) { pw.setElevation(dp(18)); }
+
+        final int accent = menuAccent();
+        final int on = fgColor();
+        boolean anySub = false;
+        for (String s : subs) { if (s != null && s.length() > 0) { anySub = true; break; } }
+
+        for (int i = 0; i < items.length; i++) {
+            final int idx = i;
+            boolean sel = i == selected;
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(14), anySub ? dp(11) : dp(15), dp(12), anySub ? dp(11) : dp(15));
+            row.setBackground(rowState(sel));
+
+            LinearLayout textCol = new LinearLayout(this);
+            textCol.setOrientation(LinearLayout.VERTICAL);
+            TextView t = new TextView(this);
+            t.setText(items[i]);
+            t.setTextSize(16 * scale);
+            t.setTextColor(sel ? accent : on);
+            if (sel) { t.setTypeface(Typeface.DEFAULT_BOLD); }
+            textCol.addView(t);
+            if (anySub) {
+                String sub = i < subs.length ? subs[i] : "";
+                if (sub != null && sub.length() > 0) {
+                    TextView s = new TextView(this);
+                    s.setText(sub);
+                    s.setTextSize(12 * scale);
+                    s.setTextColor(sel ? accent : fgDim());
+                    s.setPadding(0, dp(2), 0, 0);
+                    textCol.addView(s);
+                }
+            }
+            row.addView(textCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView check = new TextView(this);
+            check.setText("✓");
+            check.setTextSize(17 * scale);
+            check.setTextColor(accent);
+            check.setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
+            check.setPadding(dp(10), 0, dp(4), 0);
+            row.addView(check);
+
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    pw.dismiss();
+                    cb.onPick(idx);
+                }
+            });
+            box.addView(row);
+        }
+
+        // 位置：优先贴在锚点正下方，下方放不下就翻到上方
+        int[] loc = new int[2];
+        anchor.getLocationOnScreen(loc);
+        int estH = dp(24) + items.length * dp(anySub ? 62 : 50);
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        int gap = dp(6);
+        int y = loc[1] + anchor.getHeight() + gap;
+        if (y + estH > screenH - dp(24)) {
+            y = Math.max(dp(24), loc[1] - estH - gap);
+        }
+        int x = Math.min(loc[0], getResources().getDisplayMetrics().widthPixels - dp(300) - dp(16));
+        x = Math.max(dp(16), x);
+
+        // 放到下一帧再弹，否则手指抬起会被当成「点到浮层外面」直接关掉
+        final int fx = x, fy = y;
+        anchor.post(new Runnable() {
+            public void run() {
+                pw.showAtLocation(rootView, Gravity.NO_GRAVITY, fx, fy);
+                box.setScaleX(0.92f);
+                box.setScaleY(0.92f);
+                box.setAlpha(0f);
+                box.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(150).start();
+                box.setPivotX(dp(24));
+                box.setPivotY(0f);
+            }
+        });
+    }
+
+    private Drawable menuBg() {
+        if (isGlass()) {
+            return new GlassDrawable(rootView, dp(22),
+                    Color.argb(0xF4, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(1), 0x40FFFFFF);
+        }
+        if (styleIdx == ST_MIUIX) {
+            PillDrawable p = new PillDrawable(0xF72C2C2E, dp(22));
+            p.border(true, false, 0x1FFFFFFF, dp(1), 100);
+            return p;
+        }
+        int base = blend(cPanel, cText, 0.12);
+        PillDrawable p = new PillDrawable(0xFD000000 | (base & 0x00FFFFFF),
+                dp(styleIdx == ST_MATERIAL ? 24 : 18));
+        p.border(true, false, 0x1FFFFFFF, dp(1), 100);
+        return p;
+    }
+
+    private int menuAccent() {
+        if (styleIdx == ST_MIUIX) { return 0xFF6E9BFF; }
+        return styleIdx == ST_MATERIAL ? cAccent : (isGlass() ? accentColor() : cAccent);
+    }
+
+    /** 每一行的按压反馈（选中行给一层淡淡的底色） */
+    private Drawable rowState(boolean selected) {
+        android.graphics.drawable.StateListDrawable d = new android.graphics.drawable.StateListDrawable();
+        android.graphics.drawable.GradientDrawable pressed = new android.graphics.drawable.GradientDrawable();
+        pressed.setCornerRadius(dp(14));
+        pressed.setColor(selected ? Color.argb(0x1F, Color.red(menuAccent()), Color.green(menuAccent()), Color.blue(menuAccent()))
+                : 0x22FFFFFF);
+        android.graphics.drawable.GradientDrawable normal = new android.graphics.drawable.GradientDrawable();
+        normal.setCornerRadius(dp(14));
+        normal.setColor(selected ? Color.argb(0x14, Color.red(menuAccent()), Color.green(menuAccent()), Color.blue(menuAccent()))
+                : Color.TRANSPARENT);
+        d.addState(new int[]{android.R.attr.state_pressed}, pressed);
+        d.addState(new int[]{}, normal);
+        return d;
+    }
+
+    /** 可点的「一行」：圆角底，右侧箭头，用来唤起 showMenu */
+    private Drawable menuRowBg(int radiusDp) {
+        if (isGlass()) {
+            return new GlassDrawable(rootView, dp(radiusDp),
+                    Color.argb(hasWall() ? 0x4D : 0xB8, Color.red(cBtn), Color.green(cBtn), Color.blue(cBtn)))
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(Math.max(1, borderDp)), borderOn ? (borderRain ? 0x66FFFFFF : borderColor) : 0x33FFFFFF);
+        }
+        int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
+        PillDrawable p = new PillDrawable(Color.argb(a, Color.red(fillBase(cBtn)), Color.green(fillBase(cBtn)), Color.blue(fillBase(cBtn))), dp(radiusDp));
+        p.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
+        return p;
+    }
+
+    private void updateModeRow() {
+        if (modeValue == null) { return; }
+        String[] names = { T("OTG 主机：刷别人", "OTG host: flash another"),
+                T("本机 root：管自己", "Local root: manage itself"),
+                T("遥控 PC：指挥电脑", "Remote: drive the PC") };
+        modeValue.setText(names[Math.max(0, Math.min(2, mode))]);
+        modeValue.setTextColor(fgColor());
+    }
+
+    private int curSizePick() {
+        float[] v = { 0.9f, 1.0f, 1.15f };
+        for (int i = 0; i < 3; i++) { if (Math.abs(v[i] - scale) < 0.01f) { return i; } }
+        return 1;
+    }
+
+    /** 「左边标题 / 右边当前值 + ›」的一行，点一下弹 showMenu */
+    private LinearLayout menuRow(String label, String value, View.OnClickListener l) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(52));
+        row.setPadding(dp(4), 0, dp(2), 0);
+
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextSize(16 * scale);
+        t.setTextColor(fgColor());
+        row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextSize(14 * scale);
+        v.setTextColor(fgDim());
+        v.setMaxLines(1);
+        row.addView(v);
+
+        TextView chev = new TextView(this);
+        chev.setText("›");
+        chev.setTextSize(20 * scale);
+        chev.setTextColor(fgDim());
+        chev.setPadding(dp(6), 0, 0, 0);
+        row.addView(chev);
+
+        row.setOnClickListener(l);
+        return row;
     }
 
     // ---------------- 执行 ----------------
