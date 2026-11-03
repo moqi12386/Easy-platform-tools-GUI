@@ -63,6 +63,37 @@ public class RemoteClient {
         return request("POST", "/api/flash?partition=" + part, image, 300000);
     }
 
+    /** 从文件流式上传，避免把 GB 级镜像读进内存 */
+    public String flashFile(String part, java.io.File file) throws Exception {
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(base + "/api/flash?partition=" + part).openConnection();
+        c.setRequestMethod("POST");
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(900000);
+        c.setRequestProperty("X-Token", token);
+        c.setRequestProperty("Content-Type", "application/octet-stream");
+        c.setFixedLengthStreamingMode((int) file.length());
+        c.setDoOutput(true);
+        OutputStream os = c.getOutputStream();
+        java.io.FileInputStream in = new java.io.FileInputStream(file);
+        byte[] buf = new byte[65536];
+        int n;
+        while ((n = in.read(buf)) > 0) { os.write(buf, 0, n); }
+        in.close();
+        os.close();
+        int code = c.getResponseCode();
+        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        if (is != null) {
+            byte[] b = new byte[8192];
+            int k;
+            while ((k = is.read(b)) > 0) { bos.write(b, 0, k); }
+            is.close();
+        }
+        String text = new String(bos.toByteArray(), StandardCharsets.UTF_8);
+        if (code >= 400) { throw new Exception("HTTP " + code + " " + text); }
+        return text;
+    }
+
     public String reboot(String target) throws Exception {
         return request("POST", "/api/reboot?target=" + (target == null ? "" : target), null, 15000);
     }

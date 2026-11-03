@@ -17,7 +17,8 @@ assets/fonts/*.otf
 *.user
 *.suo
 
-# Android 构建产物
+# Android
 android/out/
 android/*.apk
-android/*.keystoreandroid/*.idsig
+android/*.idsig
+android/*.keystore

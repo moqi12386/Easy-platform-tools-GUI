@@ -179,6 +179,52 @@ public class FastbootUsb {
         return ok;
     }
 
+    /** 从文件流式上传（大镜像不占内存） */
+    public boolean downloadStream(java.io.InputStream in, long size, Progress p) {
+        String head = command(String.format("download:%08x", size));
+        if (!head.startsWith("DATA")) { return false; }
+        byte[] buf = new byte[65536];
+        long sent = 0;
+        try {
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                if (!bulkOut(buf, n)) { return false; }
+                sent += n;
+                if (p != null) { p.onProgress(sent, size); }
+            }
+        } catch (Exception e) {
+            say("读取镜像失败：" + e.getMessage());
+            return false;
+        }
+        String resp = readResponse();
+        return resp != null && resp.startsWith("OKAY");
+    }
+
+    public boolean flashFile(String partition, java.io.File img, Progress p) {
+        say("上传 " + partition + "（" + (img.length() / 1048576.0) + " MB）…");
+        java.io.InputStream in = null;
+        try {
+            in = new java.io.FileInputStream(img);
+            if (!downloadStream(in, img.length(), p)) { say("上传失败"); return false; }
+        } catch (Exception e) {
+            say("打开镜像失败：" + e.getMessage());
+            return false;
+        } finally {
+            try { if (in != null) { in.close(); } } catch (Exception ignored) { }
+        }
+        String r = command("flash:" + partition);
+        boolean ok = r.startsWith("OKAY");
+        say(ok ? ("刷入成功：" + partition) : ("刷入失败：" + partition + " " + r));
+        return ok;
+    }
+
+    public interface Progress { void onProgress(long done, long total); }
+
+    /** 取单个 getvar 值 */
+    public String getvar(String name) {
+        String r = command("getvar:" + name);
+        return r;
+    }
     public boolean erase(String partition) {
         String r = command("erase:" + partition);
         boolean ok = r.startsWith("OKAY");

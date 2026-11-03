@@ -1,50 +1,50 @@
-# Easy-platform-tools-GUI v1.7.0 — 增加 Android 版
+# Easy-platform-tools-GUI v1.8.0 — Android 版功能对齐桌面版
 
-桌面版之外，现在有同名的 Android App：`EasyPT.apk`。三种模式在 App 内自由切换。
+这次把 Android App 从「能刷」补到「和电脑版几乎一样」。
 
-## Android App
+## Android 版新增
 
-| 模式 | 干什么 | 前提 |
+| 功能 | 说明 |
+|---|---|
+| **线刷 ROM** | 选 `.zip` / `.tgz` / 已解压目录，解析 `flash_all.bat` 按原顺序执行；没有脚本就按 `images/*.img` 推断 |
+| **流式刷写** | 大镜像（如 `super.img`）不再整体读进内存，按 64 KB 分块走 `download:` 协议 |
+| **分区表增强** | 名称 / 大小自动换算（MB/GB）/ 类型，支持复制到剪贴板和导出 CSV |
+| **备份基带多选** | 8 个分区可勾选（modem / modemst1 / modemst2 / fsg / fsc / persist / bluetooth / dsp），逐个算 SHA256 |
+| **主题配色** | 8 套预设背景，深浅两套色板自动推导文字/按钮/输入框颜色 |
+| **字号** | 小 / 标准 / 大 三档，全界面生效 |
+| **中英文** | 设置里切换，界面文案全部双语 |
+| **日志分色 + 存日志** | 命令蓝、成功绿、失败红；一键存到 `Android/data/com.easypt.gui/files/logs/` |
+| **命令历史** | 最近 50 条，点一下回填 |
+
+## 桌面版
+
+- 版本号对齐 1.8.0，功能不变（遥控服务、线刷、备份、读分区表等在前面几个版本已就位）
+
+## 功能对照
+
+| 功能 | 桌面版 | Android 版 |
 |---|---|---|
-| **OTG 主机** | 手机 A 用 OTG 线刷手机 B：读分区表、刷镜像、擦除、重启 | 目标机进 fastboot |
-| **本机 root** | 不用电脑，直接备份基带、刷自己分区、进 Recovery / EDL | 本机需 root |
-| **遥控 PC** | 手机当遥控器，指挥电脑上的桌面版 | 同一 Wi-Fi，电脑开服务 |
-
-- **OTG 模式是自己实现的 fastboot 协议**：USB bulk 传输 + 64 字节命令包（`FASTBOOT` + 命令），
-  处理 `OKAY` / `FAIL` / `INFO` / `DATA` 响应，下载镜像走 `download:` 分包传输。不依赖 adb，不需要 root。
-- **本机模式**用 `su` + `dd` 直接读写 `/dev/block/by-name/*`。
-- **遥控模式**走 HTTP，配对码 6 位，靠 `X-Token` 头校验。
-- 界面与桌面版同一套配色，全部用系统控件，无第三方依赖，APK 仅 28 KB。
-
-## 桌面版新增
-
-- 侧栏新增「遥控服务…」：启动一个内置 HTTP 服务（TcpListener 手写，非管理员也能跑），
-  显示本机 IP 和 6 位配对码，手机 App 填进去即可用
-- 接口：`/api/status`、`/api/run`、`/api/partitions`、`/api/flash`、`/api/reboot`，
-  全部要求 `X-Token` 匹配
-- 配对码存进 `config.ini` 的 `token=`，可一键更换
+| 读分区表 / 复制 / CSV | ✅ | ✅ |
+| 刷入镜像 | ✅ | ✅ |
+| 线刷 ROM | ✅ | ✅ |
+| 备份基带 | ✅ | ✅ |
+| 重启 Recovery / BL / EDL | ✅ | ✅ |
+| 控制台 + 历史 | ✅ | ✅ |
+| 日志分色 + 保存 | ✅ | ✅ |
+| 配色 / 字号 / 双语 | ✅ | ✅ |
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `EasyPT.apk` | Android 版，28 KB，minSdk 26 |
-| `Easy-platform-tools-GUI-v1.7.0.zip` | Windows 桌面版，解压即用 |
+| `EasyPT.apk` | Android 1.8.0，40 KB，minSdk 26 |
+| `Easy-platform-tools-GUI-v1.8.0.zip` | Windows 桌面版 |
 | `Easy-platform-tools-GUI.exe` | 桌面版单文件，107 KB |
-
-## 自己编译 APK
-
-```bat
-powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
-```
-
-不依赖 Gradle：`aapt2` 链接清单 → `javac` 编译 → `d8` 转 dex → `zipalign` → `apksigner` 签名。
 
 ## 说明
 
-Android 版**没有在真机上跑过**（开发机没连手机，也没有 OTG 测试条件），
-OTG 协议和 root 路径是按规范实现并做了静态校验的，第一次用时请注意：
-先用「读分区表」确认能正常通信，再尝试写入操作。
+Android 版仍未在真机验证（开发机没有可测试的设备与 OTG 环境）。
+协议实现、打包、签名均已静态校验，首次使用建议先跑「读分区表」确认通信正常。
 
 ## 许可
 
