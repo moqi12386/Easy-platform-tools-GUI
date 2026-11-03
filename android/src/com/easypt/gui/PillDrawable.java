@@ -68,13 +68,13 @@ public class PillDrawable extends Drawable {
 
         fillPaint.setStyle(Paint.Style.FILL);
         fillPaint.setShader(null);
-        fillPaint.setColor(fillColor);
-        fillPaint.setAlpha(alpha);
+        // 注意：不能用 setAlpha(255) —— 那会把 fillColor 自带的不透明度覆盖成不透明
+        int ca = ((fillColor >>> 24) * alpha) / 255;
+        fillPaint.setColor((fillColor & 0x00FFFFFF) | (ca << 24));
         c.drawRoundRect(b, radius, radius, fillPaint);
 
         if (pressed) {
-            fillPaint.setColor(0xFFFFFFFF);
-            fillPaint.setAlpha(28 * alpha / 255);
+            fillPaint.setColor((28 * alpha / 255) << 24 | 0x00FFFFFF);
             c.drawRoundRect(b, radius, radius, fillPaint);
         }
 
@@ -89,7 +89,7 @@ public class PillDrawable extends Drawable {
                 shaderH = h;
             }
             linePaint.setShader(shader);
-            linePaint.setColor(0xFFFFFFFF);
+            linePaint.setColor((borderAlpha << 24) | 0x00FFFFFF);
         } else {
             linePaint.setShader(null);
             linePaint.setColor(borderColor);

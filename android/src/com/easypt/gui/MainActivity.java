@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.15.0";
+    private static final String VER = "2.16.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -776,8 +776,8 @@ public class MainActivity extends Activity {
     /** 按钮底的不透明度：Material 更实，玻璃几乎是透的 */
     private int fillPct() {
         switch (styleIdx) {
-            case ST_MATERIAL: return Math.max(btnAlpha, 88);
-            case ST_MIUIX: return Math.max(btnAlpha, 62);
+            case ST_MATERIAL: return btnAlpha;
+            case ST_MIUIX: return btnAlpha;
             case ST_GLASS: return 22;
             default: return btnAlpha;
         }
@@ -1878,7 +1878,23 @@ public class MainActivity extends Activity {
         chev.setPadding(dp(6), 0, 0, 0);
         row.addView(chev);
 
+        row.setClickable(true);
+        row.setFocusable(true);
         row.setOnClickListener(l);
+        // 某些系统（含分身/沙箱）里 LinearLayout 的 click 不稳定，这里再用触摸兜底
+        row.setOnTouchListener(new View.OnTouchListener() {
+            public boolean onTouch(View v, MotionEvent e) {
+                int a = e.getActionMasked();
+                if (a == MotionEvent.ACTION_DOWN) { v.setPressed(true); return true; }
+                if (a == MotionEvent.ACTION_UP) {
+                    v.setPressed(false);
+                    v.performClick();
+                    return true;
+                }
+                if (a == MotionEvent.ACTION_CANCEL) { v.setPressed(false); return true; }
+                return true;
+            }
+        });
         return row;
     }
 

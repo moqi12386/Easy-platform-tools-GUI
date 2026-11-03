@@ -1,65 +1,63 @@
-# Easy-platform-tools-GUI v2.15.0 — 玻璃不再分内外层、底栏拖动实时重绘、进度条重做
+# Easy-platform-tools-GUI v2.16.0 — 修好原生/Material 的按键透明度；AGSL 折射先关掉
 
-## 1. 去掉内外层
+## 1. 按键透明度在原生 / Material 下失效（已修）
 
-上一版为了"液态折射"在外圈做了一圈放大环，结果边缘和中间是两种质感，看着不协调。这次整个砍掉：
+根因在 `PillDrawable`：
 
-| 之前 | 现在 |
-|---|---|
-| 中间平铺 + 外圈 13 dp 放大环 + 斜向反光 | **一层**：模糊底 + 主题色 + 淡顶部高光 + 淡底部压暗 + 1 px 描边 |
+```java
+fillPaint.setColor(fillColor);     // fillColor 自带 alpha（比如 20%）
+fillPaint.setAlpha(alpha);         // alpha 字段是 255 → 把颜色的 alpha 覆盖成不透明
+```
 
-`GlassDrawable` 里相关的 `lensMatrix` / 环形裁剪都删了，绘制只剩一次 `drawBitmap` + 两个渐变。
+`Paint.setAlpha()` 不是"相乘"，而是**直接改写颜色的 alpha 通道**。
+所以原生和 Material（都走 `PillDrawable`）无论把滑杆拖到多少都是 100% 不透明；
+液态玻璃走的是另一条绘制路径，才看起来正常。
 
-## 2. 底栏拖动时实时重绘
+现在改成显式计算：
 
-拖动底栏滑块时，之前只改了 `translationX`，硬件加速下视图只是被平移、**不会重新画**，
-所以滑块里的模糊停在原地。现在 `ACTION_MOVE` 里移动完补一次 `navThumb.invalidate()`，
-每帧按新位置重新取样。
+```java
+int a = ((fillColor >>> 24) * alpha) / 255;
+fillPaint.setColor((fillColor & 0x00FFFFFF) | (a << 24));
+```
 
-（页面滚动那块上一版已经是 `GlassScroll.onScrollChanged` 每帧标脏。）
+顺带去掉了 Material 的 `Math.max(btnAlpha, 88)` 下限（之前 88% 以下拖不动也是同一类问题）。
 
-## 3. 进度条重做
+## 2. 关于用 AndroidLiquidGlass
 
-之前用 `LayerDrawable` 叠「轨道 + ClipDrawable」，两层可用高度不一致，
-结果蓝色填充是粗的、灰色轨道是细的，比例不对。
+[Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 是 **Compose Multiplatform** 库
+（Gradle + Compose + AGSL + RenderEffect，Apache-2.0）。本项目是 `javac` + `aapt2` + `d8` 手搓的纯 View 工程，
+**没法直接引它的依赖**——引进来等于把整个 Compose 运行时塞进来（十几 MB，还要改构建脚本）。
 
-现在改成自绘 `BarDrawable`：
+所以我做的是**移植它的 AGSL 片段**：
 
-| 部位 | 参数 |
-|---|---|
-| 轨道 | 16 dp 高、两端圆头、色 0x4D000000 |
-| 填充 | 同一矩形、同高、色 #3D7EFF、按 level 截断，右端也圆头 |
-| 拇指 | 26 dp 白色圆，压在轨道上 |
-| 行高 | 34 dp |
+- 新增 `LiquidGlassShader.java`，内含该项目的 `RoundedRectRefractionShaderString`
+  （保留其 Apache-2.0 声明，已注明出处链接）
+- 通过 `RuntimeShader` + `BitmapShader` 输入，对预模糊壁纸做边缘折射
+- 低版本或驱动不支持时自动退回位图模糊
 
-`ProgressBar` 会把 0–10000 的 level 交给 drawable，所以拖动时填充跟着走，不用自己算。
+**但默认是关的**（`LiquidGlassShader.ENABLED = false`）。原因：在你的手机上试了几版，
+着色器的采样对齐一直不对（全糊成一块灰、或者折射范围过大），我没法在这种调试环境下把它调到可用的观感。
+与其发一个半成品，不如先关掉、保持现在稳定的模糊玻璃。
 
-## 4. 两个保底值
-
-| 项 | 保底 | 原因 |
-|---|---|---|
-| 玻璃模糊 | 1/12 | 拖到 0% 也不会退回原始壁纸 |
-| 玻璃浓度 | 25% | 拖到 0% 面板不会变成全透明 |
+想试的话把 `ENABLED` 改成 `true` 重新编译即可；需要我继续调也可以说。
 
 ## 下载
 
 | 文件 | 说明 |
 |---|---|
-| `EasyPT.apk` | Android 2.15.0，64 KB，minSdk 26（Android 8.0+），versionCode 19 |
-
-桌面版这一版没动。
+| `EasyPT.apk` | Android 2.16.0，64 KB，minSdk 26（Android 8.0+），versionCode 20 |
 
 ## 已验证 / 未验证
 
-手机（1440×3200 / 600 dpi）真机验证：整块玻璃不再有内外分界、拖动底栏滑块时模糊跟着走、
-进度条的粗细比例和白色圆头。
+手机上验证：原生样式下把透明度拖到 20% 附近，按钮确实变成半透明、能看到壁纸；
+液态玻璃样式仍是预模糊玻璃。
 
 ## 已知取舍
 
-- 底栏滑块每帧重绘，`drawBitmap` 本身很便宜，但低端机上快速拖动可能掉一两帧
-- 进度很小时填充会画成一个圆点（和 MIUI 一致）
-- 保底值意味着滑杆两端不能"关掉"效果
+- AGSL 折射未启用（见上）
+- `PillDrawable` 的按下高亮也改成了正确的 alpha 叠加
 
 ## 许可
 
-代码 MIT。platform-tools、MiSans、JetBrains Mono 遵循各自许可，不随本仓库分发。
+本项目代码 MIT。
+`LiquidGlassShader.java` 内的 AGSL 片段来自 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Apache-2.0）。

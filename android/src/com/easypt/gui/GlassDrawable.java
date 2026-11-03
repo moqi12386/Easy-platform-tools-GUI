@@ -47,6 +47,7 @@ public class GlassDrawable extends Drawable {
     private final Rect src = new Rect();
     private final Path clip = new Path();
     private final Path ring = new Path();
+    private LiquidGlassShader liquid;
     private final Matrix mx = new Matrix();
 
     public GlassDrawable(View host) {
@@ -100,7 +101,25 @@ public class GlassDrawable extends Drawable {
         int factor = factors[Math.min(idx, factors.length - 1)];
 
         if (lv != null) {
-            drawFromLevel(c, lv, factor);
+            // 先用 AGSL 折射（AndroidLiquidGlass 的做法），失败/低版本退回位图模糊
+            boolean drawn = false;
+            if (lens && LiquidGlassShader.supported()) {
+                if (liquid == null) { liquid = new LiquidGlassShader(); }
+                int[] loc = new int[2];
+                host.getLocationOnScreen(loc);
+                float f = factor;
+                float w = box.width() / f, h = box.height() / f;
+                android.graphics.Paint sp = liquid.paintFor(lv, w, h, radius / f, dp(12) / f, dp(8) / f);
+                if (sp != null) {
+                    int sv = c.save();
+                    c.translate(-loc[0] / f, -loc[1] / f);
+                    c.scale(1f / f, 1f / f);
+                    c.drawRoundRect(new RectF(0, 0, box.width(), box.height()), radius, radius, sp);
+                    c.restoreToCount(sv);
+                    drawn = true;
+                }
+            }
+            if (!drawn) { drawFromLevel(c, lv, factor); }
         } else {
             fillPaint.setColor((tint & 0x00FFFFFF) | 0x66000000);
             c.drawRect(box, fillPaint);
