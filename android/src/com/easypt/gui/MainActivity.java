@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.11.0";
+    private static final String VER = "2.12.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -435,7 +435,7 @@ public class MainActivity extends Activity {
         statusView.setTextSize(12 * scale);
         page.addView(statusView);
 
-        ScrollView scroll = new ScrollView(this);
+        ScrollView scroll = new GlassScroll(this);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         slp.topMargin = dp(6);
         slp.bottomMargin = dp(4);
@@ -462,7 +462,7 @@ public class MainActivity extends Activity {
         scroll.addView(logView);
         page.addView(scroll);
 
-        ScrollView gridScroll = new ScrollView(this);
+        ScrollView gridScroll = new GlassScroll(this);
         int gridH = (int) (getResources().getDisplayMetrics().heightPixels * (styleIdx == ST_MIUIX ? 0.40 : 0.34));
         LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH);
         glp.topMargin = dp(4);
@@ -852,11 +852,32 @@ public class MainActivity extends Activity {
 
     /** 模糊强度变了，让所有玻璃控件重画（按钮走 refreshButtonColors） */
     private void invalidateGlass() {
+        invalidateGlassViews();
+        refreshButtonColors();
+    }
+
+    /** 只让玻璃重画（滚动时每帧调，不能顺手重建按钮） */
+    private void invalidateGlassViews() {
+        if (glassViews.isEmpty()) { return; }
+        android.graphics.Rect vis = new android.graphics.Rect();
         for (int i = 0; i < glassViews.size(); i++) {
             View v = glassViews.get(i);
-            if (v != null) { v.invalidate(); }
+            if (v == null || !v.isShown()) { continue; }
+            if (v.getGlobalVisibleRect(vis)) { v.invalidate(); }
         }
-        refreshButtonColors();
+    }
+
+    /**
+     * 滚动时硬件加速只平移显示列表、不会重新 draw()，玻璃里的模糊就会停在原位、
+     * 和底下的壁纸错位。这里每帧把可见的玻璃控件标脏，逼它按新位置重新采样。
+     */
+    private class GlassScroll extends ScrollView {
+        GlassScroll(Context c) { super(c); }
+        @Override
+        protected void onScrollChanged(int l, int t, int oldl, int oldt) {
+            super.onScrollChanged(l, t, oldl, oldt);
+            if (isGlass()) { invalidateGlassViews(); }
+        }
     }
     private int localBackdrop(View v) {
         if (wallBmp == null || v == null) { return backdrop; }
@@ -1022,7 +1043,7 @@ public class MainActivity extends Activity {
 
     /** 设置是独立一页（底栏第二个 tab），不再用对话框盖住主界面 */
     private View buildSettingsPage() {
-        ScrollView sv = new ScrollView(this);
+        ScrollView sv = new GlassScroll(this);
         sv.setFillViewport(true);
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
