@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.1.0";
+    private static final String VER = "2.2.0";
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -166,7 +166,7 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         String wp = store.getString("wall", "");
-        android.graphics.Bitmap wallBmp = wp.length() > 0 ? android.graphics.BitmapFactory.decodeFile(wp) : null;
+        android.graphics.Bitmap wallBmp = wp.length() > 0 ? fitToScreen(android.graphics.BitmapFactory.decodeFile(wp)) : null;
         if (wallBmp != null) {
             root.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
         } else {
@@ -218,7 +218,7 @@ public class MainActivity extends Activity {
         slp.topMargin = dp(8);
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
-        scroll.setBackgroundColor(Color.argb(hasWall() ? (Math.max(120, btnAlpha) * 255 / 100) : 255, Color.red(cOut), Color.green(cOut), Color.blue(cOut)));
+        scroll.setBackgroundColor(Color.argb(hasWall() ? Math.min(235, Math.max(150, btnAlpha)) : 255, Color.red(cOut), Color.green(cOut), Color.blue(cOut)));
 
         logView = new TextView(this);
         logView.setTextColor(cText);
@@ -451,6 +451,30 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(16), dp(8), dp(16), dp(8));
 
+        box.addView(label(T("按键透明度", "Button opacity")));
+        LinearLayout alphaRow = new LinearLayout(this);
+        alphaRow.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView tvAlpha = new TextView(this);
+        tvAlpha.setText(btnAlpha + "%");
+        tvAlpha.setTextColor(cText);
+        tvAlpha.setTextSize(13 * scale);
+        tvAlpha.setWidth(dp(56));
+        android.widget.SeekBar sb = new android.widget.SeekBar(this);
+        sb.setMax(100);
+        sb.setProgress(btnAlpha);
+        sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) { tvAlpha.setText(p + "%"); }
+            public void onStartTrackingTouch(android.widget.SeekBar s) { }
+            public void onStopTrackingTouch(android.widget.SeekBar s) {
+                btnAlpha = s.getProgress();
+                store.edit().putInt("alpha", btnAlpha).apply();
+                recreate();
+            }
+        });
+        alphaRow.addView(tvAlpha);
+        alphaRow.addView(sb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(alphaRow);
+
         box.addView(label(T("背景配色", "Background")));
         LinearLayout swatches = new LinearLayout(this);
         for (int i = 0; i < BG.length; i++) {
@@ -480,29 +504,6 @@ public class MainActivity extends Activity {
         }
         box.addView(sizes);
 
-        box.addView(label(T("按键透明度", "Button opacity")));
-        LinearLayout alphaRow = new LinearLayout(this);
-        alphaRow.setGravity(Gravity.CENTER_VERTICAL);
-        final TextView tvAlpha = new TextView(this);
-        tvAlpha.setText(btnAlpha + "%");
-        tvAlpha.setTextColor(cText);
-        tvAlpha.setTextSize(13 * scale);
-        tvAlpha.setWidth(dp(56));
-        android.widget.SeekBar sb = new android.widget.SeekBar(this);
-        sb.setMax(100);
-        sb.setProgress(btnAlpha);
-        sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) { tvAlpha.setText(p + "%"); }
-            public void onStartTrackingTouch(android.widget.SeekBar s) { }
-            public void onStopTrackingTouch(android.widget.SeekBar s) {
-                btnAlpha = s.getProgress();
-                store.edit().putInt("alpha", btnAlpha).apply();
-                recreate();
-            }
-        });
-        alphaRow.addView(tvAlpha);
-        alphaRow.addView(sb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        box.addView(alphaRow);
         box.addView(label(T("语言", "Language")));
         LinearLayout langs = new LinearLayout(this);
         Button zh = smallBtn("中文", new View.OnClickListener() {
@@ -902,6 +903,22 @@ public class MainActivity extends Activity {
 
     // ---------------- 壁纸 ----------------
 
+    /** 把任意比例的图按屏幕尺寸居中裁切，保证铺上去不变形 */
+    private android.graphics.Bitmap fitToScreen(android.graphics.Bitmap src) {
+        if (src == null) { return null; }
+        int[] scr = screenSize();
+        int w = scr[0], h = scr[1];
+        if (src.getWidth() == w && src.getHeight() == h) { return src; }
+        float sc = Math.max((float) w / src.getWidth(), (float) h / src.getHeight());
+        float dw = src.getWidth() * sc, dh = src.getHeight() * sc;
+        android.graphics.Bitmap out = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(out);
+        android.graphics.Matrix m = new android.graphics.Matrix();
+        m.postScale(sc, sc);
+        m.postTranslate((w - dw) / 2f, (h - dh) / 2f);
+        cv.drawBitmap(src, m, new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+        return out;
+    }
     private android.graphics.Bitmap loadScaled(Uri uri) throws Exception {
         InputStream in = getContentResolver().openInputStream(uri);
         android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
