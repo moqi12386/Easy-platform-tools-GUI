@@ -31,7 +31,9 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.GridLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -61,7 +63,12 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.4.0";
+    private static final String VER = "2.5.0";
+
+    /** 边框预设色（默认第 0 个之外，默认用彩虹） */
+    private static final int[] BD_PRESETS = {
+            0xFFFFFFFF, 0xFF11151C, 0xFF4C9AFF, 0xFF3DDC97, 0xFFFFC53D, 0xFFA66CFF, 0xFFFF4D6D
+    };
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -74,6 +81,8 @@ public class MainActivity extends Activity {
     private float scale = 1.0f;
     private String lang = "zh";
     private int btnAlpha = 90;
+    private boolean borderOn = true, borderRain = true;
+    private int borderColor = 0xFFFFFFFF, borderDp = 2, borderAlphaPct = 100;
     private int backdrop = 0;    // 壁纸平均色（无壁纸时 = 主题底色）
     private android.graphics.Bitmap wallBmp = null;
     private final java.util.HashMap<Button, Integer> themed = new java.util.HashMap<Button, Integer>();
@@ -110,6 +119,11 @@ public class MainActivity extends Activity {
         scale = store.getFloat("scale", 1.0f);
         lang = store.getString("lang", "zh");
         btnAlpha = store.getInt("alpha", 90);
+        borderOn = store.getBoolean("bOn", true);
+        borderRain = store.getBoolean("bRain", true);
+        borderColor = store.getInt("bCol", 0xFFFFFFFF);
+        borderDp = store.getInt("bDp", 2);
+        borderAlphaPct = store.getInt("bA", 100);
         pendingPart = store.getString("part", "boot");
         applyColors();
 
@@ -399,8 +413,9 @@ public class MainActivity extends Activity {
         inputRow.addView(input, ilp);
 
         Button runBtn = smallBtn(T("执行", "Run"));
+        themed.put(runBtn, cRun);
         runBtn.setBackground(pill(cRun, 10));
-        runBtn.setTextColor(textOn(blendOver(cRun, Math.max(60, btnAlpha), backdrop)));
+        runBtn.setTextColor(textOn(blendOver(cRun, btnAlpha, backdrop)));
         runBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(84), dp(48)));
         runBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { runTyped(); }
@@ -445,14 +460,22 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    /** 圆角 + 可调不透明的按钮/卡片底 */
-    private android.graphics.drawable.GradientDrawable pill(int baseColor, int radiusDp) {
+    /** 圆角 + 可调不透明的按钮底，外挂一圈自定义边框 */
+    private PillDrawable pill(int baseColor, int radiusDp) {
+        return pill(baseColor, radiusDp, false);
+    }
+
+    /** plain=true：给设置面板里的小控件用，不带边框 */
+    private PillDrawable pill(int baseColor, int radiusDp, boolean plain) {
         int a = Math.max(0, Math.min(100, btnAlpha)) * 255 / 100;
-        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
-        g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        g.setColor(Color.argb(a, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor)));
-        g.setCornerRadius(dp(radiusDp));
-        g.setStroke(Math.max(1, dp(1)), Color.argb(Math.min(255, a + 25), Color.red(cDim), Color.green(cDim), Color.blue(cDim)));
+        PillDrawable g = new PillDrawable(
+                Color.argb(a, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor)),
+                dp(radiusDp));
+        if (plain) {
+            g.border(false, false, 0, 0, 0);
+        } else {
+            g.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
+        }
         return g;
     }
 
@@ -624,6 +647,60 @@ public class MainActivity extends Activity {
         alphaRow.addView(sb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         box.addView(alphaRow);
 
+        box.addView(label(T("按键边框", "Button border")));
+        final LinearLayout chipsWrap = new LinearLayout(this);
+        chipsWrap.setOrientation(LinearLayout.VERTICAL);
+        box.addView(chipsWrap);
+        renderBorderChips(chipsWrap);
+
+        LinearLayout bdRow = new LinearLayout(this);
+        bdRow.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView tvBd = new TextView(this);
+        tvBd.setText(borderDp + " dp");
+        tvBd.setTextColor(cText);
+        tvBd.setTextSize(13 * scale);
+        tvBd.setWidth(dp(56));
+        android.widget.SeekBar sbBd = new android.widget.SeekBar(this);
+        sbBd.setMax(5);
+        sbBd.setProgress(Math.max(0, Math.min(5, borderDp - 1)));
+        sbBd.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) {
+                borderDp = p + 1;
+                tvBd.setText(borderDp + " dp");
+                if (!fromUser) { return; }
+                refreshButtonColors();
+            }
+            public void onStartTrackingTouch(android.widget.SeekBar s) { }
+            public void onStopTrackingTouch(android.widget.SeekBar s) { persistBorder(); }
+        });
+        bdRow.addView(tvBd);
+        bdRow.addView(sbBd, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(bdRow);
+
+        LinearLayout baRow = new LinearLayout(this);
+        baRow.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView tvBa = new TextView(this);
+        tvBa.setText(borderAlphaPct + "%");
+        tvBa.setTextColor(cText);
+        tvBa.setTextSize(13 * scale);
+        tvBa.setWidth(dp(56));
+        android.widget.SeekBar sbBa = new android.widget.SeekBar(this);
+        sbBa.setMax(100);
+        sbBa.setProgress(borderAlphaPct);
+        sbBa.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) {
+                borderAlphaPct = p;
+                tvBa.setText(p + "%");
+                if (!fromUser) { return; }
+                refreshButtonColors();
+            }
+            public void onStartTrackingTouch(android.widget.SeekBar s) { }
+            public void onStopTrackingTouch(android.widget.SeekBar s) { persistBorder(); }
+        });
+        baRow.addView(tvBa);
+        baRow.addView(sbBa, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(baRow);
+
         box.addView(label(T("背景配色", "Background")));
         LinearLayout swatches = new LinearLayout(this);
         for (int i = 0; i < BG.length; i++) {
@@ -721,6 +798,182 @@ public class MainActivity extends Activity {
                 })
                 .setNeutralButton(T("切换模式", "Switch mode"), new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) { chooseMode(false); }
+                })
+                .setNegativeButton(T("取消", "Cancel"), null)
+                .show();
+    }
+
+    private void persistBorder() {
+        store.edit()
+                .putBoolean("bOn", borderOn)
+                .putBoolean("bRain", borderRain)
+                .putInt("bCol", borderColor)
+                .putInt("bDp", borderDp)
+                .putInt("bA", borderAlphaPct)
+                .apply();
+    }
+
+    private void setBorder(boolean on, boolean rain, int color, LinearLayout wrap) {
+        borderOn = on;
+        borderRain = rain;
+        borderColor = color;
+        persistBorder();
+        refreshButtonColors();
+        renderBorderChips(wrap);
+    }
+
+    /** 边框配色小方块：彩虹 / 7 个预设 / 自定义 / 无 */
+    private void renderBorderChips(final LinearLayout wrap) {
+        wrap.removeAllViews();
+        HorizontalScrollView hs = new HorizontalScrollView(this);
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(2));
+
+        android.graphics.drawable.GradientDrawable rainbow =
+                new android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                        PillDrawable.RAINBOW);
+        rainbow.setCornerRadius(dp(10));
+        row.addView(chip(rainbow, borderOn && borderRain, new View.OnClickListener() {
+            public void onClick(View v) { setBorder(true, true, borderColor, wrap); }
+        }));
+
+        for (int i = 0; i < BD_PRESETS.length; i++) {
+            final int c = BD_PRESETS[i];
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            g.setColor(c);
+            g.setCornerRadius(dp(10));
+            row.addView(chip(g, borderOn && !borderRain && borderColor == c, new View.OnClickListener() {
+                public void onClick(View v) { setBorder(true, false, c, wrap); }
+            }));
+        }
+
+        // 当前自定义色（和预设不重复时才显示这一格）
+        if (!isPreset(borderColor)) {
+            android.graphics.drawable.GradientDrawable cg = new android.graphics.drawable.GradientDrawable();
+            cg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            cg.setColor(borderColor);
+            cg.setCornerRadius(dp(10));
+            row.addView(chip(cg, borderOn && !borderRain, new View.OnClickListener() {
+                public void onClick(View v) { setBorder(true, false, borderColor, wrap); }
+            }));
+        }
+
+        Button custom = smallBtn(T("自定义…", "Custom…"));
+        themed.remove(custom);
+        custom.setBackground(pill(cBtn, 10, true));
+        custom.setLayoutParams(new LinearLayout.LayoutParams(dp(92), dp(40)));
+        custom.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { customBorderDialog(wrap); }
+        });
+        row.addView(custom);
+
+        Button none = smallBtn(T("无", "None"));
+        themed.remove(none);
+        none.setBackground(pill(cBtn, 10, true));
+        none.setLayoutParams(new LinearLayout.LayoutParams(dp(52), dp(40)));
+        none.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { setBorder(false, borderRain, borderColor, wrap); }
+        });
+        row.addView(none);
+
+        hs.addView(row);
+        wrap.addView(hs);
+    }
+
+    private boolean isPreset(int c) {
+        for (int p : BD_PRESETS) { if ((p | 0xFF000000) == (c | 0xFF000000)) { return true; } }
+        return false;
+    }
+
+    private View chip(android.graphics.drawable.Drawable inner, boolean selected, View.OnClickListener l) {
+        FrameLayout f = new FrameLayout(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(38), dp(38));
+        lp.setMargins(dp(3), 0, dp(3), 0);
+        f.setLayoutParams(lp);
+        f.setPadding(dp(3), dp(3), dp(3), dp(3));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setCornerRadius(dp(12));
+        bg.setColor(Color.TRANSPARENT);
+        if (selected) {
+            bg.setStroke(dp(2), isLight(backdrop) ? 0xFF11151C : 0xFFFFFFFF);
+        }
+        f.setBackground(bg);
+        View v = new View(this);
+        v.setBackground(inner);
+        f.addView(v, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        f.setOnClickListener(l);
+        return f;
+    }
+
+    /** 自定义边框色：RGB 三根滑杆 + 实时预览 */
+    private void customBorderDialog(final LinearLayout wrap) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(16), dp(10), dp(16), dp(6));
+
+        final int[] rgb = { Color.red(borderColor), Color.green(borderColor), Color.blue(borderColor) };
+        final View prev = new View(this);
+        prev.setBackgroundColor(Color.rgb(rgb[0], rgb[1], rgb[2]));
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        plp.bottomMargin = dp(8);
+        box.addView(prev, plp);
+
+        final String[] names = { "R", "G", "B" };
+        final TextView[] vals = new TextView[3];
+        final TextView hex = new TextView(this);
+        hex.setTextColor(cDim);
+        hex.setTextSize(12 * scale);
+        hex.setPadding(0, dp(6), 0, 0);
+        for (int i = 0; i < 3; i++) {
+            final int k = i;
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView name = new TextView(this);
+            name.setText(names[i]);
+            name.setTextColor(cText);
+            name.setTextSize(13 * scale);
+            name.setWidth(dp(24));
+            vals[i] = new TextView(this);
+            vals[i].setText("" + rgb[i]);
+            vals[i].setTextColor(cDim);
+            vals[i].setTextSize(12 * scale);
+            vals[i].setWidth(dp(42));
+            vals[i].setGravity(Gravity.END);
+            android.widget.SeekBar sb = new android.widget.SeekBar(this);
+            sb.setMax(255);
+            sb.setProgress(rgb[i]);
+            sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+                public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) {
+                    rgb[k] = p;
+                    vals[k].setText("" + p);
+                    prev.setBackgroundColor(Color.rgb(rgb[0], rgb[1], rgb[2]));
+                    hex.setText(String.format("#%02X%02X%02X", rgb[0], rgb[1], rgb[2]));
+                }
+                public void onStartTrackingTouch(android.widget.SeekBar s) { }
+                public void onStopTrackingTouch(android.widget.SeekBar s) { }
+            });
+            row.addView(name);
+            row.addView(sb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(vals[i]);
+            box.addView(row);
+        }
+        hex.setText(String.format("#%02X%02X%02X", rgb[0], rgb[1], rgb[2]));
+        box.addView(hex);
+
+        new AlertDialog.Builder(this)
+                .setTitle(T("边框颜色", "Border color"))
+                .setView(box)
+                .setPositiveButton(T("确定", "OK"), new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        setBorder(true, false, Color.rgb(rgb[0], rgb[1], rgb[2]), wrap);
+                    }
                 })
                 .setNegativeButton(T("取消", "Cancel"), null)
                 .show();

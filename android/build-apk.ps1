@@ -1,4 +1,4 @@
-﻿# 用 Android build-tools 直接打 APK（不依赖 Gradle）
+# 用 Android build-tools 直接打 APK（不依赖 Gradle）
 # 用法：powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 param(
     [string]$SdkRoot = 'C:\Users\35923\android-build',
@@ -43,9 +43,14 @@ $sources = Get-ChildItem (Join-Path $proj 'src') -Recurse -Filter *.java | ForEa
 & $javac --release 8 -encoding UTF-8 -nowarn -cp $androidJar -d "$out\classes" $sources
 if ($LASTEXITCODE -ne 0) { throw "javac 失败" }
 
-# 3) d8 → classes.dex
+# 3) d8 → classes.dex（打成 jar 传进去，避免命令行超长）
 $classes = Get-ChildItem "$out\classes" -Recurse -Filter *.class | ForEach-Object { $_.FullName }
-& $d8 --release --lib $androidJar --min-api 26 --output "$out\dex" $classes
+$jarTool = Join-Path $jdk "bin\jar.exe"
+$classJar = Join-Path $out 'classes.jar'
+if (Test-Path $classJar) { Remove-Item $classJar -Force }
+& $jarTool cf $classJar -C "$out\classes" .
+if ($LASTEXITCODE -ne 0) { throw "jar 打包失败" }
+& $d8 --release --lib $androidJar --min-api 26 --output "$out\dex" $classJar
 if ($LASTEXITCODE -ne 0) { throw "d8 失败" }
 
 # 4) 把 classes.dex 塞进 apk
