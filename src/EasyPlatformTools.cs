@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "2.2.0";
+        private const string AppVersion = "2.3.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -315,6 +315,7 @@ namespace EasyPlatformTools
         private static string remoteToken = "";
         private static string wallpaperPath = "";
         private static int btnAlpha = 100;
+        private static Color backdrop = Color.FromArgb(20, 22, 28);   // 用于自动黑白字
         private static string lastPtSource = "";
 
         private enum Role { Text, Cmd, Err, Ok, Dim, Warn }
@@ -1446,10 +1447,82 @@ namespace EasyPlatformTools
         }
 
         /// <summary>壁纸：把原图压暗后铺满窗体，面板设为透明让壁纸透出来</summary>
+        /// <summary>按背景亮度返回黑字或白字</summary>
+        /// <summary>按 WCAG 对比度选黑字或白字（比固定亮度阈值更靠谱）</summary>
+        private static Color ContrastText(Color bg)
+        {
+            double l = RelLum(bg);
+            double withWhite = 1.05 / (l + 0.05);
+            double withBlack = (l + 0.05) / 0.05;
+            return withBlack >= withWhite ? Color.FromArgb(16, 19, 24) : Color.FromArgb(244, 246, 250);
+        }
+
+        private static double RelLum(Color c)
+        {
+            double r = Channel(c.R), g = Channel(c.G), b = Channel(c.B);
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        }
+
+        private static double Channel(int v)
+        {
+            double s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+
+        /// <summary>把带 alpha 的颜色压到底色上，得到实际观感</summary>
+        private static Color Flatten(Color c, Color over)
+        {
+            if (c.A == 255) { return c; }
+            double a = c.A / 255.0;
+            return Color.FromArgb(255,
+                (int)(c.R * a + over.R * (1 - a)),
+                (int)(c.G * a + over.G * (1 - a)),
+                (int)(c.B * a + over.B * (1 - a)));
+        }
+
+        /// <summary>按透明度把按钮色混到背景上，得到等效的不透明色（WinForms 子控件不支持真透明）</summary>
+        private static void ApplyButtonColors(Theme t)
+        {
+            foreach (Button b in menuButtons)
+            {
+                b.BackColor = WithAlpha(t.Btn);
+                b.ForeColor = ContrastText(b.BackColor);
+            }
+            if (btnClear != null) { btnClear.BackColor = WithAlpha(t.Btn); btnClear.ForeColor = ContrastText(btnClear.BackColor); }
+            if (btnSave != null) { btnSave.BackColor = WithAlpha(t.Btn); btnSave.ForeColor = ContrastText(btnSave.BackColor); }
+            if (btnSettings != null) { btnSettings.BackColor = WithAlpha(t.Btn); btnSettings.ForeColor = ContrastText(btnSettings.BackColor); }
+        }
+
         private static Color WithAlpha(Color c)
         {
             if (btnAlpha >= 100) { return c; }
-            return Color.FromArgb(Math.Max(0, Math.Min(100, btnAlpha)) * 255 / 100, c.R, c.G, c.B);
+            double a = Math.Max(0, Math.Min(100, btnAlpha)) / 100.0;
+            return Color.FromArgb(255,
+                (int)(c.R * a + backdrop.R * (1 - a)),
+                (int)(c.G * a + backdrop.G * (1 - a)),
+                (int)(c.B * a + backdrop.B * (1 - a)));
+        }
+
+        private static Color AverageColor(Bitmap bmp, Color veil)
+        {
+            try
+            {
+                long r = 0, g = 0, b = 0;
+                int n = 0;
+                int sx = Math.Max(1, bmp.Width / 40), sy = Math.Max(1, bmp.Height / 40);
+                for (int y = 0; y < bmp.Height; y += sy)
+                {
+                    for (int x = 0; x < bmp.Width; x += sx)
+                    {
+                        Color p = bmp.GetPixel(x, y);
+                        r += p.R; g += p.G; b += p.B; n++;
+                    }
+                }
+                if (n == 0) { return veil; }
+                Color avg = Color.FromArgb(255, (int)(r / n), (int)(g / n), (int)(b / n));
+                return Flatten(veil, avg);
+            }
+            catch { return veil; }
         }
 
         private static void ApplyWallpaper(Theme t)
@@ -1459,6 +1532,7 @@ namespace EasyPlatformTools
             {
                 if (form.BackgroundImage != null) { form.BackgroundImage.Dispose(); form.BackgroundImage = null; }
                 WallPanel.Wall = null;
+                backdrop = t.Panel;
                 if (panelLeft != null) { panelLeft.Invalidate(); }
                 if (panelTop != null) { panelTop.Invalidate(); }
                 if (panelBottom != null) { panelBottom.Invalidate(); }
@@ -1491,7 +1565,9 @@ namespace EasyPlatformTools
                     form.BackgroundImageLayout = ImageLayout.Stretch;
                 }
                 WallPanel.Wall = (Bitmap)form.BackgroundImage;
-                WallPanel.Veil = Color.FromArgb(t.Dark ? 120 : 110, t.Output);
+                WallPanel.Veil = Color.FromArgb(t.Dark ? 95 : 85, t.Output);
+                backdrop = AverageColor((Bitmap)form.BackgroundImage, WallPanel.Veil);
+                if (menuButtons.Count > 0) { ApplyButtonColors(t); }
                 panelLeft.Invalidate();
                 panelTop.Invalidate();
                 panelBottom.Invalidate();
@@ -1530,20 +1606,21 @@ namespace EasyPlatformTools
             btnRun.BackColor = t.RunBtn;
             btnStop.BackColor = t.StopBtn;
             btnClear.BackColor = WithAlpha(t.Btn);
-            btnClear.ForeColor = t.Text;
+            btnClear.ForeColor = ContrastText(btnClear.BackColor);
             btnSave.BackColor = WithAlpha(t.Btn);
-            btnSave.ForeColor = t.Text;
+            btnSave.ForeColor = ContrastText(btnSave.BackColor);
 
             if (btnSettings != null)
             {
                 btnSettings.BackColor = WithAlpha(t.Btn);
-                btnSettings.ForeColor = t.Text;
+                btnSettings.ForeColor = ContrastText(btnSettings.BackColor);
                 btnSettings.FlatAppearance.BorderColor = t.Border;
             }
 
             foreach (Button b in menuButtons)
             {
                 b.BackColor = WithAlpha(t.Btn);
+                b.ForeColor = ContrastText(b.BackColor);
                 b.ForeColor = t.Text;
                 b.FlatAppearance.BorderColor = t.Border;
             }

@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.2.0";
+    private static final String VER = "2.3.0";
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -74,6 +74,7 @@ public class MainActivity extends Activity {
     private float scale = 1.0f;
     private String lang = "zh";
     private int btnAlpha = 90;
+    private int backdrop = 0;    // 壁纸平均色，用于自动黑白字
 
     private int cBg, cPanel, cText, cDim, cAccent, cOk, cErr, cBtn, cRun, cInput, cOut;
 
@@ -110,6 +111,7 @@ public class MainActivity extends Activity {
         pendingPart = store.getString("part", "boot");
         applyColors();
 
+        enableImmersive();
         buildUi();
         registerReceiver(usbReceiver, new IntentFilter(ACTION_USB_PERM));
         fb = new FastbootUsb(new FastbootUsb.Logger() {
@@ -155,6 +157,82 @@ public class MainActivity extends Activity {
 
     private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density); }
 
+    /** 让内容画到状态栏/导航栏下面，并按 insets 留出安全边距 */
+    private void enableImmersive() {
+        android.view.Window w = getWindow();
+        w.setStatusBarColor(Color.TRANSPARENT);
+        w.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= 30) {
+            w.setDecorFitsSystemWindows(false);
+        } else {
+            w.getDecorView().setSystemUiVisibility(
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        }
+    }
+
+    /** 深色状态栏图标与否：亮背景要黑图标 */
+    private void applyStatusBarIcons(boolean darkIcons) {
+        android.view.View dv = getWindow().getDecorView();
+        int flags = dv.getSystemUiVisibility();
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                c.setSystemBarsAppearance(darkIcons ? android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS : 0,
+                        android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+            }
+            return;
+        }
+        if (darkIcons) { flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR; }
+        else { flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR; }
+        dv.setSystemUiVisibility(flags);
+    }
+
+    private int blendOver(int fg, int alphaPct, int bg) {
+        float a = Math.max(0, Math.min(100, alphaPct)) / 100f;
+        return Color.rgb(
+                (int) (Color.red(fg) * a + Color.red(bg) * (1 - a)),
+                (int) (Color.green(fg) * a + Color.green(bg) * (1 - a)),
+                (int) (Color.blue(fg) * a + Color.blue(bg) * (1 - a)));
+    }
+
+    /** 按背景亮度选黑字或白字 */
+    private boolean isLight(int color) {
+        return (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) > 145;
+    }
+
+    private int textOn(int bgColor) {
+        double l = relLum(bgColor);
+        double withWhite = 1.05 / (l + 0.05);
+        double withBlack = (l + 0.05) / 0.05;
+        return withBlack >= withWhite ? 0xFF10131A : 0xFFF4F7FB;
+    }
+
+    private double relLum(int c) {
+        return 0.2126 * ch(Color.red(c)) + 0.7152 * ch(Color.green(c)) + 0.0722 * ch(Color.blue(c));
+    }
+
+    private double ch(int v) {
+        double s = v / 255.0;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    }
+
+    private int averageColor(android.graphics.Bitmap b) {
+        if (b == null) { return cOut; }
+        long r = 0, g = 0, bl = 0;
+        int n = 0;
+        int sx = Math.max(1, b.getWidth() / 40), sy = Math.max(1, b.getHeight() / 40);
+        for (int y = 0; y < b.getHeight(); y += sy) {
+            for (int x = 0; x < b.getWidth(); x += sx) {
+                int p = b.getPixel(x, y);
+                r += Color.red(p); g += Color.green(p); bl += Color.blue(p); n++;
+            }
+        }
+        if (n == 0) { return cOut; }
+        return Color.rgb((int) (r / n), (int) (g / n), (int) (bl / n));
+    }
+
     private boolean hasWall() {
         String wp = store.getString("wall", "");
         return wp.length() > 0 && new File(wp).exists();
@@ -169,9 +247,12 @@ public class MainActivity extends Activity {
         android.graphics.Bitmap wallBmp = wp.length() > 0 ? fitToScreen(android.graphics.BitmapFactory.decodeFile(wp)) : null;
         if (wallBmp != null) {
             root.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
+            backdrop = averageColor(wallBmp);
         } else {
             root.setBackgroundColor(cBg);
+            backdrop = cOut;
         }
+        applyStatusBarIcons(isLight(backdrop));
         root.setPadding(dp(12), dp(10), dp(12), dp(10));
 
         TextView title = new TextView(this);
@@ -275,8 +356,8 @@ public class MainActivity extends Activity {
         inputRow.addView(input, ilp);
 
         Button runBtn = smallBtn(T("执行", "Run"));
-        runBtn.setBackgroundColor(cRun);
-        runBtn.setTextColor(Color.WHITE);
+        runBtn.setBackground(pill(cRun, 10));
+        runBtn.setTextColor(textOn(blendOver(cRun, Math.max(60, btnAlpha), backdrop)));
         runBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(84), dp(48)));
         runBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { runTyped(); }
@@ -284,7 +365,24 @@ public class MainActivity extends Activity {
         inputRow.addView(runBtn);
         root.addView(inputRow);
 
+        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            public android.view.WindowInsets onApplyWindowInsets(View v, android.view.WindowInsets insets) {
+                int top, bottom, left, right;
+                if (Build.VERSION.SDK_INT >= 30) {
+                    android.graphics.Insets i = insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                    top = i.top; bottom = i.bottom; left = i.left; right = i.right;
+                } else {
+                    top = insets.getSystemWindowInsetTop();
+                    bottom = insets.getSystemWindowInsetBottom();
+                    left = insets.getSystemWindowInsetLeft();
+                    right = insets.getSystemWindowInsetRight();
+                }
+                v.setPadding(dp(12) + left, dp(10) + top, dp(12) + right, dp(10) + bottom);
+                return insets;
+            }
+        });
         setContentView(root);
+        root.requestApplyInsets();
     }
 
     private Button smallBtn(String text) {
@@ -292,7 +390,8 @@ public class MainActivity extends Activity {
         b.setText(text);
         b.setAllCaps(false);
         b.setTextSize(13 * scale);
-        b.setTextColor(cText);
+        int base = blendOver(cBtn, btnAlpha, backdrop);
+        b.setTextColor(textOn(base));
         b.setBackground(pill(cBtn, 10));
         b.setPadding(dp(10), dp(6), dp(10), dp(6));
         b.setMinHeight(dp(46));
