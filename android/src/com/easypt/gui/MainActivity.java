@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.8.0";
+    private static final String VER = "2.9.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -91,10 +91,12 @@ public class MainActivity extends Activity {
     private int styleIdx = ST_NATIVE;
     private boolean borderOn = true, borderRain = true;
     private int borderColor = 0xFFFFFFFF, borderDp = 2, borderAlphaPct = 100;
+    private int blurPct = 65;
     private int backdrop = 0;    // 壁纸平均色（无壁纸时 = 主题底色）
     private android.graphics.Bitmap wallBmp = null;
     private final java.util.HashMap<Button, Integer> themed = new java.util.HashMap<Button, Integer>();
     private final java.util.HashSet<Button> listRows = new java.util.HashSet<Button>();
+    private final java.util.ArrayList<View> glassViews = new java.util.ArrayList<View>();
 
     private int cBg, cPanel, cText, cDim, cAccent, cOk, cErr, cBtn, cRun, cInput, cOut;
 
@@ -133,6 +135,8 @@ public class MainActivity extends Activity {
         borderColor = store.getInt("bCol", 0xFFFFFFFF);
         borderDp = store.getInt("bDp", 2);
         borderAlphaPct = store.getInt("bA", 100);
+        blurPct = store.getInt("blur", 65);
+        GlassDrawable.BLUR = blurPct;
         pendingPart = store.getString("part", "boot");
         applyColors();
 
@@ -434,10 +438,11 @@ public class MainActivity extends Activity {
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
         if (isGlass()) {
-            scroll.setBackground(new GlassDrawable(scroll, dp(18),
-                    Color.argb(hasWall() ? 0x66 : 0xCC, Color.red(cOut), Color.green(cOut), Color.blue(cOut)))
+            scroll.setBackground(new GlassDrawable(scroll, dp(18))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(Color.argb(hasWall() ? 0x22 : 0x80, Color.red(cOut), Color.green(cOut), Color.blue(cOut)))
                     .border(dp(1), 0x2EFFFFFF));
+            glassViews.add(scroll);
         } else if (styleIdx == ST_MIUIX) {
             scroll.setBackground(new PillDrawable(Color.argb(Math.min(255, Math.max(150, btnAlpha) * 255 / 100),
                     Color.red(cOut), Color.green(cOut), Color.blue(cOut)), dp(18)));
@@ -491,10 +496,11 @@ public class MainActivity extends Activity {
         input.setTextSize(14 * scale);
         input.setSingleLine(true);
         if (isGlass()) {
-            input.setBackground(new GlassDrawable(input, dp(16),
-                    Color.argb(0x4D, Color.red(cInput), Color.green(cInput), Color.blue(cInput)))
+            input.setBackground(new GlassDrawable(input, dp(16))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(Color.argb(0x33, Color.red(cInput), Color.green(cInput), Color.blue(cInput)))
                     .border(dp(1), 0x33FFFFFF));
+            glassViews.add(input);
             input.setPadding(dp(14), dp(4), dp(14), dp(4));
         } else if (styleIdx == ST_MATERIAL) {
             input.setBackground(new PillDrawable(Color.argb(0xE6,
@@ -531,10 +537,12 @@ public class MainActivity extends Activity {
         int barTint = Color.argb(isGlass() ? (hasWall() ? 0x55 : 0xDA) : 0xF2,
                 Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel));
         if (isGlass()) {
-            navBar.setBackground(new GlassDrawable(navBar, dp(33), barTint)
+            navBar.setBackground(new GlassDrawable(navBar, dp(33))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(barTint)
                     .border(dp(1), 0x59FFFFFF));
             navBar.setElevation(dp(18));
+            glassViews.add(navBar);
         } else {
             navBar.setBackground(new PillDrawable(barTint, dp(styleIdx == ST_MATERIAL ? 28 : 24)));
             navBar.setElevation(styleIdx == ST_MATERIAL ? dp(3) : 0);
@@ -542,6 +550,7 @@ public class MainActivity extends Activity {
 
         navThumb = new FrameLayout(this);
         navThumb.setBackground(thumbBg());
+        if (isGlass()) { glassViews.add(navThumb); }
         FrameLayout.LayoutParams thumbLp = new FrameLayout.LayoutParams(dp(20), dp(54));
         thumbLp.gravity = Gravity.LEFT | Gravity.CENTER_VERTICAL;
         navBar.addView(navThumb, thumbLp);
@@ -630,9 +639,10 @@ public class MainActivity extends Activity {
 
     private Drawable thumbBg() {
         if (isGlass()) {
-            return new GlassDrawable(navThumb, dp(28), 0x44FFFFFF)
+            return new GlassDrawable(navThumb, dp(28))
                     .wall(hasWall() ? wallBmp : null)
-                    .border(dp(1), 0x59FFFFFF);
+                    .tint(0x26FFFFFF)
+                    .border(dp(1), 0x66FFFFFF);
         }
         if (styleIdx == ST_MATERIAL) {
             return new PillDrawable(blend(cPanel, cAccent, 0.35), dp(26));
@@ -793,10 +803,11 @@ public class MainActivity extends Activity {
     private Drawable buttonBg(View host, int baseColor) {
         int base = fillBase(baseColor);
         if (isGlass()) {
-            int tint = Color.argb(hasWall() ? 0x3A : 0x59,
+            int tint = Color.argb(hasWall() ? 0x18 : 0x59,
                     Color.red(base), Color.green(base), Color.blue(base));
-            return new GlassDrawable(host, dp(radiusDp()), tint)
+            return new GlassDrawable(host, dp(radiusDp()))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(tint)
                     .border(dp(Math.max(1, borderDp)), borderAlphaPct >= 40 ? 0x66FFFFFF : 0x33FFFFFF);
         }
         int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
@@ -836,6 +847,14 @@ public class MainActivity extends Activity {
         b.setElevation(styleIdx == ST_MATERIAL ? dp(2) : isGlass() ? dp(8) : 0);
     }
 
+    /** 模糊强度变了，让所有玻璃控件重画（按钮走 refreshButtonColors） */
+    private void invalidateGlass() {
+        for (int i = 0; i < glassViews.size(); i++) {
+            View v = glassViews.get(i);
+            if (v != null) { v.invalidate(); }
+        }
+        refreshButtonColors();
+    }
     private int localBackdrop(View v) {
         if (wallBmp == null || v == null) { return backdrop; }
         int[] loc = new int[2];
@@ -1116,6 +1135,43 @@ public class MainActivity extends Activity {
         baRow.addView(tvBa);
         baRow.addView(sbBa, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         cBorder.addView(baRow);
+
+        LinearLayout blRow = new LinearLayout(this);
+        blRow.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView tvBl = new TextView(this);
+        tvBl.setText(blurPct + "%");
+        tvBl.setTextColor(cText);
+        tvBl.setTextSize(13 * scale);
+        tvBl.setWidth(dp(56));
+        android.widget.SeekBar sbBl = new android.widget.SeekBar(this);
+        sbBl.setMax(100);
+        sbBl.setProgress(blurPct);
+        sbBl.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) {
+                blurPct = p;
+                tvBl.setText(p + "%");
+                if (!fromUser) { return; }
+                GlassDrawable.BLUR = p;
+                invalidateGlass();
+            }
+            public void onStartTrackingTouch(android.widget.SeekBar s) { }
+            public void onStopTrackingTouch(android.widget.SeekBar s) {
+                blurPct = s.getProgress();
+                GlassDrawable.BLUR = blurPct;
+                store.edit().putInt("blur", blurPct).apply();
+            }
+        });
+        blRow.addView(tvBl);
+        blRow.addView(sbBl, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        cBorder.addView(blRow);
+
+        TextView blHint = new TextView(this);
+        blHint.setText(T("玻璃模糊（只影响液态玻璃样式）", "Glass blur (liquid glass only)"));
+        blHint.setTextColor(fgDim());
+        blHint.setTextSize(11 * scale);
+        blHint.setPadding(dp(2), dp(4), 0, 0);
+        cBorder.addView(blHint);
+
         col.addView(cBorder, cardLp());
 
         // 4) 背景
@@ -1247,11 +1303,12 @@ public class MainActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(14));
         if (isGlass()) {
-            c.setBackground(new GlassDrawable(c, dp(20),
-                    Color.argb(hasWall() ? 0x6B : 0xCC, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+            c.setBackground(new GlassDrawable(c, dp(20))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(Color.argb(hasWall() ? 0x33 : 0xCC, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
                     .border(dp(1), 0x40FFFFFF));
             c.setElevation(dp(8));
+            glassViews.add(c);
         } else if (styleIdx == ST_MATERIAL) {
             c.setBackground(new PillDrawable(Color.argb(0xF7,
                     Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)), dp(20)));
@@ -1501,9 +1558,8 @@ public class MainActivity extends Activity {
         box.setBackground(menuBg());
         box.setElevation(dp(20));
 
-        final PopupWindow pw = new PopupWindow(box,
-                Math.min(dp(300), getResources().getDisplayMetrics().widthPixels - dp(56)),
-                ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        final int menuW = Math.min(dp(300), getResources().getDisplayMetrics().widthPixels - dp(56));
+        final PopupWindow pw = new PopupWindow(box, menuW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         pw.setOutsideTouchable(true);
         pw.setFocusable(true);
         pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1571,8 +1627,9 @@ public class MainActivity extends Activity {
         if (y + estH > screenH - dp(24)) {
             y = Math.max(dp(24), loc[1] - estH - gap);
         }
-        int x = Math.min(loc[0], getResources().getDisplayMetrics().widthPixels - dp(300) - dp(16));
-        x = Math.max(dp(16), x);
+        // 贴着右边浮出（用户要求：不要压在左边）
+        int x = getResources().getDisplayMetrics().widthPixels - menuW - dp(12);
+        x = Math.max(dp(12), x);
 
         // 放到下一帧再弹，否则手指抬起会被当成「点到浮层外面」直接关掉
         final int fx = x, fy = y;
@@ -1591,9 +1648,9 @@ public class MainActivity extends Activity {
 
     private Drawable menuBg() {
         if (isGlass()) {
-            return new GlassDrawable(rootView, dp(22),
-                    Color.argb(0xF4, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+            return new GlassDrawable(rootView, dp(22))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(Color.argb(0xE8, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
                     .border(dp(1), 0x40FFFFFF);
         }
         if (styleIdx == ST_MIUIX) {
@@ -1632,9 +1689,9 @@ public class MainActivity extends Activity {
     /** 可点的「一行」：圆角底，右侧箭头，用来唤起 showMenu */
     private Drawable menuRowBg(int radiusDp) {
         if (isGlass()) {
-            return new GlassDrawable(rootView, dp(radiusDp),
-                    Color.argb(hasWall() ? 0x4D : 0xB8, Color.red(cBtn), Color.green(cBtn), Color.blue(cBtn)))
+            return new GlassDrawable(rootView, dp(radiusDp))
                     .wall(hasWall() ? wallBmp : null)
+                    .tint(Color.argb(hasWall() ? 0x24 : 0xB8, Color.red(cBtn), Color.green(cBtn), Color.blue(cBtn)))
                     .border(dp(Math.max(1, borderDp)), borderOn ? (borderRain ? 0x66FFFFFF : borderColor) : 0x33FFFFFF);
         }
         int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
