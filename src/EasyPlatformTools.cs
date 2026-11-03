@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "2.3.0";
+        private const string AppVersion = "2.4.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -1481,16 +1481,61 @@ namespace EasyPlatformTools
         }
 
         /// <summary>按透明度把按钮色混到背景上，得到等效的不透明色（WinForms 子控件不支持真透明）</summary>
+        private static Color RegionAverage(Bitmap bmp, int x, int y, int w, int h)
+        {
+            try
+            {
+                int x0 = Math.Max(0, Math.Min(bmp.Width - 1, x));
+                int y0 = Math.Max(0, Math.Min(bmp.Height - 1, y));
+                int x1 = Math.Max(x0 + 1, Math.Min(bmp.Width, x + w));
+                int y1 = Math.Max(y0 + 1, Math.Min(bmp.Height, y + h));
+                long r = 0, g = 0, b = 0;
+                int n = 0;
+                int sx = Math.Max(1, (x1 - x0) / 12), sy = Math.Max(1, (y1 - y0) / 12);
+                for (int yy = y0; yy < y1; yy += sy)
+                    for (int xx = x0; xx < x1; xx += sx)
+                    {
+                        Color p = bmp.GetPixel(xx, yy);
+                        r += p.R; g += p.G; b += p.B; n++;
+                    }
+                if (n == 0) { return backdrop; }
+                return Color.FromArgb(255, (int)(r / n), (int)(g / n), (int)(b / n));
+            }
+            catch { return backdrop; }
+        }
+
+        private static Color LocalBackdrop(Control c)
+        {
+            Bitmap bmp = form == null ? null : form.BackgroundImage as Bitmap;
+            if (bmp == null || c == null) { return backdrop; }
+            Point p = c.PointToScreen(Point.Empty);
+            Point inForm = form.PointToClient(p);
+            return RegionAverage(bmp, inForm.X, inForm.Y, c.Width, c.Height);
+        }
+
+        private static Color WithAlphaOver(Color c, Color over)
+        {
+            if (btnAlpha >= 100) { return c; }
+            double a = Math.Max(0, Math.Min(100, btnAlpha)) / 100.0;
+            return Color.FromArgb(255,
+                (int)(c.R * a + over.R * (1 - a)),
+                (int)(c.G * a + over.G * (1 - a)),
+                (int)(c.B * a + over.B * (1 - a)));
+        }
+
+        private static void PaintOne(Button b, Theme t)
+        {
+            if (b == null) { return; }
+            b.BackColor = WithAlphaOver(t.Btn, LocalBackdrop(b));
+            b.ForeColor = ContrastText(b.BackColor);
+        }
+
         private static void ApplyButtonColors(Theme t)
         {
-            foreach (Button b in menuButtons)
-            {
-                b.BackColor = WithAlpha(t.Btn);
-                b.ForeColor = ContrastText(b.BackColor);
-            }
-            if (btnClear != null) { btnClear.BackColor = WithAlpha(t.Btn); btnClear.ForeColor = ContrastText(btnClear.BackColor); }
-            if (btnSave != null) { btnSave.BackColor = WithAlpha(t.Btn); btnSave.ForeColor = ContrastText(btnSave.BackColor); }
-            if (btnSettings != null) { btnSettings.BackColor = WithAlpha(t.Btn); btnSettings.ForeColor = ContrastText(btnSettings.BackColor); }
+            foreach (Button b in menuButtons) { PaintOne(b, t); }
+            PaintOne(btnClear, t);
+            PaintOne(btnSave, t);
+            PaintOne(btnSettings, t);
         }
 
         private static Color WithAlpha(Color c)

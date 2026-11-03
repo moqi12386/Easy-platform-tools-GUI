@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.3.0";
+    private static final String VER = "2.4.0";
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -74,7 +74,9 @@ public class MainActivity extends Activity {
     private float scale = 1.0f;
     private String lang = "zh";
     private int btnAlpha = 90;
-    private int backdrop = 0;    // 壁纸平均色，用于自动黑白字
+    private int backdrop = 0;    // 壁纸平均色（无壁纸时 = 主题底色）
+    private android.graphics.Bitmap wallBmp = null;
+    private final java.util.HashMap<Button, Integer> themed = new java.util.HashMap<Button, Integer>();
 
     private int cBg, cPanel, cText, cDim, cAccent, cOk, cErr, cBtn, cRun, cInput, cOut;
 
@@ -218,6 +220,47 @@ public class MainActivity extends Activity {
         return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
     }
 
+    /** 取壁纸上某个矩形区域的平均色（按钮背后真实的底色） */
+    private int averageRegion(android.graphics.Bitmap b, int x, int y, int w, int h) {
+        if (b == null) { return cOut; }
+        int x0 = Math.max(0, Math.min(b.getWidth() - 1, x));
+        int y0 = Math.max(0, Math.min(b.getHeight() - 1, y));
+        int x1 = Math.max(x0 + 1, Math.min(b.getWidth(), x + w));
+        int y1 = Math.max(y0 + 1, Math.min(b.getHeight(), y + h));
+        long r = 0, g = 0, bl = 0;
+        int n = 0;
+        int stepX = Math.max(1, (x1 - x0) / 12), stepY = Math.max(1, (y1 - y0) / 12);
+        for (int yy = y0; yy < y1; yy += stepY) {
+            for (int xx = x0; xx < x1; xx += stepX) {
+                int p = b.getPixel(xx, yy);
+                r += Color.red(p); g += Color.green(p); bl += Color.blue(p); n++;
+            }
+        }
+        if (n == 0) { return cOut; }
+        return Color.rgb((int) (r / n), (int) (g / n), (int) (bl / n));
+    }
+
+    /** 按每个按钮实际所处位置的底色，重算黑白字（拖动透明度时实时调用） */
+    private void refreshButtonColors() {
+        if (themed.isEmpty()) { return; }
+        java.util.Iterator<Button> it = themed.keySet().iterator();
+        while (it.hasNext()) { Button b = it.next(); if (b.getParent() == null) { it.remove(); } }
+        for (Button b : themed.keySet()) {
+            int baseColor = themed.get(b);
+            int local = backdrop;
+            if (wallBmp != null) {
+                int[] loc = new int[2];
+                b.getLocationOnScreen(loc);
+                local = averageRegion(wallBmp, loc[0], loc[1], b.getWidth(), b.getHeight());
+            }
+            b.setBackground(pill(baseColor, 10));
+            b.setTextColor(textOn(blendOver(baseColor, btnAlpha, local)));
+        }
+    }
+
+    private View findRoot() {
+        return getWindow().getDecorView();
+    }
     private int averageColor(android.graphics.Bitmap b) {
         if (b == null) { return cOut; }
         long r = 0, g = 0, bl = 0;
@@ -244,7 +287,7 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         String wp = store.getString("wall", "");
-        android.graphics.Bitmap wallBmp = wp.length() > 0 ? fitToScreen(android.graphics.BitmapFactory.decodeFile(wp)) : null;
+        wallBmp = wp.length() > 0 ? fitToScreen(android.graphics.BitmapFactory.decodeFile(wp)) : null;
         if (wallBmp != null) {
             root.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
             backdrop = averageColor(wallBmp);
@@ -383,6 +426,8 @@ public class MainActivity extends Activity {
         });
         setContentView(root);
         root.requestApplyInsets();
+        final View rootRef = root;
+        rootRef.post(new Runnable() { public void run() { refreshButtonColors(); } });
     }
 
     private Button smallBtn(String text) {
@@ -390,8 +435,8 @@ public class MainActivity extends Activity {
         b.setText(text);
         b.setAllCaps(false);
         b.setTextSize(13 * scale);
-        int base = blendOver(cBtn, btnAlpha, backdrop);
-        b.setTextColor(textOn(base));
+        themed.put(b, cBtn);
+        b.setTextColor(textOn(blendOver(cBtn, btnAlpha, backdrop)));
         b.setBackground(pill(cBtn, 10));
         b.setPadding(dp(10), dp(6), dp(10), dp(6));
         b.setMinHeight(dp(46));
@@ -481,6 +526,7 @@ public class MainActivity extends Activity {
             act(T("重启 Recovery", "Reboot Recovery"), new Runnable() { public void run() { remoteReboot("recovery"); } });
             act(T("重启 Bootloader", "Reboot Bootloader"), new Runnable() { public void run() { remoteReboot("bootloader"); } });
         }
+        if (grid != null) { grid.post(new Runnable() { public void run() { refreshButtonColors(); } }); }
     }
 
     // ---------------- 日志 ----------------
@@ -562,12 +608,16 @@ public class MainActivity extends Activity {
         sb.setMax(100);
         sb.setProgress(btnAlpha);
         sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) { tvAlpha.setText(p + "%"); }
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) {
+                tvAlpha.setText(p + "%");
+                if (!fromUser) { return; }
+                btnAlpha = p;
+                refreshButtonColors();
+            }
             public void onStartTrackingTouch(android.widget.SeekBar s) { }
             public void onStopTrackingTouch(android.widget.SeekBar s) {
                 btnAlpha = s.getProgress();
                 store.edit().putInt("alpha", btnAlpha).apply();
-                recreate();
             }
         });
         alphaRow.addView(tvAlpha);
