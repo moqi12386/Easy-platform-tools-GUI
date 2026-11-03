@@ -249,8 +249,14 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 2. **顶部高光**：从上往下 18% 白的渐变
 3. **底部压暗 + 1 px 亮边**：玻璃的厚度和反光
 
-设置里的「玻璃模糊」滑杆（0–100%）实时生效，写进 `GlassDrawable.BLUR`，
-改完把当前所有玻璃控件 `invalidate()` 一次即可，不用重建界面。
+设置里有两根滑杆，都实时生效，不用重建界面：
+
+| 滑杆 | 作用 | 默认 |
+|---|---|---|
+| **玻璃模糊** | 降采样倍率（1×–25×），越高越糊 | 80% |
+| **玻璃浓度** | 面板不透明度 0–100%，越高壁纸越看不清 | 45% |
+
+两者都写在 `GlassDrawable.BLUR` / `GlassDrawable.CONC` 静态字段上，改完把当前所有玻璃控件 `invalidate()` 一次即可。
 
 ![液态玻璃](docs/glass.jpg)
 

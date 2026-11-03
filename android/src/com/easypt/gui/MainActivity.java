@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.9.0";
+    private static final String VER = "2.10.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -91,7 +91,8 @@ public class MainActivity extends Activity {
     private int styleIdx = ST_NATIVE;
     private boolean borderOn = true, borderRain = true;
     private int borderColor = 0xFFFFFFFF, borderDp = 2, borderAlphaPct = 100;
-    private int blurPct = 65;
+    private int blurPct = 80;
+    private int glassPct = 45;
     private int backdrop = 0;    // 壁纸平均色（无壁纸时 = 主题底色）
     private android.graphics.Bitmap wallBmp = null;
     private final java.util.HashMap<Button, Integer> themed = new java.util.HashMap<Button, Integer>();
@@ -135,8 +136,10 @@ public class MainActivity extends Activity {
         borderColor = store.getInt("bCol", 0xFFFFFFFF);
         borderDp = store.getInt("bDp", 2);
         borderAlphaPct = store.getInt("bA", 100);
-        blurPct = store.getInt("blur", 65);
+        blurPct = store.getInt("blur", 80);
+        glassPct = store.getInt("gconc", 45);
         GlassDrawable.BLUR = blurPct;
+        GlassDrawable.CONC = glassPct;
         pendingPart = store.getString("part", "boot");
         applyColors();
 
@@ -1171,6 +1174,42 @@ public class MainActivity extends Activity {
         blHint.setTextSize(11 * scale);
         blHint.setPadding(dp(2), dp(4), 0, 0);
         cBorder.addView(blHint);
+
+        LinearLayout gcRow = new LinearLayout(this);
+        gcRow.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView tvGc = new TextView(this);
+        tvGc.setText(glassPct + "%");
+        tvGc.setTextColor(cText);
+        tvGc.setTextSize(13 * scale);
+        tvGc.setWidth(dp(56));
+        android.widget.SeekBar sbGc = new android.widget.SeekBar(this);
+        sbGc.setMax(100);
+        sbGc.setProgress(glassPct);
+        sbGc.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar s, int p, boolean fromUser) {
+                glassPct = p;
+                tvGc.setText(p + "%");
+                if (!fromUser) { return; }
+                GlassDrawable.CONC = p;
+                invalidateGlass();
+            }
+            public void onStartTrackingTouch(android.widget.SeekBar s) { }
+            public void onStopTrackingTouch(android.widget.SeekBar s) {
+                glassPct = s.getProgress();
+                GlassDrawable.CONC = glassPct;
+                store.edit().putInt("gconc", glassPct).apply();
+            }
+        });
+        gcRow.addView(tvGc);
+        gcRow.addView(sbGc, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        cBorder.addView(gcRow);
+
+        TextView gcHint = new TextView(this);
+        gcHint.setText(T("玻璃浓度：越高壁纸越看不清，100% 基本就是磨砂", "Glass density: higher hides the wallpaper more"));
+        gcHint.setTextColor(fgDim());
+        gcHint.setTextSize(11 * scale);
+        gcHint.setPadding(dp(2), dp(4), 0, 0);
+        cBorder.addView(gcHint);
 
         col.addView(cBorder, cardLp());
 

@@ -25,7 +25,9 @@ public class GlassDrawable extends Drawable {
     private float radius;
     private int tint = 0x14FFFFFF;
     /** 全局模糊强度（0–100），设置里改了立刻生效 */
-    public static int BLUR = 65;
+    public static int BLUR = 80;
+    /** 全局玻璃浓度（0–100）：越高越不透明，壁纸越看不清 */
+    public static int CONC = 45;
     private int blurPct = -1;
     private float borderPx;
     private int borderColor = 0x66FFFFFF;
@@ -82,14 +84,15 @@ public class GlassDrawable extends Drawable {
             c.drawRect(box, fillPaint);
         }
 
-        // 主题色薄薄一层，压住过亮的壁纸
+        // 主题色按浓度压上去
         fillPaint.setShader(null);
-        fillPaint.setColor(tint);
+        int a = Math.max(0, Math.min(100, CONC)) * 255 / 100;
+        fillPaint.setColor((tint & 0x00FFFFFF) | (a << 24));
         c.drawRect(box, fillPaint);
 
         // 镜面边：把同一块图放大一点，只留在边缘那一圈，做出「透镜」的折射感
         if (lens && small != null) {
-            float w = Math.min(dp(9), Math.min(box.width(), box.height()) * 0.26f);
+            float w = Math.min(dp(13), Math.min(box.width(), box.height()) * 0.30f);
             float r2 = Math.max(1, radius - w);
             ring.reset();
             ring.addRoundRect(box, radius, radius, Path.Direction.CW);
@@ -100,18 +103,24 @@ public class GlassDrawable extends Drawable {
             int s2 = c.save();
             c.clipPath(ring);
             mx.reset();
-            mx.setScale(1.18f, 1.18f, box.centerX(), box.centerY());
+            mx.setScale(1.30f, 1.30f, box.centerX(), box.centerY());
             c.concat(mx);
             c.drawBitmap(small, null, box, bmpPaint);
             c.restoreToCount(s2);
             // 边缘再补一点白，像玻璃的反光
-            fillPaint.setColor(0x0CFFFFFF);
+            fillPaint.setColor(0x08FFFFFF);
             c.drawPath(ring, fillPaint);
         }
 
         // 顶部高光（从左上打下来的光）
         fillPaint.setShader(new LinearGradient(box.left, box.top, box.left, box.top + box.height() * 0.5f,
-                0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+                0x1EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        c.drawRect(box, fillPaint);
+        fillPaint.setShader(null);
+
+        // 左上斜向反光条
+        fillPaint.setShader(new LinearGradient(box.left, box.top, box.left + box.width() * 0.55f, box.top + box.height(),
+                0x22FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
         c.drawRect(box, fillPaint);
         fillPaint.setShader(null);
 
