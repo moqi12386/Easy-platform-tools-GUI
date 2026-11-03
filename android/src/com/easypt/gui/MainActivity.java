@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "1.8.0";
+    private static final String VER = "1.9.0";
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -192,7 +192,7 @@ public class MainActivity extends Activity {
         settings.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { openSettings(); }
         });
-        row.addView(settings);
+        row.addView(settings, new LinearLayout.LayoutParams(dp(96), dp(44)));
         root.addView(row);
 
         statusView = new TextView(this);
@@ -202,7 +202,8 @@ public class MainActivity extends Activity {
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        slp.topMargin = dp(6);
+        slp.topMargin = dp(8);
+        slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
         scroll.setBackgroundColor(cOut);
 
@@ -215,25 +216,34 @@ public class MainActivity extends Activity {
         scroll.addView(logView);
         root.addView(scroll);
 
+        ScrollView gridScroll = new ScrollView(this);
+        int gridH = (int) (getResources().getDisplayMetrics().heightPixels * 0.40);
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH);
+        glp.topMargin = dp(6);
+        gridScroll.setLayoutParams(glp);
+
         grid = new GridLayout(this);
         grid.setColumnCount(2);
-        grid.setPadding(0, dp(8), 0, 0);
-        root.addView(grid);
+        grid.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        gridScroll.addView(grid);
+        root.addView(gridScroll);
 
         LinearLayout tools = new LinearLayout(this);
-        tools.setPadding(0, dp(6), 0, 0);
+        tools.setPadding(0, dp(8), 0, 0);
+        final LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        tlp.setMargins(dp(4), 0, dp(4), 0);
         tools.addView(smallBtn(T("清空", "Clear"), new View.OnClickListener() {
             public void onClick(View v) { logBuf = new SpannableStringBuilder(); logView.setText(""); }
-        }));
+        }), tlp);
         tools.addView(smallBtn(T("存日志", "Save log"), new View.OnClickListener() {
             public void onClick(View v) { saveLog(); }
-        }));
+        }), tlp);
         tools.addView(smallBtn(T("历史", "History"), new View.OnClickListener() {
             public void onClick(View v) { showHistory(); }
-        }));
+        }), tlp);
         tools.addView(smallBtn(T("关于", "About"), new View.OnClickListener() {
             public void onClick(View v) { showAbout(); }
-        }));
+        }), tlp);
         root.addView(tools);
 
         LinearLayout inputRow = new LinearLayout(this);
@@ -243,14 +253,18 @@ public class MainActivity extends Activity {
         input.setHint(T("输入命令", "Type a command"));
         input.setHintTextColor(cDim);
         input.setTextColor(cText);
-        input.setTextSize(13 * scale);
+        input.setTextSize(14 * scale);
         input.setSingleLine(true);
         input.setBackgroundColor(cInput);
-        inputRow.addView(input, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        input.setMinHeight(dp(46));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        ilp.setMargins(dp(4), 0, dp(6), 0);
+        inputRow.addView(input, ilp);
 
         Button runBtn = smallBtn(T("执行", "Run"));
         runBtn.setBackgroundColor(cRun);
         runBtn.setTextColor(Color.WHITE);
+        runBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(84), dp(48)));
         runBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { runTyped(); }
         });
@@ -264,12 +278,13 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(text);
         b.setAllCaps(false);
-        b.setTextSize(12 * scale);
+        b.setTextSize(13 * scale);
         b.setTextColor(cText);
         b.setBackgroundColor(cBtn);
-        b.setPadding(dp(6), dp(2), dp(6), dp(2));
-        b.setMinHeight(0);
-        b.setMinimumHeight(0);
+        b.setPadding(dp(10), dp(6), dp(10), dp(6));
+        b.setMinHeight(dp(46));
+        b.setMinimumHeight(dp(46));
+        b.setGravity(Gravity.CENTER);
         return b;
     }
 
@@ -286,9 +301,9 @@ public class MainActivity extends Activity {
         });
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
         lp.width = 0;
-        lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        lp.height = dp(48);
         lp.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-        lp.setMargins(dp(3), dp(3), dp(3), dp(3));
+        lp.setMargins(dp(4), dp(4), dp(4), dp(4));
         b.setLayoutParams(lp);
         grid.addView(b);
     }
@@ -406,7 +421,7 @@ public class MainActivity extends Activity {
             final int idx = i;
             Button sw = new Button(this);
             sw.setBackgroundColor(BG[i]);
-            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, dp(28), 1f);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, dp(44), 1f);
             slp.setMargins(dp(2), dp(2), dp(2), dp(2));
             sw.setLayoutParams(slp);
             sw.setOnClickListener(new View.OnClickListener() {

@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.8.0";
+        private const string AppVersion = "1.9.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
