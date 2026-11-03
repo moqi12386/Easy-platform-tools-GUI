@@ -202,7 +202,7 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 | **原生** | 10 dp 圆角、半透明底、你选的边框 | `PillDrawable` |
 | **Material** | 24 dp 药丸、底色往主色带、2 dp 投影、按下有水波纹 | `RippleDrawable` + `setElevation` |
 | **MIUIX** | 单列列表：左边标题、右边 `›`、52 dp 行高，设置页也分成卡片 | 自绘 `ChevronDrawable` |
-| **液态玻璃** | 实时模糊 + 透镜边 + 顶部高光，通体透明，模糊强度可调 | `GlassDrawable` |
+| **液态玻璃** | 底栏和卡片是实时模糊的玻璃，**按钮是实心的**（不把壁纸透上来） | `GlassDrawable` + `PillDrawable` |
 
 ![四种样式](docs/styles.png)
 

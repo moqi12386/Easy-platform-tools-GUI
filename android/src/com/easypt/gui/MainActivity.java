@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.10.0";
+    private static final String VER = "2.11.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -806,12 +806,12 @@ public class MainActivity extends Activity {
     private Drawable buttonBg(View host, int baseColor) {
         int base = fillBase(baseColor);
         if (isGlass()) {
-            int tint = Color.argb(hasWall() ? 0x18 : 0x59,
-                    Color.red(base), Color.green(base), Color.blue(base));
-            return new GlassDrawable(host, dp(radiusDp()))
-                    .wall(hasWall() ? wallBmp : null)
-                    .tint(tint)
-                    .border(dp(Math.max(1, borderDp)), borderAlphaPct >= 40 ? 0x66FFFFFF : 0x33FFFFFF);
+            // 按钮在液态玻璃下是**实心**的：不把壁纸透上来，只有底栏和卡片才是玻璃
+            int solid = blend(cPanel, base, 0.55);
+            solid = blend(solid, Color.WHITE, 0.06);
+            PillDrawable p = new PillDrawable(0xFF000000 | (solid & 0x00FFFFFF), dp(radiusDp()));
+            p.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
+            return p;
         }
         int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
         PillDrawable p = new PillDrawable(
@@ -1728,10 +1728,11 @@ public class MainActivity extends Activity {
     /** 可点的「一行」：圆角底，右侧箭头，用来唤起 showMenu */
     private Drawable menuRowBg(int radiusDp) {
         if (isGlass()) {
-            return new GlassDrawable(rootView, dp(radiusDp))
-                    .wall(hasWall() ? wallBmp : null)
-                    .tint(Color.argb(hasWall() ? 0x24 : 0xB8, Color.red(cBtn), Color.green(cBtn), Color.blue(cBtn)))
-                    .border(dp(Math.max(1, borderDp)), borderOn ? (borderRain ? 0x66FFFFFF : borderColor) : 0x33FFFFFF);
+            // 同样：可点的一行也是实心
+            int solid = blend(cPanel, cBtn, 0.55);
+            PillDrawable p = new PillDrawable(0xFF000000 | (solid & 0x00FFFFFF), dp(radiusDp));
+            p.border(borderOn, borderRain, borderColor, dp(borderDp), borderAlphaPct);
+            return p;
         }
         int a = Math.max(0, Math.min(100, fillPct())) * 255 / 100;
         PillDrawable p = new PillDrawable(Color.argb(a, Color.red(fillBase(cBtn)), Color.green(fillBase(cBtn)), Color.blue(fillBase(cBtn))), dp(radiusDp));
