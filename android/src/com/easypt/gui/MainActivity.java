@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.6.0";
+    private static final String VER = "2.7.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -149,6 +149,12 @@ public class MainActivity extends Activity {
         try { unregisterReceiver(usbReceiver); } catch (Exception ignored) { }
         if (fb != null) { fb.close(); }
         super.onDestroy();
+    }
+
+    @Override
+    protected void onPause() {
+        saveSettingsFields();
+        super.onPause();
     }
 
     // ---------------- 配色 ----------------
@@ -304,20 +310,72 @@ public class MainActivity extends Activity {
 
     // ---------------- UI ----------------
 
+    private LinearLayout rootView, homePage;
+    private View settingsPage;
+    private FrameLayout pageHost, navBar, navThumb;
+    private TextView navHome, navSet;
+    private EditText setHost, setToken, setPart;
+    private int page = 0;
+
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
+        rootView = new LinearLayout(this);
+        rootView.setOrientation(LinearLayout.VERTICAL);
         String wp = store.getString("wall", "");
         wallBmp = wp.length() > 0 ? fitToScreen(android.graphics.BitmapFactory.decodeFile(wp)) : null;
         if (wallBmp != null) {
-            root.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
+            rootView.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
             backdrop = averageColor(wallBmp);
         } else {
-            root.setBackgroundColor(cBg);
+            rootView.setBackgroundColor(cBg);
             backdrop = cOut;
         }
         applyStatusBarIcons(isLight(backdrop));
-        root.setPadding(dp(12), dp(10), dp(12), dp(10));
+        rootView.setPadding(dp(12), dp(10), dp(12), dp(4));
+
+        pageHost = new FrameLayout(this);
+        pageHost.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        homePage = buildHome();
+        settingsPage = buildSettingsPage();
+        settingsPage.setVisibility(View.GONE);
+        pageHost.addView(homePage, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        pageHost.addView(settingsPage, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        rootView.addView(pageHost);
+
+        rootView.addView(buildNav());
+
+        rootView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            public android.view.WindowInsets onApplyWindowInsets(View v, android.view.WindowInsets insets) {
+                int top, bottom, left, right;
+                if (Build.VERSION.SDK_INT >= 30) {
+                    android.graphics.Insets i = insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                    top = i.top; bottom = i.bottom; left = i.left; right = i.right;
+                } else {
+                    top = insets.getSystemWindowInsetTop();
+                    bottom = insets.getSystemWindowInsetBottom();
+                    left = insets.getSystemWindowInsetLeft();
+                    right = insets.getSystemWindowInsetRight();
+                }
+                v.setPadding(dp(12) + left, dp(10) + top, dp(12) + right, dp(4) + bottom);
+                return insets;
+            }
+        });
+        setContentView(rootView);
+        rootView.requestApplyInsets();
+        final View rootRef = rootView;
+        rootRef.post(new Runnable() {
+            public void run() {
+                refreshButtonColors();
+                placeThumb(page, false);
+            }
+        });
+    }
+
+    /** 主页：日志 + 快捷按钮 + 命令输入（输入框在底栏上面，上调过） */
+    private LinearLayout buildHome() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
 
         TextView title = new TextView(this);
         title.setText("Easy-platform-tools");
@@ -325,11 +383,11 @@ public class MainActivity extends Activity {
         title.setTextSize(18 * scale);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         titleView = title;
-        root.addView(title);
+        page.addView(title);
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(8), 0, dp(6));
+        row.setPadding(0, dp(6), 0, dp(4));
 
         modeSpinner = new Spinner(this);
         ArrayAdapter<String> ad = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, new String[]{
@@ -346,22 +404,16 @@ public class MainActivity extends Activity {
             public void onNothingSelected(android.widget.AdapterView<?> p) { }
         });
         row.addView(modeSpinner, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button settings = smallBtn(T("设置", "Settings"));
-        settings.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { openSettings(); }
-        });
-        row.addView(settings, new LinearLayout.LayoutParams(dp(96), dp(44)));
-        root.addView(row);
+        page.addView(row);
 
         statusView = new TextView(this);
-        statusView.setTextColor(cDim);
+        statusView.setTextColor(fgDim());
         statusView.setTextSize(12 * scale);
-        root.addView(statusView);
+        page.addView(statusView);
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        slp.topMargin = dp(8);
+        slp.topMargin = dp(6);
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
         if (isGlass()) {
@@ -377,30 +429,30 @@ public class MainActivity extends Activity {
         }
 
         logView = new TextView(this);
-        logView.setTextColor(cText);
+        logView.setTextColor(fgColor());
         logView.setTextSize(11 * scale);
         logView.setTypeface(Typeface.MONOSPACE);
         logView.setPadding(dp(8), dp(6), dp(8), dp(6));
         logView.setTextIsSelectable(true);
         scroll.addView(logView);
-        root.addView(scroll);
+        page.addView(scroll);
 
         ScrollView gridScroll = new ScrollView(this);
-        int gridH = (int) (getResources().getDisplayMetrics().heightPixels * (styleIdx == ST_MIUIX ? 0.47 : 0.40));
+        int gridH = (int) (getResources().getDisplayMetrics().heightPixels * (styleIdx == ST_MIUIX ? 0.40 : 0.34));
         LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH);
-        glp.topMargin = dp(6);
+        glp.topMargin = dp(4);
         gridScroll.setLayoutParams(glp);
 
         grid = new GridLayout(this);
         grid.setColumnCount(styleIdx == ST_MIUIX ? 1 : 2);
         grid.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         gridScroll.addView(grid);
-        root.addView(gridScroll);
+        page.addView(gridScroll);
 
         LinearLayout tools = new LinearLayout(this);
-        tools.setPadding(0, dp(8), 0, 0);
-        final LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, dp(42), 1f);
-        tlp.setMargins(dp(4), 0, dp(4), 0);
+        tools.setPadding(0, dp(6), 0, 0);
+        final LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, dp(40), 1f);
+        tlp.setMargins(dp(3), 0, dp(3), 0);
         tools.addView(smallBtn(T("清空", "Clear"), new View.OnClickListener() {
             public void onClick(View v) { logBuf = new SpannableStringBuilder(); logView.setText(""); }
         }), tlp);
@@ -410,17 +462,15 @@ public class MainActivity extends Activity {
         tools.addView(smallBtn(T("历史", "History"), new View.OnClickListener() {
             public void onClick(View v) { showHistory(); }
         }), tlp);
-        tools.addView(smallBtn(T("关于", "About"), new View.OnClickListener() {
-            public void onClick(View v) { showAbout(); }
-        }), tlp);
+        page.addView(tools);
 
         LinearLayout inputRow = new LinearLayout(this);
-        inputRow.setPadding(0, dp(6), 0, 0);
+        inputRow.setPadding(0, dp(6), 0, dp(2));
 
         input = new EditText(this);
         input.setHint(T("输入命令", "Type a command"));
-        input.setHintTextColor(cDim);
-        input.setTextColor(cText);
+        input.setHintTextColor(fgDim());
+        input.setTextColor(fgColor());
         input.setTextSize(14 * scale);
         input.setSingleLine(true);
         if (isGlass()) {
@@ -438,7 +488,7 @@ public class MainActivity extends Activity {
         }
         input.setMinHeight(dp(46));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        ilp.setMargins(dp(4), 0, dp(6), 0);
+        ilp.setMargins(dp(2), 0, dp(6), 0);
         inputRow.addView(input, ilp);
 
         Button runBtn = smallBtn(T("执行", "Run"));
@@ -449,45 +499,168 @@ public class MainActivity extends Activity {
             public void onClick(View v) { runTyped(); }
         });
         inputRow.addView(runBtn);
+        page.addView(inputRow);
 
-        // 液态玻璃：把工具条 + 输入行装进一块浮起来的磨砂底栏
-        LinearLayout dock = new LinearLayout(this);
-        dock.setOrientation(LinearLayout.VERTICAL);
-        dock.addView(tools);
-        dock.addView(inputRow);
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        return page;
+    }
+
+    /** 底栏：主页 / 设置，玻璃样式下是一整块磨砂 + 会滑动的玻璃滑块 */
+    private View buildNav() {
+        navBar = new FrameLayout(this);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(66));
+        blp.topMargin = dp(6);
+        navBar.setLayoutParams(blp);
+
+        int barTint = Color.argb(isGlass() ? (hasWall() ? 0x55 : 0xDA) : 0xF2,
+                Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel));
         if (isGlass()) {
-            dock.setPadding(dp(7), dp(8), dp(7), dp(7));
-            dock.setBackground(new GlassDrawable(dock, dp(24),
-                    Color.argb(hasWall() ? 0x44 : 0xB0, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+            navBar.setBackground(new GlassDrawable(navBar, dp(33), barTint)
                     .wall(hasWall() ? wallBmp : null)
                     .border(dp(1), 0x59FFFFFF));
-            dock.setElevation(dp(14));
-            dlp.setMargins(dp(2), dp(10), dp(2), dp(2));
+            navBar.setElevation(dp(18));
+        } else {
+            navBar.setBackground(new PillDrawable(barTint, dp(styleIdx == ST_MATERIAL ? 28 : 24)));
+            navBar.setElevation(styleIdx == ST_MATERIAL ? dp(3) : 0);
         }
-        root.addView(dock, dlp);
 
-        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
-            public android.view.WindowInsets onApplyWindowInsets(View v, android.view.WindowInsets insets) {
-                int top, bottom, left, right;
-                if (Build.VERSION.SDK_INT >= 30) {
-                    android.graphics.Insets i = insets.getInsets(android.view.WindowInsets.Type.systemBars());
-                    top = i.top; bottom = i.bottom; left = i.left; right = i.right;
-                } else {
-                    top = insets.getSystemWindowInsetTop();
-                    bottom = insets.getSystemWindowInsetBottom();
-                    left = insets.getSystemWindowInsetLeft();
-                    right = insets.getSystemWindowInsetRight();
-                }
-                v.setPadding(dp(12) + left, dp(10) + top, dp(12) + right, dp(10) + bottom);
-                return insets;
+        navThumb = new FrameLayout(this);
+        navThumb.setBackground(thumbBg());
+        FrameLayout.LayoutParams thumbLp = new FrameLayout.LayoutParams(dp(20), dp(54));
+        thumbLp.gravity = Gravity.LEFT | Gravity.CENTER_VERTICAL;
+        navBar.addView(navThumb, thumbLp);
+
+        LinearLayout items = new LinearLayout(this);
+        items.setOrientation(LinearLayout.HORIZONTAL);
+        navHome = navItem("主页", 0);
+        navSet = navItem("设置", 1);
+        items.addView(navHome, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        items.addView(navSet, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        navBar.addView(items, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        navBar.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                placeThumb(page, false);
             }
         });
-        setContentView(root);
-        root.requestApplyInsets();
-        final View rootRef = root;
-        rootRef.post(new Runnable() { public void run() { refreshButtonColors(); } });
+        return navBar;
+    }
+
+    private TextView navItem(String text, final int idx) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(14 * scale);
+        t.setGravity(Gravity.CENTER);
+        t.setTextColor(idx == page ? cText : cDim);
+        if (idx == page) { t.setTypeface(Typeface.DEFAULT_BOLD); }
+        t.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showPage(idx); }
+        });
+        return t;
+    }
+
+    private Drawable thumbBg() {
+        if (isGlass()) {
+            return new GlassDrawable(navThumb, dp(28), 0x44FFFFFF)
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(1), 0x59FFFFFF);
+        }
+        if (styleIdx == ST_MATERIAL) {
+            return new PillDrawable(blend(cPanel, cAccent, 0.35), dp(26));
+        }
+        if (styleIdx == ST_MIUIX) {
+            return new PillDrawable(blend(cPanel, cText, 0.13), dp(22));
+        }
+        return new PillDrawable(blend(cPanel, cText, 0.10), dp(22));
+    }
+
+    /** 摆滑块；animate=true 时带「液体」回弹 + 横向拉伸 */
+    private void placeThumb(final int p, boolean animate) {
+        if (navThumb == null || navBar == null) { return; }
+        int pad = dp(5);
+        int w = (navBar.getWidth() - pad * 2) / 2;
+        if (w <= 0) { return; }
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) navThumb.getLayoutParams();
+        int wantH = Math.max(dp(40), navBar.getHeight() - pad * 2);
+        if (lp.width != w || lp.height != wantH) {
+            lp.width = w;
+            lp.height = wantH;
+            navThumb.setLayoutParams(lp);
+        }
+        float to = pad + p * (float) w;
+        if (!animate) {
+            navThumb.setX(to);
+            navThumb.setScaleX(1f);
+            applyNavColors();
+            return;
+        }
+        final float from = navThumb.getX();
+        if (Math.abs(from - to) < 1f) { navThumb.setX(to); applyNavColors(); return; }
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(isGlass() ? 420 : 240);
+        a.setInterpolator(isGlass()
+                ? new android.view.animation.OvershootInterpolator(1.7f)
+                : new android.view.animation.DecelerateInterpolator(1.4f));
+        a.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            public void onAnimationUpdate(android.animation.ValueAnimator an) {
+                float t = (float) an.getAnimatedValue();
+                navThumb.setX(from + (to - from) * t);
+                float s = (float) Math.sin(Math.PI * Math.max(0f, Math.min(1f, t)));
+                navThumb.setScaleX(1f + (isGlass() ? 0.22f : 0.05f) * s);
+            }
+        });
+        a.start();
+    }
+
+    private void showPage(int p) {
+        if (pageHost == null || p == page) {
+            if (navThumb != null) { placeThumb(page, true); }
+            return;
+        }
+        if (page == 1) { saveSettingsFields(); }
+        page = p;
+        View in = p == 0 ? homePage : settingsPage;
+        View out = p == 0 ? settingsPage : homePage;
+        out.setVisibility(View.GONE);
+        in.setAlpha(0.6f);
+        in.setVisibility(View.VISIBLE);
+        in.animate().alpha(1f).setDuration(170).start();
+        if (navHome != null) {
+            navHome.setTypeface(p == 0 ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            navSet.setTypeface(p == 1 ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            applyNavColors();
+        }
+        placeThumb(p, true);
+        if (p == 0) { refreshButtonColors(); }
+    }
+
+    /** 底栏文字跟着它背后的底色走（选中项跟滑块走） */
+    private void applyNavColors() {
+        if (navBar == null || navHome == null) { return; }
+        int wall = localBackdrop(navBar);
+        int barEff = isGlass() ? blend(wall, cPanel, hasWall() ? 0.33 : 0.62) : cPanel;
+        int thumbEff;
+        if (isGlass()) {
+            // 滑块 = 背后区域 + 白雾 + 高光，约等于往白里混四成
+            thumbEff = blend(barEff, 0xFFFFFFFF, 0.45);
+        } else if (styleIdx == ST_MATERIAL) {
+            thumbEff = blend(cPanel, cAccent, 0.35);
+        } else {
+            thumbEff = blend(cPanel, cText, 0.13);
+        }
+        int onSel = textOn(thumbEff);
+        int dim = blend(textOn(barEff), barEff, 0.28);
+        navHome.setTextColor(page == 0 ? onSel : dim);
+        navSet.setTextColor(page == 1 ? onSel : dim);
+    }
+
+    private void saveSettingsFields() {
+        if (setHost == null) { return; }
+        store.edit()
+                .putString("host", setHost.getText().toString().trim())
+                .putString("token", setToken.getText().toString().trim())
+                .putString("part", setPart.getText().toString().trim())
+                .apply();
     }
 
     private Button smallBtn(String text) {
@@ -530,6 +703,21 @@ public class MainActivity extends Activity {
     }
 
     private boolean isGlass() { return styleIdx == ST_GLASS; }
+
+    /** 玻璃样式下前景要跟着壁纸明暗走，否则浅色壁纸上看不见字 */
+    private int fgColor() {
+        if (!isGlass() || wallBmp == null) { return cText; }
+        return textOn(blendOver(cPanel, 40, backdrop));
+    }
+
+    private int fgDim() {
+        if (!isGlass() || wallBmp == null) { return cDim; }
+        return blend(fgColor(), blendOver(cPanel, 40, backdrop), 0.38);
+    }
+
+    private int accentColor() {
+        return isGlass() && wallBmp != null ? blend(fgColor(), cPanel, 0.15) : cAccent;
+    }
 
     /** 按样式造按钮底 */
     private Drawable buttonBg(View host, int baseColor) {
@@ -738,35 +926,47 @@ public class MainActivity extends Activity {
                 .setPositiveButton("OK", null).show();
     }
 
-    // ---------------- 设置 ----------------
+    // ---------------- 设置页 ----------------
 
-    private void openSettings() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(16), dp(8), dp(16), dp(8));
+    /** 设置是独立一页（底栏第二个 tab），不再用对话框盖住主界面 */
+    private View buildSettingsPage() {
+        ScrollView sv = new ScrollView(this);
+        sv.setFillViewport(true);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(2), 0, dp(10));
+        sv.addView(col);
 
-        box.addView(label(T("界面样式", "UI style")));
+        TextView title = new TextView(this);
+        title.setText(T("设置", "Settings"));
+        title.setTextColor(fgColor());
+        title.setTextSize(22 * scale);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setPadding(dp(4), dp(4), dp(4), dp(8));
+        col.addView(title);
+
+        // 1) 界面样式
+        LinearLayout cStyle = card(T("界面样式", "UI style"));
         String[] sNames = { T("原生", "Native"), "Material", "MIUIX", T("液态玻璃", "Liquid glass") };
         for (int rowI = 0; rowI < 2; rowI++) {
             LinearLayout sr = new LinearLayout(this);
-            for (int col = 0; col < 2; col++) {
-                final int k = rowI * 2 + col;
+            for (int c = 0; c < 2; c++) {
+                final int k = rowI * 2 + c;
                 Button sb2 = smallBtn((k == styleIdx ? "● " : "") + sNames[k]);
                 if (k == styleIdx) { sb2.setTextColor(cAccent); }
                 sb2.setOnClickListener(new View.OnClickListener() {
-                    public void onClick(View v) {
-                        store.edit().putInt("style", k).apply();
-                        recreate();
-                    }
+                    public void onClick(View v) { store.edit().putInt("style", k).apply(); recreate(); }
                 });
-                LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(0, dp(46), 1f);
-                slp2.setMargins(dp(2), dp(2), dp(2), dp(2));
-                sr.addView(sb2, slp2);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+                lp.setMargins(dp(2), dp(2), dp(2), dp(2));
+                sr.addView(sb2, lp);
             }
-            box.addView(sr);
+            cStyle.addView(sr);
         }
+        col.addView(cStyle, cardLp());
 
-        box.addView(label(T("按键透明度", "Button opacity")));
+        // 2) 按键透明度
+        LinearLayout cAlpha = card(T("按键透明度", "Button opacity"));
         LinearLayout alphaRow = new LinearLayout(this);
         alphaRow.setGravity(Gravity.CENTER_VERTICAL);
         final TextView tvAlpha = new TextView(this);
@@ -792,12 +992,14 @@ public class MainActivity extends Activity {
         });
         alphaRow.addView(tvAlpha);
         alphaRow.addView(sb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        box.addView(alphaRow);
+        cAlpha.addView(alphaRow);
+        col.addView(cAlpha, cardLp());
 
-        box.addView(label(T("按键边框", "Button border")));
+        // 3) 按键边框
+        LinearLayout cBorder = card(T("按键边框", "Button border"));
         final LinearLayout chipsWrap = new LinearLayout(this);
         chipsWrap.setOrientation(LinearLayout.VERTICAL);
-        box.addView(chipsWrap);
+        cBorder.addView(chipsWrap);
         renderBorderChips(chipsWrap);
 
         LinearLayout bdRow = new LinearLayout(this);
@@ -822,7 +1024,7 @@ public class MainActivity extends Activity {
         });
         bdRow.addView(tvBd);
         bdRow.addView(sbBd, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        box.addView(bdRow);
+        cBorder.addView(bdRow);
 
         LinearLayout baRow = new LinearLayout(this);
         baRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -846,9 +1048,11 @@ public class MainActivity extends Activity {
         });
         baRow.addView(tvBa);
         baRow.addView(sbBa, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        box.addView(baRow);
+        cBorder.addView(baRow);
+        col.addView(cBorder, cardLp());
 
-        box.addView(label(T("背景配色", "Background")));
+        // 4) 背景
+        LinearLayout cBg = card(T("背景", "Background"));
         LinearLayout swatches = new LinearLayout(this);
         for (int i = 0; i < BG.length; i++) {
             final int idx = i;
@@ -862,35 +1066,10 @@ public class MainActivity extends Activity {
             });
             swatches.addView(sw);
         }
-        box.addView(swatches);
+        cBg.addView(swatches);
 
-        box.addView(label(T("字号", "Font size")));
-        LinearLayout sizes = new LinearLayout(this);
-        String[] names = { T("小", "Small"), T("标准", "Normal"), T("大", "Large") };
-        float[] vals = { 0.9f, 1.0f, 1.15f };
-        for (int i = 0; i < 3; i++) {
-            final float v = vals[i];
-            Button b = smallBtn(names[i], new View.OnClickListener() {
-                public void onClick(View x) { store.edit().putFloat("scale", v).apply(); recreate(); }
-            });
-            sizes.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        }
-        box.addView(sizes);
-
-        box.addView(label(T("语言", "Language")));
-        LinearLayout langs = new LinearLayout(this);
-        Button zh = smallBtn("中文", new View.OnClickListener() {
-            public void onClick(View v) { store.edit().putString("lang", "zh").apply(); recreate(); }
-        });
-        Button en = smallBtn("English", new View.OnClickListener() {
-            public void onClick(View v) { store.edit().putString("lang", "en").apply(); recreate(); }
-        });
-        langs.addView(zh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        langs.addView(en, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        box.addView(langs);
-
-        box.addView(label(T("背景图", "Wallpaper")));
         LinearLayout wallRow = new LinearLayout(this);
+        wallRow.setPadding(0, dp(8), 0, 0);
         Button pickWall = smallBtn(T("选择图片…", "Choose image…"), new View.OnClickListener() {
             public void onClick(View v) {
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -909,45 +1088,130 @@ public class MainActivity extends Activity {
         });
         wallRow.addView(pickWall, new LinearLayout.LayoutParams(0, dp(46), 2f));
         wallRow.addView(clearWall, new LinearLayout.LayoutParams(0, dp(46), 1f));
-        box.addView(wallRow);
+        cBg.addView(wallRow);
+        col.addView(cBg, cardLp());
 
-        box.addView(label(T("遥控 PC", "Remote PC")));
-        final EditText host = new EditText(this);
-        host.setHint("192.168.1.10:8765");
-        host.setText(store.getString("host", ""));
-        box.addView(host);
+        // 5) 字号 + 语言
+        LinearLayout cText2 = card(T("字体与语言", "Text & language"));
+        LinearLayout sizes = new LinearLayout(this);
+        String[] names = { T("小", "Small"), T("标准", "Normal"), T("大", "Large") };
+        float[] vals = { 0.9f, 1.0f, 1.15f };
+        for (int i = 0; i < 3; i++) {
+            final float v = vals[i];
+            Button b = smallBtn(names[i], new View.OnClickListener() {
+                public void onClick(View x) { store.edit().putFloat("scale", v).apply(); recreate(); }
+            });
+            sizes.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        cText2.addView(sizes);
 
-        final EditText token = new EditText(this);
-        token.setHint(T("6 位配对码", "6-digit pairing code"));
-        token.setText(store.getString("token", ""));
-        box.addView(token);
+        LinearLayout langs = new LinearLayout(this);
+        langs.setPadding(0, dp(4), 0, 0);
+        Button zh = smallBtn("中文", new View.OnClickListener() {
+            public void onClick(View v) { store.edit().putString("lang", "zh").apply(); recreate(); }
+        });
+        Button en = smallBtn("English", new View.OnClickListener() {
+            public void onClick(View v) { store.edit().putString("lang", "en").apply(); recreate(); }
+        });
+        langs.addView(zh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        langs.addView(en, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        cText2.addView(langs);
+        col.addView(cText2, cardLp());
 
-        final EditText part = new EditText(this);
-        part.setHint(T("默认分区 boot", "Default partition"));
-        part.setText(store.getString("part", "boot"));
-        box.addView(part);
+        // 6) 遥控 PC
+        LinearLayout cRemote = card(T("遥控 PC", "Remote PC"));
+        setHost = new EditText(this);
+        setHost.setHint("192.168.1.10:8765");
+        setHost.setText(store.getString("host", ""));
+        setHost.setTextColor(fgColor());
+        setHost.setHintTextColor(fgDim());
+        cRemote.addView(setHost);
 
-        ScrollView sv = new ScrollView(this);
-        sv.addView(box);
+        setToken = new EditText(this);
+        setToken.setHint(T("6 位配对码", "6-digit pairing code"));
+        setToken.setText(store.getString("token", ""));
+        setToken.setTextColor(fgColor());
+        setToken.setHintTextColor(fgDim());
+        cRemote.addView(setToken);
 
-        new AlertDialog.Builder(this)
-                .setTitle(T("设置", "Settings"))
-                .setView(sv)
-                .setPositiveButton(T("保存", "Save"), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        store.edit()
-                                .putString("host", host.getText().toString().trim())
-                                .putString("token", token.getText().toString().trim())
-                                .putString("part", part.getText().toString().trim())
-                                .apply();
-                        append(T("设置已保存", "Settings saved"), cDim);
-                    }
-                })
-                .setNeutralButton(T("切换模式", "Switch mode"), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { chooseMode(false); }
-                })
-                .setNegativeButton(T("取消", "Cancel"), null)
-                .show();
+        setPart = new EditText(this);
+        setPart.setHint(T("默认分区 boot", "Default partition"));
+        setPart.setText(store.getString("part", "boot"));
+        setPart.setTextColor(fgColor());
+        setPart.setHintTextColor(fgDim());
+        cRemote.addView(setPart);
+
+        TextView hint = new TextView(this);
+        hint.setText(T("改动会即时保存，切回主页生效", "Saved as you go, applied when you go back"));
+        hint.setTextColor(fgDim());
+        hint.setTextSize(11 * scale);
+        hint.setPadding(dp(2), dp(8), 0, 0);
+        cRemote.addView(hint);
+        col.addView(cRemote, cardLp());
+
+        // 7) 其它
+        LinearLayout cAbout = card(T("其它", "More"));
+        LinearLayout abRow = new LinearLayout(this);
+        Button sw2 = smallBtn(T("切换使用模式", "Switch mode"), new View.OnClickListener() {
+            public void onClick(View v) { chooseMode(false); }
+        });
+        Button about = smallBtn(T("关于", "About"), new View.OnClickListener() {
+            public void onClick(View v) { showAbout(); }
+        });
+        abRow.addView(sw2, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        abRow.addView(about, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        cAbout.addView(abRow);
+
+        TextView ver = new TextView(this);
+        ver.setText("Easy-platform-tools-GUI · Android " + VER);
+        ver.setTextColor(fgDim());
+        ver.setTextSize(11 * scale);
+        ver.setPadding(dp(2), dp(10), 0, 0);
+        cAbout.addView(ver);
+        col.addView(cAbout, cardLp());
+
+        return sv;
+    }
+
+    /** 设置页里的一块卡片，按样式换底 */
+    private LinearLayout card(String title) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(14), dp(12), dp(14), dp(14));
+        if (isGlass()) {
+            c.setBackground(new GlassDrawable(c, dp(20),
+                    Color.argb(hasWall() ? 0x6B : 0xCC, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+                    .wall(hasWall() ? wallBmp : null)
+                    .border(dp(1), 0x40FFFFFF));
+            c.setElevation(dp(8));
+        } else if (styleIdx == ST_MATERIAL) {
+            c.setBackground(new PillDrawable(Color.argb(0xF7,
+                    Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)), dp(20)));
+            c.setElevation(dp(1));
+        } else if (styleIdx == ST_MIUIX) {
+            c.setBackground(new PillDrawable(Color.argb(0xFF,
+                    Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)), dp(18)));
+        } else {
+            int a = hasWall() ? Math.min(235, Math.max(150, btnAlpha)) : 255;
+            c.setBackground(new PillDrawable(Color.argb(a,
+                    Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)), dp(14)));
+        }
+        TextView t = new TextView(this);
+        t.setText(title);
+        t.setTextColor(accentColor());
+        t.setTextSize(12 * scale);
+        t.setLetterSpacing(0.06f);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setPadding(dp(2), 0, 0, dp(10));
+        c.addView(t);
+        return c;
+    }
+
+    private LinearLayout.LayoutParams cardLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(4), 0, dp(8));
+        return lp;
     }
 
     private void persistBorder() {
