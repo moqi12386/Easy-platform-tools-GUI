@@ -59,9 +59,9 @@ import java.util.zip.ZipInputStream;
 public class MainActivity extends Activity {
 
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
-    private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003;
+    private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "1.9.0";
+    private static final String VER = "2.0.0";
 
     /** 8 套背景色，和桌面版一致 */
     private static final int[] BG = {
@@ -153,12 +153,23 @@ public class MainActivity extends Activity {
 
     private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density); }
 
+    private boolean hasWall() {
+        String wp = store.getString("wall", "");
+        return wp.length() > 0 && new File(wp).exists();
+    }
+
     // ---------------- UI ----------------
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(cBg);
+        String wp = store.getString("wall", "");
+        android.graphics.Bitmap wallBmp = wp.length() > 0 ? android.graphics.BitmapFactory.decodeFile(wp) : null;
+        if (wallBmp != null) {
+            root.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(), wallBmp));
+        } else {
+            root.setBackgroundColor(cBg);
+        }
         root.setPadding(dp(12), dp(10), dp(12), dp(10));
 
         TextView title = new TextView(this);
@@ -205,7 +216,7 @@ public class MainActivity extends Activity {
         slp.topMargin = dp(8);
         slp.bottomMargin = dp(4);
         scroll.setLayoutParams(slp);
-        scroll.setBackgroundColor(cOut);
+        scroll.setBackgroundColor(hasWall() ? Color.argb(205, Color.red(cOut), Color.green(cOut), Color.blue(cOut)) : cOut);
 
         logView = new TextView(this);
         logView.setTextColor(cText);
@@ -455,6 +466,28 @@ public class MainActivity extends Activity {
         langs.addView(zh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         langs.addView(en, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         box.addView(langs);
+
+        box.addView(label(T("背景图", "Wallpaper")));
+        LinearLayout wallRow = new LinearLayout(this);
+        Button pickWall = smallBtn(T("选择图片…", "Choose image…"), new View.OnClickListener() {
+            public void onClick(View v) {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("image/*");
+                startActivityForResult(i, REQ_WALL);
+            }
+        });
+        Button clearWall = smallBtn(T("清除", "Clear"), new View.OnClickListener() {
+            public void onClick(View v) {
+                store.edit().putString("wall", "").apply();
+                File f = new File(getFilesDir(), "wall.jpg");
+                if (f.exists()) { f.delete(); }
+                recreate();
+            }
+        });
+        wallRow.addView(pickWall, new LinearLayout.LayoutParams(0, dp(46), 2f));
+        wallRow.addView(clearWall, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        box.addView(wallRow);
 
         box.addView(label(T("遥控 PC", "Remote PC")));
         final EditText host = new EditText(this);
@@ -808,12 +841,70 @@ public class MainActivity extends Activity {
         } else if (req == REQ_ROM) {
             try { startRom(extractRom(copyToCache(uri, "rom.zip"))); }
             catch (Exception e) { append(T("解压失败：", "Extract failed: ") + e.getMessage(), cErr); }
+        } else if (req == REQ_WALL) {
+            try {
+                android.graphics.Bitmap bmp = loadScaled(uri);
+                showCrop(bmp);
+            } catch (Exception e) { append(T("读取图片失败：", "Load image failed: ") + e.getMessage(), cErr); }
         } else if (req == REQ_ROM_DIR) {
             try { startRom(copyTree(uri)); }
             catch (Exception e) { append(T("读取目录失败：", "Read folder failed: ") + e.getMessage(), cErr); }
         }
     }
 
+    // ---------------- 壁纸 ----------------
+
+    private android.graphics.Bitmap loadScaled(Uri uri) throws Exception {
+        InputStream in = getContentResolver().openInputStream(uri);
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeStream(in, null, o);
+        in.close();
+        int sample = 1;
+        while (o.outWidth / sample > 2000 || o.outHeight / sample > 2000) { sample *= 2; }
+        android.graphics.BitmapFactory.Options o2 = new android.graphics.BitmapFactory.Options();
+        o2.inSampleSize = sample;
+        in = getContentResolver().openInputStream(uri);
+        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in, null, o2);
+        in.close();
+        return bmp;
+    }
+
+    private void showCrop(final android.graphics.Bitmap bmp) {
+        int h = (int) (getResources().getDisplayMetrics().heightPixels * 0.58f);
+        final CropView cv = new CropView(this);
+        cv.setBitmap(bmp);
+        cv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h));
+        cv.setMinimumHeight(h);
+
+        android.widget.FrameLayout wrap = new android.widget.FrameLayout(this);
+        wrap.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h));
+        wrap.addView(cv, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h));
+
+        new AlertDialog.Builder(this)
+                .setTitle(T("拖动 / 双指缩放，框内即壁纸", "Drag / pinch — the frame becomes the wallpaper"))
+                .setView(wrap)
+                .setPositiveButton(T("使用", "Use"), new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { saveWallpaper(cv.crop()); }
+                })
+                .setNegativeButton(T("取消", "Cancel"), null)
+                .show();
+    }
+
+    private void saveWallpaper(android.graphics.Bitmap bmp) {
+        if (bmp == null) { return; }
+        try {
+            File f = new File(getFilesDir(), "wall.jpg");
+            FileOutputStream out = new FileOutputStream(f);
+            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out);
+            out.close();
+            store.edit().putString("wall", f.getAbsolutePath()).apply();
+            append(T("壁纸已设置", "Wallpaper set"), cOk);
+            recreate();
+        } catch (Exception e) {
+            append(T("保存壁纸失败：", "Save wallpaper failed: ") + e.getMessage(), cErr);
+        }
+    }
     private File copyToCache(Uri uri, String name) throws Exception {
         File f = new File(getCacheDir(), name);
         InputStream in = getContentResolver().openInputStream(uri);

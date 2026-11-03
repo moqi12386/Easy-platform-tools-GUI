@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "1.9.0";
+        private const string AppVersion = "2.0.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -43,6 +43,30 @@ namespace EasyPlatformTools
         // ================================================================
         //  主题
         // ================================================================
+        /// <summary>按窗体坐标贴同一张壁纸的面板，解决 WinForms 不支持真透明的问题</summary>
+        private sealed class WallPanel : Panel
+        {
+            public static Bitmap Wall;
+            public static Color Veil = Color.FromArgb(160, 10, 12, 16);
+
+            public WallPanel()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            }
+
+            protected override void OnPaintBackground(PaintEventArgs e)
+            {
+                if (Wall == null) { base.OnPaintBackground(e); return; }
+                Form f = FindForm();
+                if (f == null) { base.OnPaintBackground(e); return; }
+                Point p = PointToScreen(Point.Empty);
+                Point inForm = f.PointToClient(p);
+                using (SolidBrush baseBrush = new SolidBrush(BackColor)) { e.Graphics.FillRectangle(baseBrush, ClientRectangle); }
+                try { e.Graphics.DrawImageUnscaled(Wall, -inForm.X, -inForm.Y); } catch { }
+                using (SolidBrush veilBrush = new SolidBrush(Veil)) { e.Graphics.FillRectangle(veilBrush, ClientRectangle); }
+            }
+        }
+
         private sealed class Theme
         {
             public Color Bg, Panel, Output, EditBg, Text, Dim, Accent, Ok, Err, Warn, Btn, Border, RunBtn, StopBtn;
@@ -278,6 +302,7 @@ namespace EasyPlatformTools
         private static string proxyUrl = "";
         private static string customPtSource = "";
         private static string remoteToken = "";
+        private static string wallpaperPath = "";
         private static string lastPtSource = "";
 
         private enum Role { Text, Cmd, Err, Ok, Dim, Warn }
@@ -426,6 +451,10 @@ namespace EasyPlatformTools
                     {
                         Lang.Current = (val == "en") ? Lang.EN : Lang.ZH;
                     }
+                    else if (key == "wall")
+                    {
+                        wallpaperPath = val;
+                    }
                     else if (key == "token")
                     {
                         remoteToken = val;
@@ -450,6 +479,7 @@ namespace EasyPlatformTools
                 sb.AppendLine("size=" + fontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("lang=" + Lang.Current);
                 sb.AppendLine("token=" + remoteToken);
+                sb.AppendLine("wall=" + wallpaperPath);
                 File.WriteAllText(ConfigPath, sb.ToString(), new UTF8Encoding(false));
             }
             catch { }
@@ -504,7 +534,7 @@ namespace EasyPlatformTools
 
         private static void BuildSidebar()
         {
-            panelLeft = new Panel();
+            panelLeft = new WallPanel();
             panelLeft.Dock = DockStyle.Fill;
             panelLeft.Padding = new Padding(12, 10, 8, 10);
             tbl.Controls.Add(panelLeft, 0, 0);
@@ -578,11 +608,11 @@ namespace EasyPlatformTools
 
         private static void BuildMain()
         {
-            panelMain = new Panel();
+            panelMain = new WallPanel();
             panelMain.Dock = DockStyle.Fill;
             tbl.Controls.Add(panelMain, 1, 0);
 
-            panelTop = new Panel();
+            panelTop = new WallPanel();
             panelTop.Dock = DockStyle.Top;
             panelTop.Height = 60;
             panelMain.Controls.Add(panelTop);
@@ -601,7 +631,7 @@ namespace EasyPlatformTools
             lblPath.Font = fSmall;
             panelTop.Controls.Add(lblPath);
 
-            panelBottom = new Panel();
+            panelBottom = new WallPanel();
             panelBottom.Dock = DockStyle.Bottom;
             panelBottom.Height = 92;
             panelMain.Controls.Add(panelBottom);
@@ -820,7 +850,7 @@ namespace EasyPlatformTools
             dlgSettings.ShowInTaskbar = false;
             dlgSettings.StartPosition = FormStartPosition.Manual;
             dlgSettings.AutoScaleMode = AutoScaleMode.None;
-            dlgSettings.ClientSize = new Size(452, 412);
+            dlgSettings.ClientSize = new Size(452, 476);
             dlgSettings.Font = fUi;
             try { dlgSettings.Icon = form.Icon; } catch { }
 
@@ -911,7 +941,7 @@ namespace EasyPlatformTools
             lblPreview.BorderStyle = BorderStyle.FixedSingle;
             dlgSettings.Controls.Add(lblPreview);
 
-            Button btnClose = AddDlgButton("关闭", 348, 358, 88, 32);
+            Button btnClose = AddDlgButton("关闭", 348, 422, 88, 32);
             btnClose.Click += delegate { dlgSettings.Close(); };
 
             cbFont.SelectedIndexChanged += delegate
@@ -966,6 +996,39 @@ namespace EasyPlatformTools
                 }
             };
             dlgSettings.Controls.Add(cbLang);
+
+            AddDlgLabel("背景图", 16, 356, true);
+
+            Label lblWall = new Label();
+            lblWall.Text = string.IsNullOrEmpty(wallpaperPath) ? "（无）" : Path.GetFileName(wallpaperPath);
+            lblWall.Location = new Point(262, 390);
+            lblWall.AutoSize = true;
+            lblWall.ForeColor = theme.Dim;
+            lblWall.Font = fSmall;
+            dlgSettings.Controls.Add(lblWall);
+
+            Button btnWall = AddDlgButton("选择图片…", 16, 382, 130, 32);
+            btnWall.Click += delegate
+            {
+                OpenFileDialog ofd = new OpenFileDialog();
+                ofd.Filter = "图片 (*.jpg;*.jpeg;*.png;*.bmp)|*.jpg;*.jpeg;*.png;*.bmp|所有文件 (*.*)|*.*";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    wallpaperPath = ofd.FileName;
+                    SaveConfig();
+                    ApplyTheme(theme);
+                    lblWall.Text = Path.GetFileName(wallpaperPath);
+                }
+            };
+
+            Button btnWallOff = AddDlgButton("移除", 156, 382, 90, 32);
+            btnWallOff.Click += delegate
+            {
+                wallpaperPath = "";
+                SaveConfig();
+                ApplyTheme(theme);
+                lblWall.Text = "（无）";
+            };
 
             Lang.ApplyTo(dlgSettings);
             dlgSettings.Show(form);
@@ -1333,6 +1396,55 @@ namespace EasyPlatformTools
             ApplySettingsTheme();
         }
 
+        /// <summary>壁纸：把原图压暗后铺满窗体，面板设为透明让壁纸透出来</summary>
+        private static void ApplyWallpaper(Theme t)
+        {
+            bool on = !string.IsNullOrEmpty(wallpaperPath) && File.Exists(wallpaperPath);
+            if (!on)
+            {
+                if (form.BackgroundImage != null) { form.BackgroundImage.Dispose(); form.BackgroundImage = null; }
+                WallPanel.Wall = null;
+                if (panelLeft != null) { panelLeft.Invalidate(); }
+                if (panelTop != null) { panelTop.Invalidate(); }
+                if (panelBottom != null) { panelBottom.Invalidate(); }
+                if (panelMain != null) { panelMain.Invalidate(); }
+                return;
+            }
+
+            try
+            {
+                int w = Math.Max(320, form.ClientSize.Width);
+                int h = Math.Max(240, form.ClientSize.Height);
+                using (Image src = Image.FromFile(wallpaperPath))
+                {
+                    Bitmap bmp = new Bitmap(w, h);
+                    using (Graphics g = Graphics.FromImage(bmp))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(src, 0, 0, w, h);
+                        // 压暗，保证文字可读
+                        using (SolidBrush veil = new SolidBrush(Color.FromArgb(60, t.Output)))
+                        {
+                            g.FillRectangle(veil, 0, 0, w, h);
+                        }
+                    }
+                    if (form.BackgroundImage != null) { form.BackgroundImage.Dispose(); }
+                    form.BackgroundImage = bmp;
+                    form.BackgroundImageLayout = ImageLayout.Stretch;
+                }
+                WallPanel.Wall = (Bitmap)form.BackgroundImage;
+                WallPanel.Veil = Color.FromArgb(t.Dark ? 150 : 130, t.Output);
+                panelLeft.Invalidate();
+                panelTop.Invalidate();
+                panelBottom.Invalidate();
+                panelMain.Invalidate();
+                tbl.Invalidate();
+            }
+            catch
+            {
+                wallpaperPath = "";
+            }
+        }
         private static void ApplyTheme(Theme t)
         {
             if (form == null) { return; }
@@ -1379,6 +1491,7 @@ namespace EasyPlatformTools
             }
 
             foreach (Label l in sectionLabels) { l.ForeColor = t.Dim; }
+            ApplyWallpaper(t);
         }
 
         private static Color RoleColor(Role r)

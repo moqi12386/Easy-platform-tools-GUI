@@ -157,6 +157,18 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 不需要 Gradle：脚本直接用 `aapt2` + `javac` + `d8` + `apksigner` 打包，
 默认找 `C:\Users\35923\android-build` 下的 build-tools / platform / jdk。
 
+## 自定义壁纸
+
+两端都支持把任意图片设成界面背景。
+
+**桌面版**：设置 → 背景图 → 选择图片…，图片会压暗后铺满窗口，侧栏/顶栏/底栏半透明透出；
+底图按窗体坐标对齐，窗口缩放时保持一致。存进 `config.ini` 的 `wall=`。
+
+**Android 版**：设置 → 背景图 → 选择图片…，进入裁剪界面：**单指拖动、双指缩放**，
+框内就是最终壁纸，确认后存到应用私有目录，日志区自动变半透明。
+
+![壁纸](docs/wallpaper.png)
+
 ## 字体
 
 仓库**不包含**字体文件（授权原因）。想要截图里的效果，把字体放进 `assets\fonts\` 即可，
