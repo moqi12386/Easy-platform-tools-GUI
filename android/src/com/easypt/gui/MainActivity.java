@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static final int MODE_OTG = 0, MODE_LOCAL = 1, MODE_REMOTE = 2;
     private static final int REQ_IMAGE = 1001, REQ_ROM = 1002, REQ_ROM_DIR = 1003, REQ_WALL = 1004;
     private static final String ACTION_USB_PERM = "com.easypt.gui.USB_PERMISSION";
-    private static final String VER = "2.13.0";
+    private static final String VER = "2.14.0";
 
     /** 界面样式 */
     private static final int ST_NATIVE = 0, ST_MATERIAL = 1, ST_MIUIX = 2, ST_GLASS = 3;
@@ -849,6 +849,43 @@ public class MainActivity extends Activity {
         }
         bmp.setPixels(out, 0, w, 0, 0, w, h);
     }
+    /** 进度条换成 MIUIX 那种：圆头粗轨道 + 白色圆拇指 */
+    /** 进度条填充色：玻璃下固定用 MIUI 蓝，否则用主题主色 */
+    private int seekAccent() {
+        if (isGlass()) { return 0xFF3D7EFF; }
+        if (styleIdx == ST_MIUIX) { return 0xFF5B8DFF; }
+        return cAccent;
+    }
+    private void styleSeek(android.widget.SeekBar sb) {
+        int trackH = dp(12);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(trackH / 2f);
+        bg.setColor(blend(cPanel, cText, 0.18));
+
+        android.graphics.drawable.GradientDrawable fg = new android.graphics.drawable.GradientDrawable();
+        fg.setCornerRadius(trackH / 2f);
+        fg.setColor(seekAccent());
+
+        android.graphics.drawable.ClipDrawable clip = new android.graphics.drawable.ClipDrawable(
+                fg, Gravity.LEFT, android.graphics.drawable.ClipDrawable.HORIZONTAL);
+
+        android.graphics.drawable.LayerDrawable ld =
+                new android.graphics.drawable.LayerDrawable(new Drawable[]{ bg, clip });
+        int inset = dp(9);
+        ld.setLayerInset(0, 0, inset, 0, inset);
+        ld.setLayerInset(1, 0, inset, 0, inset);
+        sb.setProgressDrawable(ld);
+
+        android.graphics.drawable.GradientDrawable th = new android.graphics.drawable.GradientDrawable();
+        th.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        th.setColor(0xFFF4F7FB);
+        th.setSize(dp(20), dp(20));
+        sb.setThumb(th);
+        sb.setThumbOffset(0);
+        sb.setSplitTrack(false);
+        sb.setMinimumHeight(dp(30));
+        sb.setMaxHeight(dp(30));
+    }
     /** 按样式造按钮底 */
     private Drawable buttonBg(View host, int baseColor) {
         int base = fillBase(baseColor);
@@ -1130,6 +1167,7 @@ public class MainActivity extends Activity {
         tvAlpha.setTextSize(13 * scale);
         tvAlpha.setWidth(dp(56));
         android.widget.SeekBar sb = new android.widget.SeekBar(this);
+        styleSeek(sb);
         sb.setMax(100);
         sb.setProgress(btnAlpha);
         sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1165,6 +1203,7 @@ public class MainActivity extends Activity {
         tvBd.setTextSize(13 * scale);
         tvBd.setWidth(dp(56));
         android.widget.SeekBar sbBd = new android.widget.SeekBar(this);
+        styleSeek(sbBd);
         sbBd.setMax(5);
         sbBd.setProgress(Math.max(0, Math.min(5, borderDp - 1)));
         sbBd.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1189,6 +1228,7 @@ public class MainActivity extends Activity {
         tvBa.setTextSize(13 * scale);
         tvBa.setWidth(dp(56));
         android.widget.SeekBar sbBa = new android.widget.SeekBar(this);
+        styleSeek(sbBa);
         sbBa.setMax(100);
         sbBa.setProgress(borderAlphaPct);
         sbBa.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1213,6 +1253,7 @@ public class MainActivity extends Activity {
         tvBl.setTextSize(13 * scale);
         tvBl.setWidth(dp(56));
         android.widget.SeekBar sbBl = new android.widget.SeekBar(this);
+        styleSeek(sbBl);
         sbBl.setMax(100);
         sbBl.setProgress(blurPct);
         sbBl.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1249,6 +1290,7 @@ public class MainActivity extends Activity {
         tvGc.setTextSize(13 * scale);
         tvGc.setWidth(dp(56));
         android.widget.SeekBar sbGc = new android.widget.SeekBar(this);
+        styleSeek(sbGc);
         sbGc.setMax(100);
         sbGc.setProgress(glassPct);
         sbGc.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1588,6 +1630,7 @@ public class MainActivity extends Activity {
             vals[i].setWidth(dp(42));
             vals[i].setGravity(Gravity.END);
             android.widget.SeekBar sb = new android.widget.SeekBar(this);
+        styleSeek(sb);
             sb.setMax(255);
             sb.setProgress(rgb[i]);
             sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1660,12 +1703,12 @@ public class MainActivity extends Activity {
         final LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(8), dp(10), dp(8), dp(10));
-        box.setBackground(menuBg());
+        box.setBackground(menuBg(box));   // 用自己的位置取样，不能用主页的 root
         box.setElevation(dp(20));
 
         final int menuW = Math.min(dp(300), getResources().getDisplayMetrics().widthPixels - dp(56));
         final PopupWindow pw = new PopupWindow(box, menuW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        pw.setOutsideTouchable(true);
+        pw.setOutsideTouchable(false);   // 先关掉，等 300ms 再开，避免抬手被当成「点外面」
         pw.setFocusable(true);
         pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         if (Build.VERSION.SDK_INT >= 21) { pw.setElevation(dp(18)); }
@@ -1738,9 +1781,12 @@ public class MainActivity extends Activity {
 
         // 放到下一帧再弹，否则手指抬起会被当成「点到浮层外面」直接关掉
         final int fx = x, fy = y;
-        anchor.post(new Runnable() {
+        anchor.postDelayed(new Runnable() {
             public void run() {
                 pw.showAtLocation(rootView, Gravity.NO_GRAVITY, fx, fy);
+                box.postDelayed(new Runnable() {
+                    public void run() { pw.setOutsideTouchable(true); }
+                }, 300);
                 box.setScaleX(0.92f);
                 box.setScaleY(0.92f);
                 box.setAlpha(0f);
@@ -1748,14 +1794,15 @@ public class MainActivity extends Activity {
                 box.setPivotX(dp(24));
                 box.setPivotY(0f);
             }
-        });
+        }, 60);
     }
 
-    private Drawable menuBg() {
+    private Drawable menuBg(View host) {
         if (isGlass()) {
-            return new GlassDrawable(rootView).radius(dp(22))
+            return new GlassDrawable(host).radius(dp(22))
                     .wall(wallLevels, LEVEL_DIV)
-                    .tint(Color.argb(0xE8, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+                    .tint(Color.argb(0xFF, Color.red(cPanel), Color.green(cPanel), Color.blue(cPanel)))
+                    .alpha(0xE8)
                     .border(dp(1), 0x40FFFFFF);
         }
         if (styleIdx == ST_MIUIX) {

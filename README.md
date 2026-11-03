@@ -233,7 +233,7 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 | 位置 | **贴右边**浮出（不压住左边的正文），上下按空间自动翻 |
 | 宽度 | 300 dp，超宽屏也不会拉满 |
 
-![MIUIX 弹窗](docs/popup.png)
+![MIUIX 弹窗](docs/popup.jpg)
 
 四套样式都有对应皮：MIUIX 是 `#2C2C2E` 卡片 + 蓝色主色，Material/原生是主题面板色 + 细描边，
 玻璃是实时模糊的 `GlassDrawable`（见下一节）。弹窗都是在下一帧才 `show`，否则手指抬起会被当成「点外部」立刻关掉。
@@ -241,7 +241,10 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 ### 玻璃是怎么画的
 
 先把壁纸按 1/3、1/6、1/12、1/24 烤成 4 张模糊小图（各做一次 3×3 盒滤），存在内存里。
-`draw()` 里只做一件事：按控件**当前屏幕位置**从对应级别里取一块 `drawBitmap` 出来。
+`draw()` 里只做一件事：按控件**当前屏幕位置**从对应级别里取一块 `drawBitmap` 出来，
+并且整块统一放大 1.25× 取样（`lensMatrix`），内层和边缘是同一块透镜。
+
+> 弹窗是 `PopupWindow`，有独立窗口，必须用**它自己**的视图取样；用主页 root 会取到壁纸左上角。
 
 所以滚动时每帧重画也不掉帧（一次绘制 vs 以前的「新建位图 + 盒滤」）。
 每块玻璃糊的都是它自己背后那块，换壁纸、滚动、挪位置都对得上。

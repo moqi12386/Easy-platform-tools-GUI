@@ -35,6 +35,7 @@ public class GlassDrawable extends Drawable {
     private int[] factors = { 3, 6, 12, 24 };
     private float radius;
     private int tint = 0x14FFFFFF;
+    private int fixedAlpha = -1;   // >=0 时不受全局 CONC 影响（弹窗用）
     private float borderPx;
     private int borderColor = 0x66FFFFFF;
     private boolean lens = true;
@@ -71,6 +72,9 @@ public class GlassDrawable extends Drawable {
 
     public GlassDrawable tint(int color) { this.tint = color; return this; }
 
+    /** 固定不透明度 0–255，忽略全局浓度 */
+    public GlassDrawable alpha(int a) { this.fixedAlpha = a; return this; }
+
     public GlassDrawable border(float px, int color) {
         this.borderPx = px;
         this.borderColor = color;
@@ -96,14 +100,17 @@ public class GlassDrawable extends Drawable {
         int factor = factors[Math.min(idx, factors.length - 1)];
 
         if (lv != null) {
+            int s0 = c.save();
+            lensMatrix(c);
             drawFromLevel(c, lv, factor);
+            c.restoreToCount(s0);
         } else {
             fillPaint.setColor((tint & 0x00FFFFFF) | 0x66000000);
             c.drawRect(box, fillPaint);
         }
 
         // 主题色按浓度压上去
-        int a = Math.max(0, Math.min(100, CONC)) * 255 / 100;
+        int a = fixedAlpha >= 0 ? fixedAlpha : Math.max(0, Math.min(100, CONC)) * 255 / 100;
         fillPaint.setShader(null);
         fillPaint.setColor((tint & 0x00FFFFFF) | (a << 24));
         c.drawRect(box, fillPaint);
@@ -120,12 +127,10 @@ public class GlassDrawable extends Drawable {
             ring.op(inner, Path.Op.DIFFERENCE);
             int s2 = c.save();
             c.clipPath(ring);
-            mx.reset();
-            mx.setScale(1.30f, 1.30f, box.centerX(), box.centerY());
-            c.concat(mx);
+            lensMatrix(c);
             drawFromLevel(c, lv, factor);
             c.restoreToCount(s2);
-            fillPaint.setColor(0x08FFFFFF);
+            fillPaint.setColor(0x0AFFFFFF);
             c.drawPath(ring, fillPaint);
         }
 
@@ -157,6 +162,13 @@ public class GlassDrawable extends Drawable {
             RectF in = new RectF(box.left + inset, box.top + inset, box.right - inset, box.bottom - inset);
             c.drawRoundRect(in, Math.max(0, radius - inset), Math.max(0, radius - inset), linePaint);
         }
+    }
+
+    /** 整块玻璃用同一套「放大 1.25」取样：内层和边缘看起来是一整块透镜 */
+    private void lensMatrix(Canvas c) {
+        mx.reset();
+        mx.setScale(1.25f, 1.25f, box.centerX(), box.centerY());
+        c.concat(mx);
     }
 
     /** 0..100 映射到 3 级：最低级也有 1/6 的模糊，不会退回原图 */
