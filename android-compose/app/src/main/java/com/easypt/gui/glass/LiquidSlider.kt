@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -237,6 +236,8 @@ fun LiquidSlider(
                                 requireUnconsumed = false,
                                 pass = PointerEventPass.Initial
                             )
+                            // 按下即进入"液态玻璃"态（demo 的白点按下效果）
+                            dampedDragAnimation.press()
                             // 按下先不消费：等判断出方向再决定给滑杆还是给页面滚动
                             val start = down.position
                             var decided = false
@@ -250,9 +251,9 @@ fun LiquidSlider(
                                     if (dx > 6f && dx > dy) { decided = true; captured = true }
                                     else if (dy > 6f && dy > dx) { decided = true; captured = false }
                                 }
-                                if (decided && !captured) break
+                                if (decided && !captured) { dampedDragAnimation.release(); break }
                                 ch.consume()
-                                if (!ch.pressed) break
+                                if (!ch.pressed) { dampedDragAnimation.release(); break }
                                 val v = valueAt(ch.position.x)
                                 dampedDragAnimation.updateValue(v)
                                 onValueChange(v)

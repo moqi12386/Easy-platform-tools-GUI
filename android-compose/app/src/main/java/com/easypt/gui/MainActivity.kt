@@ -213,7 +213,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         part = sp.getString("part", "boot") ?: "boot"
         host = sp.getString("host", "192.168.1.10:8765") ?: "192.168.1.10:8765"
         token = sp.getString("token", "") ?: ""
-        style = UiStyle.entries.getOrElse(sp.getInt("style", 0)) { UiStyle.Native }
+        style = UiStyle.entries.getOrElse(sp.getInt("style", UiStyle.Glass.ordinal)) { UiStyle.Glass }
         lang = if (sp.getInt("lang", 0) == 1) Lang.En else Lang.Zh
         uiAlpha = sp.getFloat("alpha", 85f)
         glassBlur = sp.getFloat("gblur", 55f)
@@ -1824,6 +1824,37 @@ fun HomePage(
         }
 
         Spacer(Modifier.height(12.dp))
+        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = cmd,
+                    onValueChange = { cmd = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            if (mode == 1) tr(lang, "shell 命令", "shell command")
+                            else tr(lang, "fastboot 命令", "fastboot command"),
+                            fontSize = 13.sp
+                        )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors()
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { onRun(cmd); cmd = "" },
+                    colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(tr(lang, "执行", "Run")) }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
+        Spacer(Modifier.height(12.dp))
 
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
             val text = LocalCardText.current
@@ -1906,36 +1937,7 @@ fun HomePage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = cmd,
-                    onValueChange = { cmd = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = {
-                        Text(
-                            if (mode == 1) tr(lang, "shell 命令", "shell command")
-                            else tr(lang, "fastboot 命令", "fastboot command"),
-                            fontSize = 13.sp
-                        )
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors()
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = { onRun(cmd); cmd = "" },
-                    colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text(tr(lang, "执行", "Run")) }
-            }
         }
-        Spacer(Modifier.height(16.dp))
-    }
 }
 
 // ======================= 设置 =======================
