@@ -174,6 +174,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
+    private var fontChoice by mutableStateOf(AppFont.System)
+    private var miSans by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
     private var showWpSource by mutableStateOf(false)
@@ -234,6 +236,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
+        fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
+        runCatching {
+            val f = File(filesDir, "MiSans-Regular.ttf")
+            if (f.exists()) miSans = androidx.compose.ui.text.font.FontFamily(
+                androidx.compose.ui.text.font.Font(f)
+            )
+        }
         forceSafe = sp.getBoolean("forceSafe", false)
 
         androidx.core.content.ContextCompat.registerReceiver(
@@ -980,6 +989,53 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
     }
 
+    private fun chooseFont(f: AppFont) {
+        if (f == AppFont.MiSans) {
+            if (miSans != null) {
+                fontChoice = f
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
+                return
+            }
+            downloadMiSans()
+            return
+        }
+        fontChoice = f
+        getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
+    }
+
+    /** MiSans 官方包较大，后台下载后只取 Regular 那一份 */
+    private fun downloadMiSans() {
+        append(t("开始下载 MiSans（官方包较大，请耐心等待）…", "Downloading MiSans…"), TextSecondary)
+        Thread {
+            val zip = File(cacheDir, "misans.zip")
+            val out = File(filesDir, "MiSans-Regular.ttf")
+            try {
+                if (!out.exists()) {
+                    java.net.URL("https://hyperos.mi.com/font-download/MiSans.zip").openStream().use { i ->
+                        zip.outputStream().use { o -> i.copyTo(o) }
+                    }
+                    java.util.zip.ZipFile(zip).use { zf ->
+                        val entry = zf.entries().asSequence().firstOrNull {
+                            it.name.endsWith("MiSans-Regular.ttf", true)
+                        } ?: throw IllegalStateException("压缩包里没有 MiSans-Regular.ttf")
+                        zf.getInputStream(entry).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                    }
+                    zip.delete()
+                }
+                runOnUiThread {
+                    miSans = androidx.compose.ui.text.font.FontFamily(
+                        androidx.compose.ui.text.font.Font(out)
+                    )
+                    fontChoice = AppFont.MiSans
+                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.MiSans.ordinal).apply()
+                    append(t("MiSans 已应用", "MiSans applied"), OkColor)
+                }
+            } catch (e: Throwable) {
+                ui.post { append(t("MiSans 下载/解压失败：${e.message}", "MiSans failed: ${e.message}"), ErrColor) }
+            }
+        }.start()
+    }
+
     private fun chooseMonet(v: Boolean) {
         monet = v
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("monet", v).apply()
@@ -1078,6 +1134,18 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
+                if (useBackdrop) {
+                    // 顶部渐变：照 demo 的 progressive blur，画在内容下面，标题仍清晰
+                    Box(Modifier.fillMaxSize()) {
+                        com.easypt.gui.glass.ProgressiveBlurEdge(
+                            backdrop = wallBackdrop,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                            heightDp = 220f,
+                            tintColor = if (Palette.dark) Color(0xFF0A0F16) else Color.White,
+                            tintIntensity = 0.18f
+                        )
+                    }
+                }
                 Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
@@ -1087,6 +1155,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
+                                typography = typographyWith(if (fontChoice == AppFont.MiSans) miSans else fontChoice.family),
                                 colorScheme = if (dark) {
                                     darkColorScheme(
                                         primary = Accent,
@@ -1174,6 +1243,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         canMonet = Build.VERSION.SDK_INT >= 31,
                                         onStyle = { chooseStyle(it) },
                                         onLang = { chooseLang(it) },
+                                        font = fontChoice,
+                                        onFont = { chooseFont(it) },
                                         opacity = uiAlpha,
                                         onOpacity = {
                                             uiAlpha = it
@@ -1209,12 +1280,21 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     if (useBackdrop) {
                     if (useBackdrop) {
                         // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
-                        com.easypt.gui.glass.ProgressiveBlurEdge(
-                            backdrop = wallBackdrop,
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                            heightDp = 110f,
-                            tintColor = if (Palette.dark) Color(0xFF121212) else Color.White,
-                            tintIntensity = 0.10f
+                        // 底栏上方的渐变淡出：内容照样能滑到底栏下面，只是越靠下越淡
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            Bg.copy(alpha = 0.55f),
+                                            Bg.copy(alpha = 0.92f)
+                                        )
+                                    )
+                                )
                         )
                     }
 
@@ -1291,6 +1371,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
                 MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                     MaterialTheme(
+                        typography = typographyWith(if (fontChoice == AppFont.MiSans) miSans else fontChoice.family),
                         colorScheme = if (dark) {
                             darkColorScheme(primary = Accent, surface = Surface, onSurface = TextPrimary)
                         } else {
@@ -1918,7 +1999,7 @@ fun HomePage(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 110.dp)
+            .padding(bottom = 20.dp)
             .verticalScroll(rememberScrollState())
     ) {
         if (safeRender) {
@@ -2109,6 +2190,8 @@ fun SettingsPage(
     canMonet: Boolean,
     onStyle: (UiStyle) -> Unit,
     onLang: (Lang) -> Unit,
+    font: AppFont,
+    onFont: (AppFont) -> Unit,
     opacity: Float,
     onOpacity: (Float) -> Unit,
     glassBlur: Float,
@@ -2131,7 +2214,7 @@ fun SettingsPage(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 110.dp)
+            .padding(bottom = 20.dp)
             .verticalScroll(rememberScrollState())
     ) {
         var showPartPicker by remember { mutableStateOf(false) }
@@ -2160,6 +2243,15 @@ fun SettingsPage(
                 options = listOf("中文", "English"),
                 selected = lang.ordinal,
                 onPick = { onLang(Lang.entries[it]) }
+            )
+            KSelectRow(
+                icon = Icons.Filled.Build,
+                title = tr(lang, "字体", "Font"),
+                subtitle = null,
+                value = font.zh,
+                options = AppFont.entries.map { it.zh },
+                selected = font.ordinal,
+                onPick = { onFont(AppFont.entries[it]) }
             )
         }
 
