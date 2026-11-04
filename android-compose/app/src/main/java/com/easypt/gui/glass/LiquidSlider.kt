@@ -1,11 +1,13 @@
 package com.easypt.gui.glass
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -107,7 +109,39 @@ fun LiquidSlider(
                 }
         }
 
-        Box(Modifier.layerBackdrop(trackBackdrop)) {
+        Box(
+            Modifier
+                .layerBackdrop(trackBackdrop)
+                .fillMaxWidth()
+                .height(44f.dp)
+                .pointerInput(trackWidth) {
+                    fun valueAt(x: Float): Float {
+                        val delta = (valueRange.endInclusive - valueRange.start) *
+                            ((x / trackWidth).fastCoerceIn(0f, 1f))
+                        return (if (isLtr) valueRange.start + delta
+                        else valueRange.endInclusive - delta).coerceIn(valueRange)
+                    }
+                    // 自己接管手势：demo 原来的 inspectDragGestures 在可滚动页面里不认拖拽
+                    detectDragGestures(
+                        onDragStart = { off ->
+                            didDrag = true
+                            val v = valueAt(off.x)
+                            dampedDragAnimation.updateValue(v)
+                            onValueChange(v)
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val v = valueAt(change.position.x)
+                            dampedDragAnimation.updateValue(v)
+                            onValueChange(v)
+                        },
+                        onDragEnd = {
+                            onValueChange(dampedDragAnimation.targetValue)
+                        }
+                    )
+                },
+            contentAlignment = Alignment.CenterStart
+        ) {
             Box(
                 Modifier
                     .clip(Capsule())
