@@ -201,9 +201,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             }
             // 第一次失败：自动降级（关掉 backdrop / 特效）+ 强制回到原生样式，避免死循环
             safeRender = true
-            style = UiStyle.Native
+            val _prev = getSharedPreferences(PREF, MODE_PRIVATE).getInt("prevStyle", UiStyle.Native.ordinal)
+            style = UiStyle.entries.getOrElse(_prev) { UiStyle.Native }
             try {
-                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", UiStyle.Native.ordinal).apply()
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", style.ordinal).apply()
             } catch (_: Throwable) { }
             try { File(filesDir, "boot-trace.txt").delete() } catch (_: Throwable) { }
         } else {
@@ -939,6 +940,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private fun chooseStyle(s: UiStyle) {
+        // 回退用：记下这次的"上一个操作"
+        try {
+            getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("prevStyle", style.ordinal).apply()
+        } catch (_: Throwable) { }
         try {
             File(filesDir, "last-action.txt").writeText("切换到界面样式：${s.labelZh} (${s.name})")
         } catch (_: Throwable) {
@@ -961,6 +966,18 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         forceSafe = v
         safeRender = v
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("forceSafe", v).apply()
+        if (v) {
+            // 打开安全模式：立刻回退到上一个样式，并关掉所有特效
+            val sp = getSharedPreferences(PREF, MODE_PRIVATE)
+            val prev = sp.getInt("prevStyle", UiStyle.Native.ordinal)
+            if (style == UiStyle.Glass) {
+                style = UiStyle.entries.getOrElse(prev) { UiStyle.Native }
+                sp.edit().putInt("style", style.ordinal).apply()
+            }
+            append(t("安全模式已开启：已回退到 ${style.labelZh}", "Safe mode on: rolled back to ${style.labelZh}"), OkColor)
+        } else {
+            append(t("安全模式已关闭", "Safe mode off"), OkColor)
+        }
     }
 
     private fun chooseMonet(v: Boolean) {
@@ -1190,6 +1207,17 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     if (useBackdrop) {
+                    if (useBackdrop) {
+                        // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
+                        com.easypt.gui.glass.ProgressiveBlurEdge(
+                            backdrop = wallBackdrop,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                            heightDp = 110f,
+                            tintColor = if (Palette.dark) Color(0xFF121212) else Color.White,
+                            tintIntensity = 0.10f
+                        )
+                    }
+
                         LiquidBottomTabs(
                             dark = Palette.dark,
                             selectedTabIndex = { page },
@@ -1459,6 +1487,7 @@ fun KRow(
     subtitle: String? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
     chevron: Boolean = true,
+    tint: Color? = null,
     onClick: (() -> Unit)? = null
 ) {
     val text = LocalCardText.current
@@ -1476,7 +1505,7 @@ fun KRow(
                     Modifier
                         .size(30.dp)
                         .clip(RoundedCornerShape(9.dp))
-                        .background(miuixIconColor(icon)),
+                        .background(tint ?: miuixIconColor(icon)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
@@ -2021,15 +2050,15 @@ fun HomePage(
                 KRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
                 KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
-                    tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), onClick = onRom)
+                    tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Color(0xFF5E5CE6), onClick = onRom)
                 KRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    onClick = { onReboot("recovery") })
+                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
-                    onClick = { onReboot("bootloader") })
-                KRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
+                    tint = Color(0xFF0A84FF), onClick = { onReboot("bootloader") })
+                KRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Color(0xFFFF3B30))
             }
             1 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
                 KRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
@@ -2038,17 +2067,17 @@ fun HomePage(
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
                 KRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
-                    onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
+                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Color(0xFFFF3B30))
             }
             else -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
                 KRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
                 KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    onClick = { onReboot("recovery") })
+                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
             }
         }
 
