@@ -44,8 +44,65 @@ namespace EasyPlatformTools
         //  主题
         // ================================================================
         /// <summary>按窗体坐标贴同一张壁纸的面板，解决 WinForms 不支持真透明的问题</summary>
+        /// <summary>圆角按钮：WinForms 原生按钮是直角，这里自绘圆角 + 悬停/按下反馈</summary>
+        private class RoundButton : Button
+        {
+            public int Radius = 9;
+            private bool hover;
+            private bool down;
+
+            public RoundButton()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
+                    | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                FlatStyle = FlatStyle.Flat;
+                FlatAppearance.BorderSize = 0;
+                DoubleBuffered = true;
+            }
+
+            private System.Drawing.Drawing2D.GraphicsPath Path()
+            {
+                int r = Math.Max(0, Math.Min(Radius, Math.Min(Width, Height) / 2));
+                System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
+                if (r <= 0) { p.AddRectangle(new Rectangle(0, 0, Width, Height)); return p; }
+                p.AddArc(0, 0, r * 2, r * 2, 180, 90);
+                p.AddArc(Width - r * 2, 0, r * 2, r * 2, 270, 90);
+                p.AddArc(Width - r * 2, Height - r * 2, r * 2, r * 2, 0, 90);
+                p.AddArc(0, Height - r * 2, r * 2, r * 2, 90, 90);
+                p.CloseFigure();
+                return p;
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+            protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.Clear(Parent != null ? Parent.BackColor : BackColor);
+
+                Color fill = BackColor;
+                if (!Enabled) { fill = ControlPaint.Light(fill, 0.2f); }
+                else if (down) { fill = ControlPaint.Dark(fill, 0.10f); }
+                else if (hover) { fill = ControlPaint.Light(fill, 0.12f); }
+
+                using (System.Drawing.Drawing2D.GraphicsPath path = Path())
+                {
+                    using (SolidBrush b = new SolidBrush(fill)) { g.FillPath(b, path); }
+                    Color border = Enabled ? FlatAppearance.BorderColor : ControlPaint.Light(FlatAppearance.BorderColor, 0.3f);
+                    using (Pen pen = new Pen(border, 1f)) { g.DrawPath(pen, path); }
+                }
+
+                Color fg = Enabled ? ForeColor : ControlPaint.Light(ForeColor, 0.35f);
+                TextRenderer.DrawText(g, Text, Font, ClientRectangle, fg,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
+        }
         /// <summary>支持半透明底的平面按钮</summary>
-        private sealed class AlphaButton : Button
+        private sealed class AlphaButton : RoundButton
         {
             public AlphaButton()
             {
@@ -55,6 +112,111 @@ namespace EasyPlatformTools
             }
         }
 
+        /// <summary>日志区：自己画壁纸 + 半透明遮罩 + 彩色文本，RichTextBox 做不到真透明</summary>
+        private sealed class LogView : Control
+        {
+            private readonly System.Collections.Generic.List<System.Tuple<string, Color>> rows =
+                new System.Collections.Generic.List<System.Tuple<string, Color>>();
+            private int scroll;
+            public Color VeilColor = Color.FromArgb(96, 10, 12, 16);
+            public int TextPad = 14;
+
+            public LogView()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+                    | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+                DoubleBuffered = true;
+            }
+
+            private int LineHeight()
+            {
+                using (Graphics g = CreateGraphics())
+                {
+                    return Math.Max(10, (int)Math.Ceiling(Font.GetHeight(g)));
+                }
+            }
+
+            public void AppendColored(string text, Color color)
+            {
+                if (text == null) { return; }
+                string[] ls = text.Replace("\r\n", "\n").Split('\n');
+                foreach (string s in ls) { rows.Add(System.Tuple.Create(s, color)); }
+                scroll = int.MaxValue;
+                Invalidate();
+            }
+
+            public void ClearAll()
+            {
+                rows.Clear();
+                scroll = 0;
+                Invalidate();
+            }
+
+            public string GetText()
+            {
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                foreach (System.Tuple<string, Color> r in rows) { sb.AppendLine(r.Item1); }
+                return sb.ToString();
+            }
+
+            public void ScrollToEnd()
+            {
+                scroll = int.MaxValue;
+                Invalidate();
+            }
+
+            protected override void OnMouseWheel(MouseEventArgs e)
+            {
+                int lh = LineHeight();
+                int total = rows.Count * lh;
+                int max = Math.Max(0, total - ClientSize.Height);
+                int cur = Math.Min(scroll, max);
+                cur -= Math.Sign(e.Delta) * lh * 3;
+                scroll = Math.Max(0, Math.Min(max, cur));
+                Invalidate();
+                base.OnMouseWheel(e);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                Bitmap wall = WallPanel.Wall;
+                Form f = FindForm();
+                if (wall != null && f != null)
+                {
+                    Point inForm = f.PointToClient(PointToScreen(Point.Empty));
+                    try { g.DrawImageUnscaled(wall, -inForm.X, -inForm.Y); }
+                    catch { g.Clear(Color.Black); }
+                }
+                else
+                {
+                    g.Clear(BackColor);
+                }
+
+                using (SolidBrush veil = new SolidBrush(VeilColor))
+                {
+                    g.FillRectangle(veil, ClientRectangle);
+                }
+
+                int lh = LineHeight();
+                int total = rows.Count * lh;
+                int max = Math.Max(0, total - ClientSize.Height);
+                if (scroll > max) { scroll = max; }
+
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                int y = -scroll;
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    if (y + lh < 0) { y += lh; continue; }
+                    if (y > ClientSize.Height) { break; }
+                    using (SolidBrush b = new SolidBrush(rows[i].Item2))
+                    {
+                        g.DrawString(rows[i].Item1, Font, b, TextPad, y);
+                    }
+                    y += lh;
+                }
+            }
+        }
         private sealed class WallPanel : Panel
         {
             public static Bitmap Wall;
@@ -256,6 +418,8 @@ namespace EasyPlatformTools
             if (dlgSettings != null && !dlgSettings.IsDisposed)
             {
                 dlgSettings.Font = fUi;
+            // 对话框显示前统一上一次色：后面才创建的按钮（背景图那排）也能套用主题
+            dlgSettings.Shown += delegate { ApplySettingsTheme(); };
                 foreach (Label l in dlgLabels) { l.Font = fUi; }
                 foreach (Button b in dlgButtons) { b.Font = fUi; }
                 if (cbFont != null) { cbFont.Font = fUi; }
@@ -281,7 +445,7 @@ namespace EasyPlatformTools
         private static TableLayoutPanel tbl;
         private static Panel panelLeft, panelMain, panelTop, panelBottom, rtHost;
         private static Label lblStatus, lblPath, lblMenu, lblHint;
-        private static RichTextBox rt;
+        private static LogView rt;
         private static ComboBox cbMode;
         private static TextBox txtInput;
         private static Button btnRun, btnStop, btnClear, btnSave, btnSettings;
@@ -524,6 +688,9 @@ namespace EasyPlatformTools
             tbl.Dock = DockStyle.Fill;
             tbl.ColumnCount = 2;
             tbl.RowCount = 1;
+                        tbl.Padding = new Padding(0);
+            tbl.Margin = new Padding(0);
+            tbl.CellBorderStyle = TableLayoutPanelCellBorderStyle.None;
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200F));
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -571,6 +738,7 @@ namespace EasyPlatformTools
         private static void BuildSidebar()
         {
             panelLeft = new WallPanel();
+            panelLeft.Margin = new Padding(0);
             panelLeft.Dock = DockStyle.Fill;
             panelLeft.Padding = new Padding(12, 10, 8, 10);
             tbl.Controls.Add(panelLeft, 0, 0);
@@ -646,6 +814,7 @@ namespace EasyPlatformTools
         {
             panelMain = new WallPanel();
             panelMain.Dock = DockStyle.Fill;
+            panelMain.Margin = new Padding(0);
             tbl.Controls.Add(panelMain, 1, 0);
 
             panelTop = new WallPanel();
@@ -749,17 +918,14 @@ namespace EasyPlatformTools
 
             rtHost = new Panel();
             rtHost.Dock = DockStyle.Fill;
-            rtHost.Padding = new Padding(16, 6, 0, 0);
+            rtHost.Margin = new Padding(0);
+            rtHost.Padding = new Padding(0, 4, 0, 0);
             panelMain.Controls.Add(rtHost);
 
-            rt = new RichTextBox();
+            rt = new LogView();
             rt.Dock = DockStyle.Fill;
-            rt.BorderStyle = BorderStyle.None;
-            rt.ReadOnly = true;
-            rt.WordWrap = false;
-            rt.HideSelection = false;
-            rt.DetectUrls = false;
             rt.Font = fOut;
+            rt.ForeColor = Color.White;
             rtHost.Controls.Add(rt);
             rtHost.BringToFront();
 
@@ -783,7 +949,7 @@ namespace EasyPlatformTools
                 catch { }
             };
 
-            btnClear.Click += delegate { lines.Clear(); rt.Clear(); };
+            btnClear.Click += delegate { lines.Clear(); rt.ClearAll(); };
 
             btnSave.Click += delegate
             {
@@ -794,7 +960,7 @@ namespace EasyPlatformTools
                 if (Directory.Exists(logDir)) { dlg.InitialDirectory = logDir; }
                 if (dlg.ShowDialog() == DialogResult.OK)
                 {
-                    File.WriteAllText(dlg.FileName, rt.Text, new UTF8Encoding(true));
+                    File.WriteAllText(dlg.FileName, rt.GetText(), new UTF8Encoding(true));
                     AddOut("已保存：" + dlg.FileName, Role.Dim);
                 }
             };
@@ -900,6 +1066,8 @@ namespace EasyPlatformTools
             dlgSettings.AutoScaleMode = AutoScaleMode.None;
             dlgSettings.ClientSize = new Size(452, 540);
             dlgSettings.Font = fUi;
+            // 对话框显示前统一上一次色：后面才创建的按钮（背景图那排）也能套用主题
+            dlgSettings.Shown += delegate { ApplySettingsTheme(); };
             try { dlgSettings.Icon = form.Icon; } catch { }
 
             // ---- 背景 ----
@@ -913,7 +1081,7 @@ namespace EasyPlatformTools
 
             for (int i = 0; i < PRESETS.Length; i++)
             {
-                Button sw = new Button();
+                Button sw = new RoundButton();
                 sw.Size = new Size(30, 26);
                 sw.Margin = new Padding(3);
                 sw.FlatStyle = FlatStyle.Flat;
@@ -1049,13 +1217,15 @@ namespace EasyPlatformTools
 
             Label lblWall = new Label();
             lblWall.Text = string.IsNullOrEmpty(wallpaperPath) ? "（无）" : Path.GetFileName(wallpaperPath);
-            lblWall.Location = new Point(262, 390);
-            lblWall.AutoSize = true;
+            lblWall.Location = new Point(294, 390);
+            lblWall.AutoSize = false;
+            lblWall.Size = new Size(142, 18);
+            lblWall.AutoEllipsis = true;
             lblWall.ForeColor = theme.Dim;
             lblWall.Font = fSmall;
             dlgSettings.Controls.Add(lblWall);
 
-            Button btnWall = AddDlgButton("选择图片…", 16, 382, 130, 32);
+            Button btnWall = AddDlgButton("选择图片…", 16, 382, 104, 32);
             btnWall.Click += delegate
             {
                 OpenFileDialog ofd = new OpenFileDialog();
@@ -1069,41 +1239,47 @@ namespace EasyPlatformTools
                 }
             };
 
-            Button btnWallOnline = AddDlgButton("在线壁纸", 256, 382, 110, 32);
+            Button btnWallOnline = AddDlgButton("在线壁纸", 194, 382, 92, 32);
             btnWallOnline.Click += delegate
             {
                 using (Form dlgOnline = new Form())
                 {
                     dlgOnline.Text = "在线壁纸 · 必应";
-                    dlgOnline.Size = new Size(720, 520);
+                    dlgOnline.Size = new Size(760, 600);
                     dlgOnline.StartPosition = FormStartPosition.CenterParent;
-                    dlgOnline.BackColor = theme.Bg;
+                    dlgOnline.BackColor = theme.Panel;
                     dlgOnline.ForeColor = theme.Text;
                     dlgOnline.Font = fSmall;
+                    dlgOnline.MinimizeBox = false;
+                    dlgOnline.MaximizeBox = false;
 
                     Label tip = new Label();
                     tip.Text = "正在获取必应壁纸…";
                     tip.AutoSize = true;
                     tip.Location = new Point(16, 12);
+                    tip.ForeColor = theme.Dim;
                     dlgOnline.Controls.Add(tip);
 
-                    ListView lv = new ListView();
-                    lv.View = View.LargeIcon;
-                    lv.LargeImageList = new ImageList();
-                    lv.LargeImageList.ImageSize = new Size(160, 90);
-                    lv.Dock = DockStyle.Fill;
-                    lv.MultiSelect = false;
-                    lv.BackColor = theme.Panel;
-                    lv.ForeColor = theme.Text;
+                    FlowLayoutPanel flow = new FlowLayoutPanel();
+                    flow.Location = new Point(8, 36);
+                    flow.Size = new Size(728, 470);
+                    flow.AutoScroll = true;
+                    flow.FlowDirection = FlowDirection.LeftToRight;
+                    flow.WrapContents = true;
+                    flow.BackColor = theme.Output;
+                    dlgOnline.Controls.Add(flow);
 
-                    Panel host = new Panel();
-                    host.Dock = DockStyle.Fill;
-                    host.Padding = new Padding(16, 36, 16, 60);
-                    host.Controls.Add(lv);
-                    dlgOnline.Controls.Add(host);
-
-                    List<string> urls = new List<string>();
-                    string[] titles = new string[0];
+                    Button close = new RoundButton();
+                    close.Text = "关闭";
+                    close.Size = new Size(88, 30);
+                    close.Location = new Point(648, 512);
+                    close.FlatStyle = FlatStyle.Flat;
+                    close.FlatAppearance.BorderSize = 1;
+                    close.BackColor = theme.Btn;
+                    close.ForeColor = theme.Text;
+                    close.FlatAppearance.BorderColor = theme.Border;
+                    close.Click += delegate { dlgOnline.Close(); };
+                    dlgOnline.Controls.Add(close);
 
                     System.Threading.ThreadPool.QueueUserWorkItem(delegate
                     {
@@ -1112,32 +1288,100 @@ namespace EasyPlatformTools
                             using (System.Net.WebClient wc = new System.Net.WebClient())
                             {
                                 wc.Encoding = System.Text.Encoding.UTF8;
+                                wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                                 string json = wc.DownloadString("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN");
                                 MatchCollection ms = Regex.Matches(json, "\"urlbase\":\"([^\"]+)\"");
-                                List<string> bases = new List<string>();
-                                foreach (Match m in ms) bases.Add(m.Groups[1].Value);
+                                System.Collections.Generic.List<string> bases = new System.Collections.Generic.List<string>();
+                                foreach (Match m in ms) { bases.Add(m.Groups[1].Value); }
+
                                 dlgOnline.BeginInvoke((MethodInvoker)delegate
                                 {
-                                    tip.Text = bases.Count == 0 ? "没有获取到壁纸" : "点一张设为背景";
-                                    int i = 0;
+                                    tip.Text = bases.Count == 0 ? "没有获取到壁纸" : "点每一项下面的「选择」即可应用";
+                                    int idx = 0;
                                     foreach (string b in bases)
                                     {
                                         string full = "https://www.bing.com" + b + "_UHD.jpg";
                                         string thumb = "https://www.bing.com" + b + "_400x240.jpg";
-                                        urls.Add(full);
+                                        Panel card = new Panel();
+                                        card.Size = new Size(226, 156);
+                                        card.Margin = new Padding(6);
+                                        card.BackColor = theme.Btn;
+
+                                        PictureBox pic = new PictureBox();
+                                        pic.Size = new Size(206, 92);
+                                        pic.Location = new Point(10, 8);
+                                        pic.SizeMode = PictureBoxSizeMode.Zoom;
+                                        pic.BackColor = theme.Output;
                                         try
                                         {
                                             byte[] bytes = wc.DownloadData(thumb);
-                                            using (MemoryStream ms2 = new MemoryStream(bytes))
+                                            using (System.IO.MemoryStream m2 = new System.IO.MemoryStream(bytes))
                                             {
-                                                lv.LargeImageList.Images.Add(Image.FromStream(ms2));
+                                                pic.Image = Image.FromStream(m2);
                                             }
                                         }
-                                        catch
+                                        catch { }
+                                        card.Controls.Add(pic);
+
+                                        string captured = full;
+                                        Button pick = new RoundButton();
+                                        pick.Text = "选择";
+                                        pick.Size = new Size(206, 30);
+                                        pick.Location = new Point(10, 110);
+                                        pick.FlatStyle = FlatStyle.Flat;
+                                        pick.FlatAppearance.BorderSize = 1;
+                                        pick.BackColor = theme.RunBtn;
+                                        pick.ForeColor = Color.White;
+                                        pick.FlatAppearance.BorderColor = theme.Border;
+                                        pick.Click += delegate
                                         {
-                                            lv.LargeImageList.Images.Add(new Bitmap(160, 90));
-                                        }
-                                        lv.Items.Add(new ListViewItem("壁纸 " + (++i), i - 1));
+                                            pick.Enabled = false;
+                                            pick.Text = "下载中…";
+                                            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                                            {
+                                                try
+                                                {
+                                                    string dir = Path.Combine(Path.GetTempPath(), "easypt-walls");
+                                                    Directory.CreateDirectory(dir);
+                                                    string file = Path.Combine(dir, "bing-" + DateTime.Now.Ticks + ".jpg");
+                                                    using (System.Net.WebClient wc2 = new System.Net.WebClient())
+                                                    {
+                                                        wc2.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                                        wc2.DownloadFile(captured, file);
+                                                    }
+                                                    using (Image probe = Image.FromFile(file))
+                                                    {
+                                                        if (probe.Width < 100) { throw new Exception("不是有效图片"); }
+                                                    }
+                                                    dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                                    {
+                                                        wallpaperPath = file;
+                                                        SaveConfig();
+                                                        ApplyTheme(theme);
+                                                        try { form.Invalidate(true); form.Refresh(); } catch { }
+                                                        lblWall.Text = Path.GetFileName(file);
+                                                        dlgOnline.Close();
+                                                    });
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    try
+                                                    {
+                                                        dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                                        {
+                                                            pick.Enabled = true;
+                                                            pick.Text = "选择";
+                                                            tip.Text = "下载失败：" + ex.Message;
+                                                        });
+                                                    }
+                                                    catch { }
+                                                }
+                                            });
+                                        };
+                                        card.Controls.Add(pick);
+
+                                        flow.Controls.Add(card);
+                                        idx++;
                                     }
                                 });
                             }
@@ -1149,58 +1393,10 @@ namespace EasyPlatformTools
                         }
                     });
 
-                    Button ok = new Button();
-                    ok.Text = "应用";
-                    ok.Location = new Point(520, 430);
-                    ok.Size = new Size(80, 32);
-                    ok.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                    ok.Click += delegate
-                    {
-                        if (lv.SelectedIndices.Count == 0) return;
-                        string url = urls[lv.SelectedIndices[0]];
-                        ok.Enabled = false;
-                        tip.Text = "正在下载…";
-                        System.Threading.ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            try
-                            {
-                                string dir = Path.Combine(Path.GetTempPath(), "easypt-walls");
-                                Directory.CreateDirectory(dir);
-                                string file = Path.Combine(dir, "bing-" + DateTime.Now.Ticks + ".jpg");
-                                using (System.Net.WebClient wc2 = new System.Net.WebClient())
-                                {
-                                    wc2.DownloadFile(url, file);
-                                }
-                                dlgOnline.BeginInvoke((MethodInvoker)delegate
-                                {
-                                    wallpaperPath = file;
-                                    SaveConfig();
-                                    ApplyTheme(theme);
-                                    lblWall.Text = Path.GetFileName(file);
-                                    dlgOnline.Close();
-                                });
-                            }
-                            catch (Exception ex2)
-                            {
-                                try { dlgOnline.BeginInvoke((MethodInvoker)delegate { tip.Text = "下载失败：" + ex2.Message; ok.Enabled = true; }); }
-                                catch { }
-                            }
-                        });
-                    };
-                    dlgOnline.Controls.Add(ok);
-
-                    Button cancel = new Button();
-                    cancel.Text = "取消";
-                    cancel.Location = new Point(608, 430);
-                    cancel.Size = new Size(80, 32);
-                    cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                    cancel.Click += delegate { dlgOnline.Close(); };
-                    dlgOnline.Controls.Add(cancel);
-
                     dlgOnline.ShowDialog(dlgSettings);
                 }
             };
-            Button btnWallOff = AddDlgButton("移除", 156, 382, 90, 32);
+            Button btnWallOff = AddDlgButton("移除", 126, 382, 62, 32);
             btnWallOff.Click += delegate
             {
                 wallpaperPath = "";
@@ -1258,7 +1454,7 @@ namespace EasyPlatformTools
 
         private static Button AddDlgButton(string text, int x, int y, int w, int h)
         {
-            Button b = new Button();
+            Button b = new RoundButton();
             b.Text = text;
             b.Location = new Point(x, y);
             b.Size = new Size(w, h);
@@ -1336,7 +1532,7 @@ namespace EasyPlatformTools
             lblSetupPct.Text = "";
             dlgSetup.Controls.Add(lblSetupPct);
 
-            btnSetupGo = new Button();
+            btnSetupGo = new RoundButton();
             btnSetupGo.Text = "立即下载";
             btnSetupGo.Location = new Point(20, 216);
             btnSetupGo.Size = new Size(150, 36);
@@ -1347,7 +1543,7 @@ namespace EasyPlatformTools
             btnSetupGo.Font = fUi;
             dlgSetup.Controls.Add(btnSetupGo);
 
-            btnSetupManual = new Button();
+            btnSetupManual = new RoundButton();
             btnSetupManual.Text = "手动下载";
             btnSetupManual.Location = new Point(182, 216);
             btnSetupManual.Size = new Size(120, 36);
@@ -1359,7 +1555,7 @@ namespace EasyPlatformTools
             btnSetupManual.Font = fUi;
             dlgSetup.Controls.Add(btnSetupManual);
 
-            btnSetupExit = new Button();
+            btnSetupExit = new RoundButton();
             btnSetupExit.Text = "退出";
             btnSetupExit.Location = new Point(314, 216);
             btnSetupExit.Size = new Size(100, 36);
@@ -1708,6 +1904,35 @@ namespace EasyPlatformTools
                 (int)(c.B * a + backdrop.B * (1 - a)));
         }
 
+        /// <summary>取壁纸在某个控件所在区域的平均色，用来给不支持透明的控件做"伪半透明"</summary>
+        private static Color WallColorUnder(Control c, Color fallback)
+        {
+            Bitmap wall = WallPanel.Wall;
+            if (wall == null || c == null || form == null || !c.IsHandleCreated) { return fallback; }
+            try
+            {
+                Point p = form.PointToClient(c.PointToScreen(Point.Empty));
+                int w = Math.Max(1, c.Width);
+                int h = Math.Max(1, c.Height);
+                long r = 0, g = 0, b = 0;
+                int n = 0;
+                int stepX = Math.Max(1, w / 16);
+                int stepY = Math.Max(1, h / 16);
+                for (int y = p.Y; y < p.Y + h; y += stepY)
+                {
+                    if (y < 0 || y >= wall.Height) { continue; }
+                    for (int x = p.X; x < p.X + w; x += stepX)
+                    {
+                        if (x < 0 || x >= wall.Width) { continue; }
+                        Color q = wall.GetPixel(x, y);
+                        r += q.R; g += q.G; b += q.B; n++;
+                    }
+                }
+                if (n == 0) { return fallback; }
+                return Color.FromArgb((int)(r / n), (int)(g / n), (int)(b / n));
+            }
+            catch { return fallback; }
+        }
         private static Color AverageColor(Bitmap bmp, Color veil)
         {
             try
@@ -1770,14 +1995,21 @@ namespace EasyPlatformTools
                     form.BackgroundImageLayout = ImageLayout.Stretch;
                 }
                 WallPanel.Wall = (Bitmap)form.BackgroundImage;
-                WallPanel.Veil = Color.FromArgb(t.Dark ? 95 : 85, t.Output);
+                WallPanel.Veil = Color.FromArgb(t.Dark ? 58 : 42, t.Output);
                 backdrop = AverageColor((Bitmap)form.BackgroundImage, WallPanel.Veil);
                 if (menuButtons.Count > 0) { ApplyButtonColors(t); }
+                if (WallPanel.Wall != null)
+                {
+                    rt.BackColor = WallColorUnder(rt, backdrop);
+                    txtInput.BackColor = WallColorUnder(txtInput, t.EditBg);
+                    cbMode.BackColor = WallColorUnder(cbMode, t.Btn);
+                }
                 panelLeft.Invalidate();
                 panelTop.Invalidate();
                 panelBottom.Invalidate();
                 panelMain.Invalidate();
                 tbl.Invalidate();
+                try { rt.Invalidate(); txtInput.Invalidate(); } catch { }
             }
             catch
             {
@@ -1788,12 +2020,15 @@ namespace EasyPlatformTools
         {
             if (form == null) { return; }
 
+            // 先算壁纸（WallPanel.Wall / backdrop），后面的配色要用到
+            ApplyWallpaper(t);
+
             form.BackColor = t.Output;
-            if (tbl != null) { tbl.BackColor = t.Panel; }
+            if (tbl != null) { tbl.BackColor = (WallPanel.Wall != null) ? backdrop : t.Panel; }
             panelLeft.BackColor = t.Panel;
             panelTop.BackColor = t.Panel;
             panelBottom.BackColor = t.Panel;
-            panelMain.BackColor = t.Output;
+            panelMain.BackColor = (WallPanel.Wall != null) ? backdrop : t.Output;
             if (rtHost != null) { rtHost.BackColor = t.Output; }
 
             lblPath.ForeColor = t.Dim;
@@ -1802,10 +2037,12 @@ namespace EasyPlatformTools
             PaintStatus();
 
             rt.BackColor = t.Output;
-            rt.ForeColor = t.Text;
-            txtInput.BackColor = t.EditBg;
+            // 有壁纸时用白字，保证在图片上可读
+            rt.ForeColor = Color.White;
+            ((LogView)rt).VeilColor = Color.FromArgb(t.Dark ? 110 : 130, Color.Black);
+            txtInput.BackColor = (WallPanel.Wall != null) ? WallColorUnder(txtInput, t.EditBg) : t.EditBg;
             txtInput.ForeColor = t.Text;
-            cbMode.BackColor = t.Btn;
+            cbMode.BackColor = (WallPanel.Wall != null) ? WallColorUnder(cbMode, t.Btn) : t.Btn;
             cbMode.ForeColor = t.Text;
 
             btnRun.BackColor = t.RunBtn;
@@ -1831,7 +2068,6 @@ namespace EasyPlatformTools
             }
 
             foreach (Label l in sectionLabels) { l.ForeColor = t.Dim; }
-            ApplyWallpaper(t);
         }
 
         private static Color RoleColor(Role r)
@@ -1868,18 +2104,13 @@ namespace EasyPlatformTools
 
         private static void AppendLine(string text, Color color)
         {
-            rt.SelectionStart = rt.TextLength;
-            rt.SelectionLength = 0;
-            rt.SelectionColor = color;
-            rt.AppendText(text + "\r\n");
-            rt.SelectionStart = rt.TextLength;
-            rt.ScrollToCaret();
+            rt.AppendColored(text, color);
         }
 
         private static void RenderAll()
         {
             if (rt == null) { return; }
-            rt.Clear();
+            rt.ClearAll();
             foreach (KeyValuePair<Role, string> kv in lines)
             {
                 AppendLine(kv.Value, RoleColor(kv.Key));
@@ -2192,7 +2423,7 @@ namespace EasyPlatformTools
 
         private static Button DialogButton(Form f, string text, int x, int y, int w, int h, bool primary)
         {
-            Button b = new Button();
+            Button b = new RoundButton();
             b.Text = text;
             b.Location = new Point(x, y);
             b.Size = new Size(w, h);
@@ -3342,23 +3573,23 @@ namespace EasyPlatformTools
         {
             if (dlgRemote != null && !dlgRemote.IsDisposed) { dlgRemote.Activate(); return; }
 
-            dlgRemote = NewToolDialog("手机遥控服务", new Size(520, 300));
+            dlgRemote = NewToolDialog("手机遥控服务", new Size(520, 330));
 
             lblRemoteInfo = new Label();
             lblRemoteInfo.Location = new Point(20, 18);
-            lblRemoteInfo.Size = new Size(480, 90);
+            lblRemoteInfo.Size = new Size(480, 136);
             lblRemoteInfo.Font = fSmall;
             lblRemoteInfo.ForeColor = theme.Text;
             dlgRemote.Controls.Add(lblRemoteInfo);
 
             lblRemoteStatus = new Label();
-            lblRemoteStatus.Location = new Point(20, 116);
+            lblRemoteStatus.Location = new Point(20, 158);
             lblRemoteStatus.Size = new Size(480, 22);
             lblRemoteStatus.Font = fSmall;
             lblRemoteStatus.ForeColor = theme.Dim;
             dlgRemote.Controls.Add(lblRemoteStatus);
 
-            Button btnToggle = DialogButton(dlgRemote, "启动服务", 20, 156, 140, 40, true);
+            Button btnToggle = DialogButton(dlgRemote, "启动服务", 20, 192, 140, 40, true);
             btnToggle.Click += delegate
             {
                 if (RemoteServer.Running)
@@ -3386,16 +3617,16 @@ namespace EasyPlatformTools
                 RefreshRemoteInfo();
             };
 
-            Button btnCopy = DialogButton(dlgRemote, "复制配对码", 172, 156, 130, 40, false);
+            Button btnCopy = DialogButton(dlgRemote, "复制配对码", 172, 192, 130, 40, false);
             btnCopy.Click += delegate
             {
                 try { Clipboard.SetText(remoteToken); SetLbl(lblRemoteStatus, "配对码已复制"); } catch { }
             };
 
-            Button btnClose = DialogButton(dlgRemote, "关闭", 314, 156, 90, 40, false);
+            Button btnClose = DialogButton(dlgRemote, "关闭", 314, 192, 90, 40, false);
             btnClose.Click += delegate { dlgRemote.Close(); };
 
-            Button btnReload = DialogButton(dlgRemote, "换一个配对码", 20, 206, 160, 34, false);
+            Button btnReload = DialogButton(dlgRemote, "换一个配对码", 20, 242, 160, 34, false);
             btnReload.Click += delegate
             {
                 remoteToken = new Random().Next(100000, 999999).ToString();

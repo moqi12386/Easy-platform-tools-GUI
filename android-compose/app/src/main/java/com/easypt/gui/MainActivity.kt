@@ -175,7 +175,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
     private var fontChoice by mutableStateOf(AppFont.System)
-    private var miSans by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
+    private var customFont by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
+    private var fontPicker: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
     private var crashBannerClosed by mutableStateOf(false)
@@ -187,6 +188,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 本地字体选择器（ttf / otf / ttc）
+        fontPicker = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri -> if (uri != null) installLocalFont(uri) }
         // 上一次没跑完？（成功启动会把轨迹删掉，残留 = 上次没跑完）
         val prevTrace = readTrace()
         val prevCrash = readCrash()
@@ -238,8 +243,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         monet = sp.getBoolean("monet", false)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         runCatching {
-            val f = File(filesDir, "MiSans-Regular.ttf")
-            if (f.exists()) miSans = androidx.compose.ui.text.font.FontFamily(
+            val f = File(filesDir, "custom-font.ttf")
+            if (f.exists()) customFont = androidx.compose.ui.text.font.FontFamily(
                 androidx.compose.ui.text.font.Font(f)
             )
         }
@@ -990,48 +995,79 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private fun chooseFont(f: AppFont) {
-        if (f == AppFont.MiSans) {
-            if (miSans != null) {
+        when (f) {
+            AppFont.Harmony -> {
+                if (customFont != null) {
+                    fontChoice = f
+                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
+                } else {
+                    downloadHarmony()
+                }
+            }
+            AppFont.Local -> fontPicker?.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
+            else -> {
                 fontChoice = f
                 getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
-                return
             }
-            downloadMiSans()
-            return
         }
-        fontChoice = f
-        getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
     }
 
-    /** MiSans 官方包较大，后台下载后只取 Regular 那一份 */
-    private fun downloadMiSans() {
-        append(t("开始下载 MiSans（官方包较大，请耐心等待）…", "Downloading MiSans…"), TextSecondary)
+    /** 本地字体：拷进 filesDir 后加载（ttf / otf / ttc） */
+    fun installLocalFont(uri: android.net.Uri) {
         Thread {
-            val zip = File(cacheDir, "misans.zip")
-            val out = File(filesDir, "MiSans-Regular.ttf")
+            try {
+                val out = File(filesDir, "custom-font.ttf")
+                contentResolver.openInputStream(uri)?.use { i ->
+                    out.outputStream().use { o -> i.copyTo(o) }
+                } ?: throw IllegalStateException("无法读取文件")
+                val fam = androidx.compose.ui.text.font.FontFamily(
+                    androidx.compose.ui.text.font.Font(out)
+                )
+                runOnUiThread {
+                    customFont = fam
+                    fontChoice = AppFont.Local
+                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.Local.ordinal).apply()
+                    append(t("本地字体已应用", "Local font applied"), OkColor)
+                }
+            } catch (e: Throwable) {
+                ui.post { append(t("字体加载失败（支持 ttf/otf/ttc）：${e.message}", "Font load failed: ${e.message}"), ErrColor) }
+            }
+        }.start()
+    }
+
+    /** HarmonyOS Sans：下载官方压缩包，取第一个 ttf */
+    private fun downloadHarmony() {
+        append(t("开始下载 HarmonyOS Sans（约 50MB，请稍候）…", "Downloading HarmonyOS Sans (~50MB)…"), TextSecondary)
+        Thread {
+            val zip = File(cacheDir, "harmony.zip")
+            val out = File(filesDir, "custom-font.ttf")
             try {
                 if (!out.exists()) {
-                    java.net.URL("https://hyperos.mi.com/font-download/MiSans.zip").openStream().use { i ->
+                    java.net.URL("https://registry.npmmirror.com/harmonyos-sans/1.0.0/files/HarmonyOS%20Sans.zip").openStream().use { i ->
                         zip.outputStream().use { o -> i.copyTo(o) }
                     }
                     java.util.zip.ZipFile(zip).use { zf ->
-                        val entry = zf.entries().asSequence().firstOrNull {
-                            it.name.endsWith("MiSans-Regular.ttf", true)
-                        } ?: throw IllegalStateException("压缩包里没有 MiSans-Regular.ttf")
+                        val all = zf.entries().asSequence().filter {
+                            it.name.endsWith(".ttf", true) || it.name.endsWith(".otf", true)
+                        }.toList()
+                        val entry = all.firstOrNull { it.name.contains("Regular", true) && it.name.contains("SC", true) }
+                            ?: all.firstOrNull { it.name.contains("Regular", true) }
+                            ?: all.firstOrNull()
+                            ?: throw IllegalStateException("压缩包里没有字体文件")
                         zf.getInputStream(entry).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
                     }
                     zip.delete()
                 }
                 runOnUiThread {
-                    miSans = androidx.compose.ui.text.font.FontFamily(
+                    customFont = androidx.compose.ui.text.font.FontFamily(
                         androidx.compose.ui.text.font.Font(out)
                     )
-                    fontChoice = AppFont.MiSans
-                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.MiSans.ordinal).apply()
-                    append(t("MiSans 已应用", "MiSans applied"), OkColor)
+                    fontChoice = AppFont.Harmony
+                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.Harmony.ordinal).apply()
+                    append(t("HarmonyOS Sans 已应用", "HarmonyOS Sans applied"), OkColor)
                 }
             } catch (e: Throwable) {
-                ui.post { append(t("MiSans 下载/解压失败：${e.message}", "MiSans failed: ${e.message}"), ErrColor) }
+                ui.post { append(t("HarmonyOS 下载/解压失败：${e.message}", "HarmonyOS failed: ${e.message}"), ErrColor) }
             }
         }.start()
     }
@@ -1160,7 +1196,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
-                                typography = typographyWith(if (fontChoice == AppFont.MiSans) miSans else fontChoice.family),
+                                typography = typographyWith(if (fontChoice == AppFont.Harmony || fontChoice == AppFont.Local) customFont else fontChoice.family),
                                 colorScheme = if (dark) {
                                     darkColorScheme(
                                         primary = Accent,
@@ -1378,7 +1414,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
                 MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                     MaterialTheme(
-                        typography = typographyWith(if (fontChoice == AppFont.MiSans) miSans else fontChoice.family),
+                        typography = typographyWith(if (fontChoice == AppFont.Harmony || fontChoice == AppFont.Local) customFont else fontChoice.family),
                         colorScheme = if (dark) {
                             darkColorScheme(primary = Accent, surface = Surface, onSurface = TextPrimary)
                         } else {
@@ -3210,3 +3246,4 @@ fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
         }
     }
 }
+

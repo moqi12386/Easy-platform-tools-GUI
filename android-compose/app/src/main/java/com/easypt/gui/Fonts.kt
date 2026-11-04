@@ -10,7 +10,8 @@ enum class AppFont(val zh: String, val en: String, val family: FontFamily?) {
     Serif("衬线（宋体）", "Serif", FontFamily.Serif),
     Mono("等宽", "Monospace", FontFamily.Monospace),
     Cursive("手写体", "Cursive", FontFamily.Cursive),
-    MiSans("MiSans（点击下载）", "MiSans (download)", null);
+    Harmony("HarmonyOS Sans（点击下载）", "HarmonyOS Sans (download)", null),
+    Local("本地字体（选择文件）", "Local font file", null);
 
     val label: String get() = zh
 }
