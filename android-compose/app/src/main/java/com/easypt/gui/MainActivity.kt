@@ -21,16 +21,25 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -52,7 +61,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -166,6 +174,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var monet by mutableStateOf(false)
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
+    private var showWpSource by mutableStateOf(false)
+    private var showBing by mutableStateOf(false)
 
 
     private fun t(zh: String, en: String) = tr(lang, zh, en)
@@ -470,6 +480,23 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             customWallpaper = true
             getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("wp", true).apply()
             reloadWallpaper()
+        }.start()
+    }
+
+    /** 在线壁纸：下载后走本地同一套流程 */
+    fun setWallpaperFromUrl(url: String) {
+        append(t("下载壁纸…", "Downloading wallpaper…"), TextSecondary)
+        Thread {
+            val f = File(cacheDir, "wp_online.jpg")
+            try {
+                java.net.URL(url).openStream().use { input ->
+                    f.outputStream().use { out -> input.copyTo(out) }
+                }
+            } catch (e: Throwable) {
+                ui.post { append(t("下载失败：${e.message}", "Download failed: ${e.message}"), ErrColor) }
+                return@Thread
+            }
+            runOnUiThread { setWallpaperFrom(Uri.fromFile(f)) }
         }.start()
     }
 
@@ -1130,8 +1157,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             getSharedPreferences(PREF, MODE_PRIVATE).edit().putFloat("gdens", it).apply()
                                         },
                                         customWallpaper = customWallpaper,
-                                        onPickWallpaper = { pickWallpaper.launch(arrayOf("image/*")) },
+                                        onPickWallpaper = { showWpSource = true },
                                         onResetWallpaper = { resetWallpaper() },
+                                        parts = parts.map { it.first },
                                         part = part,
                                         onPart = { choosePart(it) },
                                         host = host,
@@ -1147,6 +1175,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     if (useBackdrop) {
                         LiquidBottomTabs(
+                            dark = Palette.dark,
                             selectedTabIndex = { page },
                             onTabSelected = { page = it },
                             backdrop = wallBackdrop,
@@ -1191,6 +1220,29 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
                 if (showPlayground) {
                     GlassPlaygroundOverlay(assets, lang) { showPlayground = false }
+                }
+
+                if (showWpSource) {
+                    LiquidChoiceDialog(
+                        backdrop = wallBackdrop,
+                        title = tr(lang, "壁纸来源", "Wallpaper source"),
+                        options = listOf(
+                            tr(lang, "在线壁纸（必应）", "Online (Bing)"),
+                            tr(lang, "本地图片", "Local image")
+                        ),
+                        selected = -1,
+                        onPick = { i ->
+                            showWpSource = false
+                            if (i == 0) showBing = true else pickWallpaper.launch(arrayOf("image/*"))
+                        },
+                        onDismiss = { showWpSource = false }
+                    )
+                }
+                if (showBing) {
+                    BingWallpaperDialog(
+                        onPick = { url -> showBing = false; setWallpaperFromUrl(url) },
+                        onDismiss = { showBing = false }
+                    )
                 }
 
                 MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
@@ -1357,7 +1409,7 @@ fun KCard(
 /** 一行设置项：图标 + 标题 + 副标题 + 右侧尾随内容 */
 @Composable
 fun KRow(
-    icon: ImageVector,
+    icon: ImageVector? = null,
     title: String,
     subtitle: String? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
@@ -1372,8 +1424,10 @@ fun KRow(
             .padding(horizontal = 18.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
-        Spacer(Modifier.width(14.dp))
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
+            Spacer(Modifier.width(14.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(title, color = text, fontSize = 16.sp)
             if (subtitle != null) {
@@ -1829,20 +1883,12 @@ fun HomePage(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
+                GlassField(
                     value = cmd,
                     onValueChange = { cmd = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = {
-                        Text(
-                            if (mode == 1) tr(lang, "shell 命令", "shell command")
-                            else tr(lang, "fastboot 命令", "fastboot command"),
-                            fontSize = 13.sp
-                        )
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors()
+                    placeholder = if (mode == 1) tr(lang, "shell 命令", "shell command")
+                        else tr(lang, "fastboot 命令", "fastboot command"),
+                    modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(
@@ -1895,42 +1941,42 @@ fun HomePage(
 
         when (mode) {
             0 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(Icons.Filled.PlayArrow, tr(lang, "连接设备", "Connect device"),
+                KRow(null, tr(lang, "连接设备", "Connect device"),
                     tr(lang, "USB 授权后自动打开", "auto after USB grant"), onClick = onConnect)
-                KRow(Icons.Filled.Info, tr(lang, "设备信息", "Device info"),
+                KRow(null, tr(lang, "设备信息", "Device info"),
                     "product / version / serialno", onClick = onInfo)
-                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"),
+                KRow(null, tr(lang, "读分区表", "Partitions"),
                     "fastboot getvar all", onClick = onParts)
-                KRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
+                KRow(null, tr(lang, "刷入镜像", "Flash image"),
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
-                KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
+                KRow(null, tr(lang, "线刷 ROM", "Flash ROM"),
                     tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), onClick = onRom)
-                KRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
+                KRow(null, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
+                KRow(null, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
+                KRow(null, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Lock, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
+                KRow(null, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
                     onClick = { onReboot("bootloader") })
-                KRow(Icons.Filled.Warning, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
+                KRow(null, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
             }
             1 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
-                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
-                KRow(Icons.Filled.Star, tr(lang, "备份分区", "Back up partition"),
+                KRow(null, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
+                KRow(null, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
+                KRow(null, tr(lang, "备份分区", "Back up partition"),
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
-                KRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
+                KRow(null, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
+                KRow(null, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
+                KRow(null, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
                     onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Warning, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
+                KRow(null, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
             }
             else -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
-                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
+                KRow(null, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
+                KRow(null, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
+                KRow(null, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
+                KRow(null, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     onClick = { onReboot("recovery") })
             }
         }
@@ -1972,6 +2018,7 @@ fun SettingsPage(
     customWallpaper: Boolean,
     onPickWallpaper: () -> Unit,
     onResetWallpaper: () -> Unit,
+    parts: List<String>,
     part: String,
     onPart: (String) -> Unit,
     host: String,
@@ -1987,6 +2034,12 @@ fun SettingsPage(
             .padding(bottom = 110.dp)
             .verticalScroll(rememberScrollState())
     ) {
+        var showPartPicker by remember { mutableStateOf(false) }
+        val partOptions = remember(parts) {
+            if (parts.isEmpty()) listOf("boot", "init_boot", "vbmeta", "dtbo", "super", "system", "vendor", "recovery")
+            else parts
+        }
+
         PageTitle(tr(lang, "设置", "Settings"))
 
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
@@ -2000,7 +2053,7 @@ fun SettingsPage(
                 onPick = { onStyle(UiStyle.entries[it]) }
             )
             KSelectRow(
-                icon = Icons.Filled.Settings,
+                icon = Icons.Filled.Public,
                 title = tr(lang, "语言", "Language"),
                 subtitle = null,
                 value = if (lang == Lang.Zh) "中文" else "English",
@@ -2117,16 +2170,26 @@ fun SettingsPage(
                 Text(tr(lang, "刷写", "Flashing"), color = LocalCardText.current, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 var p by remember { mutableStateOf(part) }
-                OutlinedTextField(
+                GlassField(
                     value = p,
                     onValueChange = { p = it; onPart(it) },
-                    placeholder = { Text(tr(lang, "默认目标分区，例如 boot", "Default partition, e.g. boot")) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors(),
+                    placeholder = tr(lang, "点这里选分区（${part}）", "tap to pick (${part})"),
+                    readOnly = true,
+                    onClick = { showPartPicker = true },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+
+        if (showPartPicker) {
+            LiquidChoiceDialog(
+                backdrop = LocalWallBackdrop.current,
+                title = tr(lang, "选择分区", "Pick partition"),
+                options = partOptions,
+                selected = partOptions.indexOf(part),
+                onPick = { showPartPicker = false; onPart(partOptions[it]) },
+                onDismiss = { showPartPicker = false }
+            )
         }
 
         Spacer(Modifier.height(12.dp))
@@ -2135,24 +2198,18 @@ fun SettingsPage(
             Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
                 Text(tr(lang, "遥控 PC", "Remote PC"), color = LocalCardText.current, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                GlassField(
                     value = host,
                     onValueChange = onHost,
-                    placeholder = { Text(tr(lang, "电脑地址", "PC address")) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors(),
+                    placeholder = tr(lang, "电脑地址，例如 192.168.1.10:8765", "PC address"),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                GlassField(
                     value = token,
                     onValueChange = onToken,
-                    placeholder = { Text(tr(lang, "配对码", "Pairing code")) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors(),
+                    placeholder = tr(lang, "配对码", "Pairing code"),
+                    numeric = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -2745,6 +2802,157 @@ fun LiquidChoiceDialog(
                     ) { Text("取消", color = contentColor, fontSize = 16.sp) }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 玻璃输入框：内部是 BasicTextField，外观用 demo 的 drawBackdrop（vibrancy + blur），
+ * 不再用 M3 OutlinedTextField 那个白底黑字的方块。
+ */
+@Composable
+fun GlassField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
+    numeric: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val wall = LocalWallBackdrop.current
+    val text = LocalCardText.current
+    val shape = RoundedCornerShape(16.dp)
+
+    val surface = if (useBackdrop && wall != null) {
+        Modifier.drawBackdrop(
+            backdrop = wall,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(8.dp.toPx())
+            },
+            onDrawSurface = {
+                drawRect(
+                    if (Palette.dark) Color(0xFF121212).copy(alpha = 0.45f)
+                    else Color(0xFFFAFAFA).copy(alpha = 0.55f)
+                )
+            }
+        )
+    } else {
+        Modifier
+            .clip(shape)
+            .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+    }
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        readOnly = readOnly,
+        singleLine = true,
+        textStyle = TextStyle(color = text, fontSize = 15.sp),
+        cursorBrush = SolidColor(Palette.accent),
+        keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
+        else KeyboardOptions.Default,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .then(surface)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .padding(horizontal = 16.dp),
+        decorationBox = { inner ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                if (value.isEmpty()) {
+                    Text(placeholder, color = text.copy(alpha = 0.45f), fontSize = 15.sp)
+                }
+                inner()
+            }
+        }
+    )
+}
+
+/** 必应壁纸选择：拉 https://www.bing.com/HPImageArchive.aspx 的最近 10 张 */
+@Composable
+fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    var urls by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    val light = !Palette.dark
+    val contentColor = if (light) Color.Black else Color.White
+
+    LaunchedEffect(Unit) {
+        val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val conn = java.net.URL("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN")
+                    .openConnection()
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                val body = conn.getInputStream().bufferedReader().readText()
+                val arr = org.json.JSONObject(body).getJSONArray("images")
+                (0 until arr.length()).map { i ->
+                    val o = arr.getJSONObject(i)
+                    val base = o.getString("urlbase")
+                    val title = o.optString("title", "")
+                    title to ("https://www.bing.com" + base + "_UHD.jpg")
+                }
+            }
+        }
+        result.onSuccess { urls = it }.onFailure { err = it.message ?: "error" }
+        loading = false
+    }
+
+    GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
+        Text(
+            "Bing Wallpaper",
+            color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(28.dp, 24.dp, 28.dp, 8.dp)
+        )
+        when {
+            loading -> Text(
+                "加载中…",
+                color = contentColor.copy(alpha = 0.6f), fontSize = 14.sp,
+                modifier = Modifier.padding(24.dp, 8.dp, 24.dp, 24.dp)
+            )
+            err != null -> Text(
+                "加载失败：$err",
+                color = contentColor.copy(alpha = 0.6f), fontSize = 13.sp,
+                modifier = Modifier.padding(24.dp, 8.dp, 24.dp, 24.dp)
+            )
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.heightIn(max = 420.dp).padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(urls.size) { i ->
+                    val (title, url) = urls[i]
+                    coil.compose.AsyncImage(
+                        model = url,
+                        contentDescription = title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .height(100.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onPick(url) }
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.2f))
+                    .clickable { onDismiss() }
+                    .height(48.dp)
+                    .width(160.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) { Text("取消", color = contentColor, fontSize = 16.sp) }
         }
     }
 }
