@@ -1317,6 +1317,11 @@ fun KCard(
         // 液态玻璃：真透明，从壁纸图层取样
         UiStyle.Glass -> {
             val tint = if (Palette.dark) Color(0xFF0A0F16) else Color.White
+            // 滑杆 -> 实际参数：模糊 2~26dp，折射 4~44dp，底料 15%~70%
+            val d = androidx.compose.ui.platform.LocalDensity.current
+            val blurPx = with(d) { (2f + blur * 24f).dp.toPx() }
+            val lensPx = with(d) { (4f + density * 40f).dp.toPx() }
+            val tintA = 0.15f + alpha * 0.55f
             val mod = when {
                 // 降级模式：纯色，不碰任何渲染特效
                 safeRender -> Modifier
@@ -1329,13 +1334,10 @@ fun KCard(
                         shape = { shape },
                         effects = {
                             vibrancy()
-                            blur(8f.dp.toPx())
-                            lens(12f.dp.toPx(), 12f.dp.toPx())
+                            blur(blurPx)
+                            lens(lensPx, lensPx)
                         },
-                        onDrawSurface = {
-                            drawRect(if (Palette.dark) Color(0xFF121212).copy(alpha = 0.4f)
-                            else Color(0xFFFAFAFA).copy(alpha = 0.4f))
-                        }
+                        onDrawSurface = { drawRect(tint.copy(alpha = tintA)) }
                     )
                 } ?: Modifier
                 // 低版本 / 降级：取样玻璃
@@ -1347,8 +1349,8 @@ fun KCard(
                     blurLevel = blur,
                     density = density,
                     light = !Palette.dark,
-                    tint = if (Palette.dark) Color(0xFF0A0F16) else Color.White,
-                    tintAlpha = 0.16f + alpha * 0.24f
+                    tint = tint,
+                    tintAlpha = tintA
                 )
             }
             CompositionLocalProvider(LocalCardText provides if (Palette.dark) Color.White else Palette.text) {
@@ -1430,38 +1432,15 @@ fun KSelectRow(
             chevron = false,
             onClick = { open = true }
         )
-        Box(Modifier.align(Alignment.BottomEnd)) {
-            DropdownMenu(
-                expanded = open,
-                onDismissRequest = { open = false },
-                containerColor = Palette.surface,
-                shape = RoundedCornerShape(20.dp),
-                shadowElevation = 10.dp,
-                offset = androidx.compose.ui.unit.DpOffset(0.dp, 4.dp)
-            ) {
-                options.forEachIndexed { i, name ->
-                    val sel = i == selected
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                name,
-                                color = if (sel) Palette.accent else Palette.text,
-                                fontSize = 16.sp
-                            )
-                        },
-                        trailingIcon = {
-                            if (sel) {
-                                Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
-                            }
-                        },
-                        onClick = {
-                            open = false
-                            onPick(i)
-                        },
-                        modifier = Modifier.widthIn(min = 170.dp)
-                    )
-                }
-            }
+        if (open) {
+            LiquidChoiceDialog(
+                backdrop = LocalWallBackdrop.current,
+                title = title,
+                options = options,
+                selected = selected,
+                onPick = { open = false; onPick(it) },
+                onDismiss = { open = false }
+            )
         }
     }
 }
@@ -2562,6 +2541,101 @@ private fun SliderRow(
             )
         } else {
             Slider(value = value, onValueChange = onChange, valueRange = min..max)
+        }
+    }
+}
+
+/**
+ * 选择弹窗：结构照抄 demo 的 DialogContent ——
+ * 压暗 + 48dp 玻璃面板 + colorControls/blur/lens(depthEffect) + Highlight.Plain + 胶囊按钮
+ */
+@Composable
+fun LiquidChoiceDialog(
+    backdrop: Backdrop?,
+    title: String,
+    options: List<String>,
+    selected: Int,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val light = !Palette.dark
+    val contentColor = if (light) Color.Black else Color.White
+    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(dimColor)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onDismiss() }
+            )
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(40.dp)
+                    .fillMaxWidth()
+                    .then(
+                        if (useBackdrop && backdrop != null) {
+                            Modifier.drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(48.dp) },
+                                effects = {
+                                    colorControls(brightness = if (light) 0.2f else 0f, saturation = 1.5f)
+                                    blur(if (light) 16.dp.toPx() else 8.dp.toPx())
+                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
+                                },
+                                highlight = { Highlight.Plain },
+                                onDrawSurface = { drawRect(containerColor) }
+                            )
+                        } else {
+                            Modifier.clip(RoundedCornerShape(48.dp)).background(Palette.surface)
+                        }
+                    )
+            ) {
+                Text(
+                    title,
+                    color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(28.dp, 24.dp, 28.dp, 12.dp)
+                )
+                options.forEachIndexed { i, name ->
+                    val sel = i == selected
+                    Row(
+                        Modifier
+                            .padding(horizontal = 24.dp, vertical = 4.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(50))
+                            .background(if (sel) containerColor.copy(alpha = 0.5f) else Color.Transparent)
+                            .clickable { onPick(i) }
+                            .height(48.dp)
+                            .padding(horizontal = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(name, color = if (sel) Palette.accent else contentColor, fontSize = 16.sp)
+                        Spacer(Modifier.weight(1f))
+                        if (sel) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Row(
+                    Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(containerColor.copy(alpha = 0.2f))
+                            .clickable { onDismiss() }
+                            .height(48.dp)
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+                }
+            }
         }
     }
 }
