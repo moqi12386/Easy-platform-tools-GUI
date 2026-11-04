@@ -12,8 +12,8 @@ android {
         applicationId = "com.easypt.gui"
         minSdk = 26
         targetSdk = 37
-        versionCode = 68
-        versionName = "3.17.2"
+        versionCode = 70
+        versionName = "3.18.1"
     }
 
     signingConfigs {
@@ -55,6 +55,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
     implementation("io.github.kyant0:backdrop:2.0.1")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("io.github.kyant0:shapes:1.2.1")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
 }

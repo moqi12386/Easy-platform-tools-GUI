@@ -52,6 +52,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.luminance
@@ -984,11 +986,24 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ThemeMode.System -> systemDark
         }
         Palette.dark = dark
-        Palette.monetAccent = if (monet && Build.VERSION.SDK_INT >= 31) {
-            val ctx = LocalContext.current
-            val cs = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-            cs.primary
-        } else null
+        // 莫奈取色：直接分析当前壁纸位图（自定义壁纸也算），且只对 Material 风格生效
+        var monetColor by remember { mutableStateOf<Color?>(null) }
+        LaunchedEffect(monet, style, assets, customWallpaper) {
+            monetColor = if (monet && style == UiStyle.Material && assets != null) {
+                withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    runCatching {
+                        val bmp = assets.full.asAndroidBitmap()
+                        val pal = androidx.palette.graphics.Palette.from(bmp).clearFilters().generate()
+                        val c = pal.getVibrantColor(0)
+                            .takeIf { it != 0 }
+                            ?: pal.getLightVibrantColor(0).takeIf { it != 0 }
+                            ?: pal.getDominantColor(0)
+                        if (c == 0) null else Color(c)
+                    }.getOrNull()
+                }
+            } else null
+        }
+        Palette.monetAccent = monetColor
 
         // 只有「液态玻璃」这一档才启用 backdrop 库（libhwui 渲染树在部分机型上会原生崩溃，
         // 其他样式完全不碰渲染特效，保证默认稳定）
@@ -1455,7 +1470,7 @@ fun KRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         val uiStyle = LocalStyle.current
-        if (icon != null && uiStyle != UiStyle.Glass) {
+        if (icon != null) {
             if (uiStyle == UiStyle.Miuix) {
                 Box(
                     Modifier
@@ -2009,12 +2024,12 @@ fun HomePage(
                     tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), onClick = onRom)
                 KRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Lock, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
+                KRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
                     onClick = { onReboot("bootloader") })
-                KRow(Icons.Filled.Warning, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
+                KRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
             }
             1 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
                 KRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
@@ -2023,15 +2038,15 @@ fun HomePage(
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
                 KRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
                     onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Warning, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
+                KRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
             }
             else -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
                 KRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
                 KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
                 KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     onClick = { onReboot("recovery") })
             }
@@ -2226,14 +2241,26 @@ fun SettingsPage(
                 Text(tr(lang, "刷写", "Flashing"), color = LocalCardText.current, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 var p by remember { mutableStateOf(part) }
-                GlassField(
-                    value = p,
-                    onValueChange = { p = it; onPart(it) },
-                    placeholder = tr(lang, "点这里选分区（${part}）", "tap to pick (${part})"),
-                    readOnly = true,
-                    onClick = { showPartPicker = true },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                LaunchedEffect(part) { p = part }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GlassField(
+                        value = p,
+                        onValueChange = { p = it; onPart(it) },
+                        placeholder = tr(lang, "目标分区，例如 boot", "partition, e.g. boot"),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Palette.accent.copy(alpha = 0.16f))
+                            .clickable { showPartPicker = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.List, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(22.dp))
+                    }
+                }
             }
         }
 
