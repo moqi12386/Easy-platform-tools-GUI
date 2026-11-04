@@ -67,6 +67,8 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import com.easypt.gui.glass.LiquidBottomTab
+import com.easypt.gui.glass.LiquidBottomTabs
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Slider as MiuixSlider
@@ -1130,20 +1132,49 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                     }
 
-                    LiquidBottomBar(
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                        assets = assets,
-                        backdrop = backdrop,
-                        screen = screen,
-                        page = page,
-                        blur = glassBlur / 100f,
-                        density = glassDensity / 100f,
-                        items = listOf(
-                            BarItem(Icons.Filled.Home, t("主页", "Home")),
-                            BarItem(Icons.Filled.Settings, t("设置", "Settings"))
-                        ),
-                        onPage = { page = it }
-                    )
+                    // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
+                    if (useBackdrop) {
+                        LiquidBottomTabs(
+                            selectedTabIndex = { page },
+                            onTabSelected = { page = it },
+                            backdrop = wallBackdrop,
+                            tabsCount = 2,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            LiquidBottomTab(onClick = { page = 0 }) {
+                                Icon(
+                                    Icons.Filled.Home, contentDescription = null,
+                                    tint = Color.White, modifier = Modifier.size(24.dp)
+                                )
+                                Text(t("主页", "Home"), color = Color.White, fontSize = 10.sp)
+                            }
+                            LiquidBottomTab(onClick = { page = 1 }) {
+                                Icon(
+                                    Icons.Filled.Settings, contentDescription = null,
+                                    tint = Color.White, modifier = Modifier.size(24.dp)
+                                )
+                                Text(t("设置", "Settings"), color = Color.White, fontSize = 10.sp)
+                            }
+                        }
+                    } else {
+                        LiquidBottomBar(
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                            assets = assets,
+                            backdrop = backdrop,
+                            screen = screen,
+                            page = page,
+                            blur = glassBlur / 100f,
+                            density = glassDensity / 100f,
+                            items = listOf(
+                                BarItem(Icons.Filled.Home, t("主页", "Home")),
+                                BarItem(Icons.Filled.Settings, t("设置", "Settings"))
+                            ),
+                            onPage = { page = it }
+                        )
+                    }
                 }
 
                 MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
@@ -2122,7 +2153,7 @@ fun SettingsPage(
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                 Text("Easy-platform-tools-GUI", color = LocalCardText.current, fontSize = 15.sp)
-                Text("3.5.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text("3.6.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
