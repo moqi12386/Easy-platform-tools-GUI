@@ -1552,35 +1552,15 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
         }
         val wall = LocalWallBackdrop.current
         if (useBackdrop && wall != null) {
-            // demo 的 LiquidSlider 负责渲染；手势由外层接管
-            // （demo 的 inspectDragGestures 在可滚动容器里会被外层滚动吞掉，这里直接算位置）
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val w = constraints.maxWidth.toFloat()
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .pointerInput(w) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { off ->
-                                    onChange((off.x / w).coerceIn(0f, 1f) * 100f)
-                                },
-                                onHorizontalDrag = { change, _ ->
-                                    change.consume()
-                                    onChange((change.position.x / w).coerceIn(0f, 1f) * 100f)
-                                }
-                            )
-                        }
-                ) {
-                    LiquidSlider(
-                        value = { value },
-                        onValueChange = { onChange(it) },
-                        valueRange = 0f..100f,
-                        visibilityThreshold = 0.01f,
-                        backdrop = wall,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                    )
-                }
-            }
+            // demo 的 LiquidSlider 原样使用（手势已经在 DragGestureInspector 里改成 Initial 阶段抢占）
+            LiquidSlider(
+                value = { value },
+                onValueChange = { onChange(it) },
+                valueRange = 0f..100f,
+                visibilityThreshold = 0.01f,
+                backdrop = wall,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            )
         } else if (style == UiStyle.Miuix) {
             // 用 miuix 库自带的滑块
             MiuixSlider(

@@ -66,7 +66,8 @@ private suspend inline fun AwaitPointerEventScope.awaitDragOrUp(
 ): PointerInputChange? {
     var pointer = pointerId
     while (true) {
-        val event = awaitPointerEvent()
+        // 在 Initial 阶段抢，保证外层 verticalScroll 抢不走（demo 不在滚动容器里所以原来用默认阶段）
+        val event = awaitPointerEvent(PointerEventPass.Initial)
         val dragEvent = event.changes.fastFirstOrNull { it.id == pointer } ?: return null
         if (dragEvent.changedToUpIgnoreConsumed()) {
             val otherDown = event.changes.fastFirstOrNull { it.pressed }
