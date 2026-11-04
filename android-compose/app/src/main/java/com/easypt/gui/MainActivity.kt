@@ -67,8 +67,11 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
-import com.easypt.gui.glass.LiquidBottomTab
 import com.easypt.gui.glass.LiquidBottomTabs
+import com.easypt.gui.glass.LiquidBottomTab
+import com.easypt.gui.glass.LiquidButton
+import com.easypt.gui.glass.LiquidSlider
+import com.easypt.gui.glass.LiquidToggle
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Slider as MiuixSlider
@@ -1474,18 +1477,30 @@ fun KSwitchRow(
                 Text(subtitle, color = text.copy(alpha = 0.55f), fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = { onCheckedChange(it) },
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = Palette.accent,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
-                uncheckedBorderColor = Color.Transparent
+        val wall = LocalWallBackdrop.current
+        if (useBackdrop && wall != null) {
+            Box(Modifier.width(58.dp).height(32.dp)) {
+                LiquidToggle(
+                    selected = { checked },
+                    onSelect = { if (enabled) onCheckedChange(it) },
+                    backdrop = wall,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        } else {
+            Switch(
+                checked = checked,
+                onCheckedChange = { onCheckedChange(it) },
+                enabled = enabled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Palette.accent,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
+                    uncheckedBorderColor = Color.Transparent
+                )
             )
-        )
+        }
     }
 }
 
@@ -1530,7 +1545,18 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
             Text(label, color = LocalCardText.current, fontSize = 16.sp, modifier = Modifier.weight(1f))
             Text("${value.toInt()}%", color = LocalCardText.current.copy(alpha = 0.55f), fontSize = 14.sp)
         }
-        if (style == UiStyle.Miuix) {
+        val wall = LocalWallBackdrop.current
+        if (useBackdrop && wall != null) {
+            // demo 的 LiquidSlider
+            LiquidSlider(
+                value = { value / 100f },
+                onValueChange = { onChange(it * 100f) },
+                valueRange = 0f..1f,
+                visibilityThreshold = 0.001f,
+                backdrop = wall,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            )
+        } else if (style == UiStyle.Miuix) {
             // 用 miuix 库自带的滑块
             MiuixSlider(
                 value = value,
@@ -1566,12 +1592,32 @@ fun KDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         val shape = remember { RoundedCornerShape(26.dp) }
+        val wall = LocalWallBackdrop.current
         Box(Modifier.fillMaxSize().padding(26.dp), contentAlignment = Alignment.Center) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .clip(shape)
-                    .background(Palette.surface)
+                    .then(
+                        if (useBackdrop && wall != null) {
+                            Modifier.drawBackdrop(
+                                backdrop = wall,
+                                shape = { shape },
+                                effects = {
+                                    vibrancy()
+                                    blur(8.dp.toPx())
+                                    lens(24.dp.toPx(), 24.dp.toPx())
+                                },
+                                onDrawSurface = {
+                                    drawRect(
+                                        if (Palette.dark) Color(0xFF121212).copy(alpha = 0.6f)
+                                        else Color(0xFFFAFAFA).copy(alpha = 0.6f)
+                                    )
+                                }
+                            )
+                        } else {
+                            Modifier.clip(shape).background(Palette.surface)
+                        }
+                    )
                     .padding(20.dp)
             ) {
                 Text(title, color = Palette.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
@@ -2153,7 +2199,7 @@ fun SettingsPage(
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                 Text("Easy-platform-tools-GUI", color = LocalCardText.current, fontSize = 15.sp)
-                Text("3.6.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text("3.7.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
