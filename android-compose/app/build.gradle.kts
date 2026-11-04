@@ -12,8 +12,8 @@ android {
         applicationId = "com.easypt.gui"
         minSdk = 26
         targetSdk = 37
-        versionCode = 43
-        versionName = "3.3.3"
+        versionCode = 48
+        versionName = "3.5.0"
     }
 
     signingConfigs {

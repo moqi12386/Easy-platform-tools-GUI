@@ -103,8 +103,7 @@ internal var safeRender = false
  * backdrop 库靠 GraphicsLayer + RenderEffect，在 Android 17 (API 37) 上会整段崩掉，
  * 所以只在 Android 12~15 (31..35) 启用，其余走纯位图取样玻璃。
  */
-internal val useBackdrop: Boolean
-    get() = Build.VERSION.SDK_INT in 31..35 && !safeRender
+internal var useBackdrop: Boolean = false
 
 // 全局配色走 Palette（Tail 定义），getter 让旧代码零改动跟随主题
 private val Bg: Color get() = Palette.bg
@@ -952,7 +951,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             cs.primary
         } else null
 
-        val glassStyle = style == UiStyle.Glass && !safeRender
+        // 只有「液态玻璃」这一档才启用 backdrop 库（libhwui 渲染树在部分机型上会原生崩溃，
+        // 其他样式完全不碰渲染特效，保证默认稳定）
+        // 库里那套效果（vibrancy + blur + lens）在 Android 12~15 上照抄使用；
+        // Android 16+（含这台 Xiaomi）系统 libhwui 处理 RenderEffect 会原生崩溃，降到取样玻璃
+        useBackdrop = style == UiStyle.Glass && Build.VERSION.SDK_INT >= 31 && !safeRender
         LaunchedEffect(assets, dark) { applyBars(assets) }
         // 每次样式变化：两帧内没崩就认为这次切换是安全的
         LaunchedEffect(style) {
@@ -996,14 +999,18 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             Box(Modifier.fillMaxSize().background(Bg)) {
                 val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
 
-                // 只保留一层 backdrop（给底栏取样）。嵌套两层在库里没有先例，先去掉。
+                // 照 demo 的做法：图层里只有背景（壁纸），玻璃元件在图层外面取样
+                val wallBackdrop = rememberLayerBackdrop()
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .then(if (useBackdrop) Modifier.layerBackdrop(backdrop) else Modifier)
+                        .then(if (useBackdrop) Modifier.layerBackdrop(wallBackdrop) else Modifier)
                 ) {
                     WallpaperView(assets)
+                }
+                Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
+                        LocalWallBackdrop provides wallBackdrop,
                         LocalTitleColor provides onWall,
                         LocalCardText provides Palette.text
                     ) {
@@ -1260,8 +1267,22 @@ fun KCard(
                     .shadow(6.dp, shape, clip = false)
                     .clip(shape)
                     .background(if (Palette.dark) Color(0xFF1F2026) else Color.White)
-                // 卡片一律走软件取样：只画位图，不碰 RenderEffect / GraphicsLayer，
-                // 这样任何机型都不会因为渲染管线原生崩溃
+                useBackdrop -> LocalWallBackdrop.current?.let { wall ->
+                    Modifier.drawBackdrop(
+                        backdrop = wall,
+                        shape = { shape },
+                        effects = {
+                            vibrancy()
+                            blur(8f.dp.toPx())
+                            lens(12f.dp.toPx(), 12f.dp.toPx())
+                        },
+                        onDrawSurface = {
+                            drawRect(if (Palette.dark) Color(0xFF121212).copy(alpha = 0.4f)
+                            else Color(0xFFFAFAFA).copy(alpha = 0.4f))
+                        }
+                    )
+                } ?: Modifier
+                // 低版本 / 降级：取样玻璃
                 else -> Modifier.glassSurface(
                     assets = assets,
                     shape = shape,
@@ -2101,7 +2122,7 @@ fun SettingsPage(
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                 Text("Easy-platform-tools-GUI", color = LocalCardText.current, fontSize = 15.sp)
-                Text("3.3.3 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text("3.5.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -2180,22 +2201,19 @@ fun LiquidBottomBar(
                         )
                     }
             ) {
+                // —— 以下参数照抄 AndroidLiquidGlass 的 LiquidBottomTabs ——
+                val containerColor = if (dark) Color(0xFF121212).copy(alpha = 0.4f)
+                else Color(0xFFFAFAFA).copy(alpha = 0.4f)
                 val surfaceMod = when {
                     useBackdrop -> Modifier.drawBackdrop(
                         backdrop = backdrop,
                         shape = { capsule },
                         effects = {
                             vibrancy()
-                            blur((4f + blur * 14f).dp.toPx())
-                            lens((4f + density * 8f).dp.toPx(), (4f + density * 8f).dp.toPx())
+                            blur(8f.dp.toPx())
+                            lens(24f.dp.toPx(), 24f.dp.toPx())
                         },
-                        onDrawSurface = {
-                            drawRect(
-                                if (dark) Color(0xFF14161A).copy(alpha = 0.72f)
-                                else Color.White.copy(alpha = 0.58f)
-                            )
-                        },
-                        shadow = null
+                        onDrawSurface = { drawRect(containerColor) }
                     )
                     !safeRender -> Modifier.glassSurface(
                         assets = assets,
