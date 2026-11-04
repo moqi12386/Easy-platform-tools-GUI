@@ -67,6 +67,8 @@ import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.easypt.gui.glass.LiquidBottomTabs
@@ -1218,9 +1220,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         if (showAbout) {
                             AboutDialog(style, lang, onDismiss = { showAbout = false })
                         }
-                        if (showPlayground) {
-                            GlassPlaygroundDialog(style, lang, onDismiss = { showPlayground = false })
-                        }
                         eraseTarget?.let { target ->
                             ConfirmDialog(
                                 style, lang,
@@ -2072,22 +2071,43 @@ fun SettingsPage(
                     color = LocalCardText.current.copy(alpha = 0.55f), fontSize = 12.sp
                 )
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onPickWallpaper,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text(tr(lang, "选择图片", "Choose"), fontSize = 13.sp) }
-                    Button(
-                        onClick = onResetWallpaper,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = LocalCardText.current.copy(alpha = 0.10f),
-                            contentColor = LocalCardText.current
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text(tr(lang, "恢复默认", "Reset"), fontSize = 13.sp) }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val wall = LocalWallBackdrop.current
+                    if (useBackdrop && wall != null) {
+                        // 照抄 demo：一个 tint 的、一个 surfaceColor 的
+                        LiquidButton(
+                            onClick = onPickWallpaper,
+                            backdrop = wall,
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            tint = Palette.accent
+                        ) {
+                            Text(tr(lang, "选择图片", "Choose"), color = Color.White, fontSize = 14.sp)
+                        }
+                        LiquidButton(
+                            onClick = onResetWallpaper,
+                            backdrop = wall,
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            surfaceColor = Color.White.copy(alpha = 0.3f)
+                        ) {
+                            Text(tr(lang, "恢复默认", "Reset"), color = LocalCardText.current, fontSize = 14.sp)
+                        }
+                    } else {
+                        Button(
+                            onClick = onPickWallpaper,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text(tr(lang, "选择图片", "Choose"), fontSize = 13.sp) }
+                        Button(
+                            onClick = onResetWallpaper,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LocalCardText.current.copy(alpha = 0.10f),
+                                contentColor = LocalCardText.current
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text(tr(lang, "恢复默认", "Reset"), fontSize = 13.sp) }
+                    }
                 }
             }
         }
@@ -2438,72 +2458,110 @@ fun AboutDialog(style: UiStyle, lang: Lang, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun GlassPlaygroundDialog(style: UiStyle, lang: Lang, onDismiss: () -> Unit) {
-    KDialog(style, tr(lang, "Glass Playground", "Glass Playground"), onDismiss) {
-        var blurDp by remember { mutableFloatStateOf(8f) }
-        var lensDp by remember { mutableFloatStateOf(24f) }
-        var tintPct by remember { mutableFloatStateOf(40f) }
+fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit) {
+    var blurDp by remember { mutableFloatStateOf(8f) }
+    var lensDp by remember { mutableFloatStateOf(24f) }
+    var tintPct by remember { mutableFloatStateOf(40f) }
+    val bd = rememberLayerBackdrop()
 
-        val canvas = rememberCanvasBackdrop {
-            drawRect(
-                Brush.linearGradient(
-                    listOf(Color(0xFF4F8CFF), Color(0xFF00C6A8), Color(0xFFFF7A59))
-                )
-            )
-        }
-
+    Box(Modifier.fillMaxSize()) {
+        // 背景进图层（照 demo：图层里只有背景）
         Box(
             Modifier
-                .fillMaxWidth()
-                .height(150.dp)
-                .then(
-                    if (useBackdrop) {
-                        Modifier.drawBackdrop(
-                            backdrop = canvas,
-                            shape = { RoundedCornerShape(24.dp) },
-                            effects = {
-                                vibrancy()
-                                blur(blurDp.dp.toPx())
-                                lens(lensDp.dp.toPx(), lensDp.dp.toPx())
-                            },
-                            onDrawSurface = { drawRect(Color.White.copy(alpha = tintPct / 100f)) }
-                        )
-                    } else {
-                        Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xFF4F8CFF))
-                    }
-                ),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .then(if (useBackdrop) Modifier.layerBackdrop(bd) else Modifier)
         ) {
-            Text("Glass", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            WallpaperView(assets)
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (Palette.dark) 0.45f else 0.25f)))
         }
 
-        Spacer(Modifier.height(14.dp))
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Glass Playground", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold
+            )
 
-        listOf(
-            Triple(tr(lang, "模糊", "Blur"), blurDp, { v: Float -> blurDp = v }),
-            Triple(tr(lang, "折射", "Lens"), lensDp, { v: Float -> lensDp = v }),
-            Triple(tr(lang, "底料", "Tint"), tintPct, { v: Float -> tintPct = v })
-        ).forEach { (label, v, set) ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(label, color = Palette.text, fontSize = 14.sp, modifier = Modifier.width(60.dp))
-                Slider(
-                    value = v,
-                    onValueChange = set,
-                    valueRange = 0f..48f,
-                    modifier = Modifier.weight(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Palette.accent,
-                        inactiveTrackColor = Color(0xFFE1E4E8)
-                    )
-                )
-                Text("${v.toInt()}", color = Palette.text2, fontSize = 12.sp, modifier = Modifier.width(34.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(230.dp)
+                    .then(
+                        if (useBackdrop) {
+                            Modifier.drawBackdrop(
+                                backdrop = bd,
+                                shape = { RoundedCornerShape(40.dp) },
+                                effects = {
+                                    vibrancy()
+                                    blur(blurDp.dp.toPx())
+                                    lens(lensDp.dp.toPx(), lensDp.dp.toPx())
+                                },
+                                onDrawSurface = { drawRect(Color.White.copy(alpha = tintPct / 100f)) }
+                            )
+                        } else {
+                            Modifier.clip(RoundedCornerShape(40.dp)).background(Color(0x66FFFFFF))
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Liquid Glass", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
-        }
 
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onDismiss) { Text(tr(lang, "关闭", "Close"), color = Palette.accent) }
+            SliderRow(lang, bd, tr(lang, "模糊", "Blur"), blurDp, 0f, 48f) { blurDp = it }
+            SliderRow(lang, bd, tr(lang, "折射", "Lens"), lensDp, 0f, 48f) { lensDp = it }
+            SliderRow(lang, bd, tr(lang, "底料", "Tint"), tintPct, 0f, 100f) { tintPct = it }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                if (useBackdrop) {
+                    LiquidButton(onClick = onClose, backdrop = bd, modifier = Modifier.height(48.dp)) {
+                        Text(tr(lang, "关闭", "Close"), color = Color.White, fontSize = 15.sp)
+                    }
+                } else {
+                    Button(
+                        onClick = onClose,
+                        colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White),
+                        shape = RoundedCornerShape(50)
+                    ) { Text(tr(lang, "关闭", "Close")) }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun SliderRow(
+    lang: Lang,
+    bd: Backdrop,
+    label: String,
+    value: Float,
+    min: Float,
+    max: Float,
+    onChange: (Float) -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = Color.White, fontSize = 15.sp, modifier = Modifier.width(64.dp))
+            Text("${value.toInt()}", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        }
+        if (useBackdrop) {
+            LiquidSlider(
+                value = { value },
+                onValueChange = onChange,
+                valueRange = min..max,
+                visibilityThreshold = 0.01f,
+                backdrop = bd,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            Slider(value = value, onValueChange = onChange, valueRange = min..max)
         }
     }
 }
