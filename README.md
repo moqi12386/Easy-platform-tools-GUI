@@ -5,6 +5,8 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、、可换背�
 
 ![主界面](docs/main.png)
 
+> **Android 版**（`android-compose/`，v3.2.0）：Compose 重写，KernelSU 风格卡片界面 + 悬浮玻璃底栏（实时模糊界面内容）+ 夜间模式 + 四种界面样式（原生 / Material 莫奈取色 / MIUIX / 液态玻璃）。支持 OTG 主机直连 fastboot、本机 root 备份刷写、遥控 PC、线刷 ROM。详见 [RELEASE-NOTES](RELEASE-NOTES.md)。
+
 ## 特性
 
 - **左侧快捷命令**：检测设备、版本信息、设备属性、重启到 Bootloader / Recovery / EDL、重启系统、fastboot 设备、fastboot 重启
