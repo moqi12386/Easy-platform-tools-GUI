@@ -178,6 +178,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var miSans by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
+    private var crashBannerClosed by mutableStateOf(false)
     private var showWpSource by mutableStateOf(false)
     private var showBing by mutableStateOf(false)
 
@@ -202,7 +203,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 return
             }
             // 第一次失败：自动降级（关掉 backdrop / 特效）+ 强制回到原生样式，避免死循环
-            safeRender = true
             val _prev = getSharedPreferences(PREF, MODE_PRIVATE).getInt("prevStyle", UiStyle.Native.ordinal)
             style = UiStyle.entries.getOrElse(_prev) { UiStyle.Native }
             try {
@@ -1198,6 +1198,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         logs = logs,
                                         part = part,
                                         onModePick = { applyMode(it) },
+                                        crashBannerVisible = safeRender && !crashBannerClosed,
+                                        onDismissCrashBanner = { crashBannerClosed = true },
                                         onConnect = { connectUsb() },
                                         onInfo = { otgInfo() },
                                         onParts = { if (mode == 1) localParts() else otgParts() },
@@ -1983,6 +1985,8 @@ fun HomePage(
     logs: List<LogLine>,
     part: String,
     onModePick: (Int) -> Unit,
+    crashBannerVisible: Boolean,
+    onDismissCrashBanner: () -> Unit,
     onConnect: () -> Unit,
     onInfo: () -> Unit,
     onParts: () -> Unit,
@@ -2007,7 +2011,7 @@ fun HomePage(
             .padding(bottom = 20.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        if (safeRender) {
+        if (crashBannerVisible) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -2024,12 +2028,21 @@ fun HomePage(
                 Text(
                     tr(
                         lang,
-                        "上次启动异常，已用安全模式启动（关闭玻璃特效）。设置里可查看崩溃日志",
-                        "Last launch failed; running in safe mode (glass disabled). See crash log in Settings"
+                        "上次启动异常，已撤销那次操作。设置里可查看崩溃日志",
+                        "Last launch failed; that action was rolled back. See crash log in Settings"
                     ),
                     color = if (Palette.dark) Color(0xFFFFD98A) else Color(0xFF6B4700),
                     fontSize = 12.sp,
-                    lineHeight = 16.sp
+                    lineHeight = 16.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Icons.Filled.Close, null,
+                    tint = if (Palette.dark) Color(0xFFFFD98A) else Color(0xFF6B4700),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable { onDismissCrashBanner() }
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -2340,7 +2353,15 @@ fun SettingsPage(
         Spacer(Modifier.height(12.dp))
 
         if (style == UiStyle.Glass) {
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+            var slidersOpen by remember { mutableStateOf(false) }
+            KCard(style, assets, backdrop, screen, blur, density, alpha) {
+                KRow(
+                    Icons.Filled.Build,
+                    tr(lang, "玻璃参数", "Glass parameters"),
+                    if (slidersOpen) tr(lang, "点收起", "tap to collapse") else tr(lang, "点展开", "tap to expand"),
+                    onClick = { slidersOpen = !slidersOpen }
+                )
+                if (slidersOpen) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 SliderRow(style, tr(lang, "面板不透明度", "Panel opacity"), opacity, onOpacity)
                 SliderRow(style, tr(lang, "玻璃模糊", "Glass blur"), glassBlur, onGlassBlur)
@@ -2357,7 +2378,8 @@ fun SettingsPage(
                     )
                 }
             }
-        }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))
