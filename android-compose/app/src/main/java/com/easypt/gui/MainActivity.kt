@@ -197,15 +197,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         } else {
             safeRender = false
             // 上次是不是在切样式之后崩的？（原生崩溃没有 Java 堆栈，只能靠这个）
-            val lastAction = readLastAction()
-            if (lastAction != null) {
-                safeRender = true
-                style = UiStyle.Native
-                try {
-                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", UiStyle.Native.ordinal).apply()
-                } catch (_: Throwable) { }
-                mark("last-action: $lastAction")
-            }
         }
 
         // 本次启动：清空旧轨迹再开始记
@@ -1017,11 +1008,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
         // 主题切换时整棵树重建，避免读到半新半旧的配色
         key(dark, monet) {
+            val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
+            // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
+            val wallBackdrop = rememberLayerBackdrop()
             Box(Modifier.fillMaxSize().background(Bg)) {
-                val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
-
-                // 照 demo 的做法：图层里只有背景（壁纸），玻璃元件在图层外面取样
-                val wallBackdrop = rememberLayerBackdrop()
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -1222,7 +1212,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             RomDialog(style, lang, romSteps, onStart = { runRom() }, onDismiss = { showRom = false })
                         }
                         if (showAbout) {
-                            AboutDialog(style, lang, onDismiss = { showAbout = false })
+                            AboutDialog(style, lang, wallBackdrop, onDismiss = { showAbout = false })
                         }
                         eraseTarget?.let { target ->
                             ConfirmDialog(
@@ -2402,40 +2392,133 @@ fun LiquidBottomBar(
 
 // ======================= 关于 / Glass Playground =======================
 
+/**
+ * 玻璃弹窗面板 —— 结构/参数照抄 AndroidLiquidGlass demo 的 DialogContent：
+ * 压暗 + RoundedRectangle(48dp) + colorControls + blur + lens(depthEffect) + Highlight.Plain
+ */
 @Composable
-fun AboutDialog(style: UiStyle, lang: Lang, onDismiss: () -> Unit) {
-    KDialog(style, tr(lang, "关于", "About"), onDismiss) {
+fun GlassDialogPanel(
+    backdrop: Backdrop?,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val light = !Palette.dark
+    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize()) {
+            // 压暗层（点空白关闭）
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(dimColor)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onDismiss() }
+            )
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(40.dp)
+                    .fillMaxWidth()
+                    .then(
+                        if (useBackdrop && backdrop != null) {
+                            Modifier.drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(48.dp) },
+                                effects = {
+                                    colorControls(
+                                        brightness = if (light) 0.2f else 0f,
+                                        saturation = 1.5f
+                                    )
+                                    blur(if (light) 16.dp.toPx() else 8.dp.toPx())
+                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
+                                },
+                                highlight = { Highlight.Plain },
+                                onDrawSurface = { drawRect(containerColor) }
+                            )
+                        } else {
+                            Modifier
+                                .clip(RoundedCornerShape(48.dp))
+                                .background(if (light) Color(0xFFFAFAFA) else Color(0xFF1B1C20))
+                        }
+                    )
+            ) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -> Unit) {
+    val light = !Palette.dark
+    val contentColor = if (light) Color.Black else Color.White
+    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val ctx = LocalContext.current
+    val ver = remember {
+        runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
+
+    GlassDialogPanel(backdrop, onDismiss) {
+        Text(
+            tr(lang, "关于", "About"),
+            color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(28.dp, 24.dp, 28.dp, 12.dp)
+        )
         Text(
             "Easy-platform-tools-GUI",
-            color = Palette.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold
+            color = contentColor, fontSize = 17.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 2.dp)
         )
-        Spacer(Modifier.height(4.dp))
-        Text("3.8.0 · Compose", color = Palette.text2, fontSize = 13.sp)
-        Spacer(Modifier.height(14.dp))
+        Text(
+            "$ver · Compose · MIT",
+            color = contentColor.copy(alpha = 0.7f), fontSize = 14.sp,
+            modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 10.dp)
+        )
         Text(
             tr(
                 lang,
-                "Windows 版是 adb / fastboot 图形命令台；这个是 Android 版，可以：\n" +
-                    "· OTG 主机直连 fastboot（不依赖 adb / root）\n" +
-                    "· 本机 root 下备份、刷写分区\n" +
-                    "· 遥控 PC 上的服务\n" +
-                    "· 线刷 ROM（解析 flash_all 脚本）",
-                "Android port of Easy-platform-tools-GUI.\n" +
-                    "· OTG host fastboot (no adb / no root)\n" +
-                    "· Backup & flash partitions with root\n" +
-                    "· Remote PC service\n" +
-                    "· ROM line-flashing (flash_all scripts)"
+                "OTG 主机直连 fastboot（不依赖 adb / root）\n" +
+                    "本机 root 下备份、刷写分区\n遥控 PC 上的服务\n线刷 ROM（解析 flash_all 脚本）",
+                "OTG host fastboot (no adb / no root)\n" +
+                    "Backup & flash partitions with root\nRemote PC service\nROM line-flashing"
             ),
-            color = Palette.text2, fontSize = 12.sp, lineHeight = 18.sp
+            color = contentColor.copy(alpha = 0.68f), fontSize = 14.sp, lineHeight = 21.sp,
+            modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 10.dp)
         )
-        Spacer(Modifier.height(12.dp))
         Text(
-            "MIT License · 玻璃效果来自 Kyant0/AndroidLiquidGlass (Apache-2.0)",
-            color = Palette.text2.copy(alpha = 0.8f), fontSize = 11.sp
+            "玻璃效果来自 Kyant0/AndroidLiquidGlass (Apache-2.0)",
+            color = contentColor.copy(alpha = 0.5f), fontSize = 11.sp,
+            modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 12.dp)
         )
-        Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onDismiss) { Text(tr(lang, "关闭", "Close"), color = Palette.accent) }
+        Row(
+            Modifier.padding(24.dp, 4.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(containerColor.copy(alpha = 0.2f))
+                    .clickable { onDismiss() }
+                    .height(48.dp)
+                    .weight(1f),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) { Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp) }
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Palette.accent)
+                    .clickable { onDismiss() }
+                    .height(48.dp)
+                    .weight(1f),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) { Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp) }
         }
     }
 }
