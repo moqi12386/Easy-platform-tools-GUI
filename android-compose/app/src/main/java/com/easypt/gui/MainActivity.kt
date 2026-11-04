@@ -2499,26 +2499,46 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(containerColor.copy(alpha = 0.2f))
-                    .clickable { onDismiss() }
-                    .height(48.dp)
-                    .weight(1f),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) { Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp) }
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Palette.accent)
-                    .clickable { onDismiss() }
-                    .height(48.dp)
-                    .weight(1f),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) { Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp) }
+            if (useBackdrop && backdrop != null) {
+                // demo 的 LiquidButton
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = backdrop,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) {
+                    Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp)
+                }
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = backdrop,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Palette.accent
+                ) {
+                    Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp)
+                }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(containerColor.copy(alpha = 0.2f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Palette.accent)
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp) }
+            }
         }
     }
 }

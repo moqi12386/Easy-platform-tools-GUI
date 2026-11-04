@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -113,33 +116,7 @@ fun LiquidSlider(
             Modifier
                 .layerBackdrop(trackBackdrop)
                 .fillMaxWidth()
-                .height(44f.dp)
-                .pointerInput(trackWidth) {
-                    fun valueAt(x: Float): Float {
-                        val delta = (valueRange.endInclusive - valueRange.start) *
-                            ((x / trackWidth).fastCoerceIn(0f, 1f))
-                        return (if (isLtr) valueRange.start + delta
-                        else valueRange.endInclusive - delta).coerceIn(valueRange)
-                    }
-                    // 自己接管手势：demo 原来的 inspectDragGestures 在可滚动页面里不认拖拽
-                    detectDragGestures(
-                        onDragStart = { off ->
-                            didDrag = true
-                            val v = valueAt(off.x)
-                            dampedDragAnimation.updateValue(v)
-                            onValueChange(v)
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val v = valueAt(change.position.x)
-                            dampedDragAnimation.updateValue(v)
-                            onValueChange(v)
-                        },
-                        onDragEnd = {
-                            onValueChange(dampedDragAnimation.targetValue)
-                        }
-                    )
-                },
+                .height(44f.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             Box(
@@ -240,6 +217,49 @@ fun LiquidSlider(
                     }
                 )
                 .size(40f.dp, 24f.dp)
+        )
+
+        // 手势层：盖在最上面，Initial 阶段立刻接管并消费事件，
+        // 不依赖 demo 的 inspectDragGestures（它在可滚动容器里会被吞掉），也不受 slop 影响
+        Box(
+            Modifier
+                .matchParentSize()
+                .pointerInput(trackWidth) {
+                    fun valueAt(x: Float): Float {
+                        val frac = (x / trackWidth).fastCoerceIn(0f, 1f)
+                        val delta = (valueRange.endInclusive - valueRange.start) * frac
+                        return (if (isLtr) valueRange.start + delta
+                        else valueRange.endInclusive - delta).coerceIn(valueRange)
+                    }
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial
+                            )
+                            // 按下先不消费：等判断出方向再决定给滑杆还是给页面滚动
+                            val start = down.position
+                            var decided = false
+                            var captured = false
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val ch = event.changes.fastFirstOrNull { it.id == down.id } ?: break
+                                if (!decided) {
+                                    val dx = kotlin.math.abs(ch.position.x - start.x)
+                                    val dy = kotlin.math.abs(ch.position.y - start.y)
+                                    if (dx > 6f && dx > dy) { decided = true; captured = true }
+                                    else if (dy > 6f && dy > dx) { decided = true; captured = false }
+                                }
+                                if (decided && !captured) break
+                                ch.consume()
+                                if (!ch.pressed) break
+                                val v = valueAt(ch.position.x)
+                                dampedDragAnimation.updateValue(v)
+                                onValueChange(v)
+                            }
+                        }
+                    }
+                }
         )
     }
 }
