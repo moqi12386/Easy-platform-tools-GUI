@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
@@ -62,6 +63,7 @@ import androidx.core.view.WindowCompat
 import androidx.documentfile.provider.DocumentFile
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -102,7 +104,10 @@ private const val ACTION_PERM = "com.easypt.gui.USB_PERMISSION"
 private const val PREF = "easyptc"
 
 /** 运行期降级开关：上次渲染崩过就关掉 backdrop，保证还能用 */
-internal var safeRender = false
+internal var safeRender by androidx.compose.runtime.mutableStateOf(false)
+
+/** 用户在设置里手动强制安全模式 */
+internal var forceSafe by androidx.compose.runtime.mutableStateOf(false)
 
 /**
  * backdrop 库靠 GraphicsLayer + RenderEffect，在 Android 17 (API 37) 上会整段崩掉，
@@ -157,6 +162,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
+    private var showAbout by mutableStateOf(false)
+    private var showPlayground by mutableStateOf(false)
 
 
     private fun t(zh: String, en: String) = tr(lang, zh, en)
@@ -221,6 +228,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
+        forceSafe = sp.getBoolean("forceSafe", false)
 
         androidx.core.content.ContextCompat.registerReceiver(
             this, usbReceiver, IntentFilter(ACTION_PERM),
@@ -927,6 +935,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("theme", m.ordinal).apply()
     }
 
+    private fun chooseForceSafe(v: Boolean) {
+        forceSafe = v
+        safeRender = v
+        getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("forceSafe", v).apply()
+    }
+
     private fun chooseMonet(v: Boolean) {
         monet = v
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("monet", v).apply()
@@ -1098,6 +1112,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         alpha = uiAlpha / 100f,
                                         lang = lang,
                                         onShareLog = { shareLog() },
+                                        onForceSafe = { chooseForceSafe(it) },
+                                        onAbout = { showAbout = true },
+                                        onPlayground = { showPlayground = true },
                                         themeMode = themeMode,
                                         onTheme = { chooseTheme(it) },
                                         monet = monet,
@@ -1197,6 +1214,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                         if (showRom) {
                             RomDialog(style, lang, romSteps, onStart = { runRom() }, onDismiss = { showRom = false })
+                        }
+                        if (showAbout) {
+                            AboutDialog(style, lang, onDismiss = { showAbout = false })
+                        }
+                        if (showPlayground) {
+                            GlassPlaygroundDialog(style, lang, onDismiss = { showPlayground = false })
                         }
                         eraseTarget?.let { target ->
                             ConfirmDialog(
@@ -1956,6 +1979,9 @@ fun SettingsPage(
     alpha: Float,
     lang: Lang,
     onShareLog: () -> Unit,
+    onForceSafe: (Boolean) -> Unit,
+    onAbout: () -> Unit,
+    onPlayground: () -> Unit,
     themeMode: ThemeMode,
     onTheme: (ThemeMode) -> Unit,
     monet: Boolean,
@@ -2068,6 +2094,7 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
+        if (style == UiStyle.Glass) {
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 SliderRow(style, tr(lang, "面板不透明度", "Panel opacity"), opacity, onOpacity)
@@ -2085,6 +2112,7 @@ fun SettingsPage(
                     )
                 }
             }
+        }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -2197,10 +2225,18 @@ fun SettingsPage(
         Spacer(Modifier.height(12.dp))
 
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
-                Text("Easy-platform-tools-GUI", color = LocalCardText.current, fontSize = 15.sp)
-                Text("3.7.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
-            }
+            KRow(
+                Icons.Filled.Info,
+                tr(lang, "关于", "About"),
+                tr(lang, "版本信息与许可", "Version and license"),
+                onClick = { onAbout() }
+            )
+            KRow(
+                Icons.Filled.Build,
+                tr(lang, "Glass Playground", "Glass Playground"),
+                tr(lang, "实时调玻璃参数", "Tune glass parameters live"),
+                onClick = { onPlayground() }
+            )
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -2357,6 +2393,117 @@ fun LiquidBottomBar(
                     }
                 }
             }
+        }
+    }
+}
+
+// ======================= 关于 / Glass Playground =======================
+
+@Composable
+fun AboutDialog(style: UiStyle, lang: Lang, onDismiss: () -> Unit) {
+    KDialog(style, tr(lang, "关于", "About"), onDismiss) {
+        Text(
+            "Easy-platform-tools-GUI",
+            color = Palette.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text("3.8.0 · Compose", color = Palette.text2, fontSize = 13.sp)
+        Spacer(Modifier.height(14.dp))
+        Text(
+            tr(
+                lang,
+                "Windows 版是 adb / fastboot 图形命令台；这个是 Android 版，可以：\n" +
+                    "· OTG 主机直连 fastboot（不依赖 adb / root）\n" +
+                    "· 本机 root 下备份、刷写分区\n" +
+                    "· 遥控 PC 上的服务\n" +
+                    "· 线刷 ROM（解析 flash_all 脚本）",
+                "Android port of Easy-platform-tools-GUI.\n" +
+                    "· OTG host fastboot (no adb / no root)\n" +
+                    "· Backup & flash partitions with root\n" +
+                    "· Remote PC service\n" +
+                    "· ROM line-flashing (flash_all scripts)"
+            ),
+            color = Palette.text2, fontSize = 12.sp, lineHeight = 18.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "MIT License · 玻璃效果来自 Kyant0/AndroidLiquidGlass (Apache-2.0)",
+            color = Palette.text2.copy(alpha = 0.8f), fontSize = 11.sp
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text(tr(lang, "关闭", "Close"), color = Palette.accent) }
+        }
+    }
+}
+
+@Composable
+fun GlassPlaygroundDialog(style: UiStyle, lang: Lang, onDismiss: () -> Unit) {
+    KDialog(style, tr(lang, "Glass Playground", "Glass Playground"), onDismiss) {
+        var blurDp by remember { mutableFloatStateOf(8f) }
+        var lensDp by remember { mutableFloatStateOf(24f) }
+        var tintPct by remember { mutableFloatStateOf(40f) }
+
+        val canvas = rememberCanvasBackdrop {
+            drawRect(
+                Brush.linearGradient(
+                    listOf(Color(0xFF4F8CFF), Color(0xFF00C6A8), Color(0xFFFF7A59))
+                )
+            )
+        }
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .then(
+                    if (useBackdrop) {
+                        Modifier.drawBackdrop(
+                            backdrop = canvas,
+                            shape = { RoundedCornerShape(24.dp) },
+                            effects = {
+                                vibrancy()
+                                blur(blurDp.dp.toPx())
+                                lens(lensDp.dp.toPx(), lensDp.dp.toPx())
+                            },
+                            onDrawSurface = { drawRect(Color.White.copy(alpha = tintPct / 100f)) }
+                        )
+                    } else {
+                        Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xFF4F8CFF))
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Glass", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        listOf(
+            Triple(tr(lang, "模糊", "Blur"), blurDp, { v: Float -> blurDp = v }),
+            Triple(tr(lang, "折射", "Lens"), lensDp, { v: Float -> lensDp = v }),
+            Triple(tr(lang, "底料", "Tint"), tintPct, { v: Float -> tintPct = v })
+        ).forEach { (label, v, set) ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, color = Palette.text, fontSize = 14.sp, modifier = Modifier.width(60.dp))
+                Slider(
+                    value = v,
+                    onValueChange = set,
+                    valueRange = 0f..48f,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Palette.accent,
+                        inactiveTrackColor = Color(0xFFE1E4E8)
+                    )
+                )
+                Text("${v.toInt()}", color = Palette.text2, fontSize = 12.sp, modifier = Modifier.width(34.dp))
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text(tr(lang, "关闭", "Close"), color = Palette.accent) }
         }
     }
 }
