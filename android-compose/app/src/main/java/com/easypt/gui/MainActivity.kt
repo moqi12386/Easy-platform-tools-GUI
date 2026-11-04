@@ -96,6 +96,16 @@ data class LogLine(val text: String, val color: Color)
 private const val ACTION_PERM = "com.easypt.gui.USB_PERMISSION"
 private const val PREF = "easyptc"
 
+/** 运行期降级开关：上次渲染崩过就关掉 backdrop，保证还能用 */
+internal var safeRender = false
+
+/**
+ * backdrop 库靠 GraphicsLayer + RenderEffect，在 Android 17 (API 37) 上会整段崩掉，
+ * 所以只在 Android 12~15 (31..35) 启用，其余走纯位图取样玻璃。
+ */
+internal val useBackdrop: Boolean
+    get() = Build.VERSION.SDK_INT in 31..35 && !safeRender
+
 // 全局配色走 Palette（Tail 定义），getter 让旧代码零改动跟随主题
 private val Bg: Color get() = Palette.bg
 private val Surface: Color get() = Palette.surface
@@ -144,16 +154,56 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
 
+
     private fun t(zh: String, en: String) = tr(lang, zh, en)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 上一次没跑完？（成功启动会把轨迹删掉，残留 = 上次没跑完）
+        val prevTrace = readTrace()
+        val prevCrash = readCrash()
+        val spBoot = getSharedPreferences(PREF, MODE_PRIVATE)
+        if (prevTrace != null) {
+            val fails = spBoot.getInt("bootFails", 0) + 1
+            spBoot.edit().putInt("bootFails", fails).apply()
+            if (fails >= 2) {
+                // 降级后还是崩 -> 停在诊断页
+                showCrashScreen(
+                    (prevCrash ?: "没有 Java 堆栈 —— 大概率是渲染层原生崩溃（SIGSEGV）\n") +
+                        "\n—— 上次启动走到哪一步 ——\n" + prevTrace
+                )
+                return
+            }
+            // 第一次失败：自动降级（关掉 backdrop / 特效）+ 强制回到原生样式，避免死循环
+            safeRender = true
+            style = UiStyle.Native
+            try {
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", UiStyle.Native.ordinal).apply()
+            } catch (_: Throwable) { }
+            try { File(filesDir, "boot-trace.txt").delete() } catch (_: Throwable) { }
+        } else {
+            safeRender = false
+            // 上次是不是在切样式之后崩的？（原生崩溃没有 Java 堆栈，只能靠这个）
+            val lastAction = readLastAction()
+            if (lastAction != null) {
+                safeRender = true
+                style = UiStyle.Native
+                try {
+                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", UiStyle.Native.ordinal).apply()
+                } catch (_: Throwable) { }
+                mark("last-action: $lastAction")
+            }
+        }
+
+        // 本次启动：清空旧轨迹再开始记
+        try { File(filesDir, "boot-trace.txt").delete() } catch (_: Throwable) { }
+        mark("01-onCreate")
         installCrashHandler()
+        mark("02-handler")
         enableEdgeToEdge()
         setupBars()
-        showLastCrashIfAny()
+        mark("03-bars")
 
-        fb = FastbootUsb(this)
         val sp = getSharedPreferences(PREF, MODE_PRIVATE)
         mode = sp.getInt("mode", 0)
         part = sp.getString("part", "boot") ?: "boot"
@@ -175,7 +225,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         append("Easy-platform-tools-GUI · Compose", Accent)
         append("Android ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}", TextSecondary)
 
+        mark("04-prefs")
         reloadWallpaper()
+        mark("05-setContent")
         setContent { EasyApp() }
     }
 
@@ -184,7 +236,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->
             try {
                 File(filesDir, "last-crash.txt").writeText(
-                    "EasyPT 3.1.2 crash\n" +
+                    "EasyPT 3.3.3 crash\n" +
                         "device=${Build.MANUFACTURER} ${Build.MODEL} API ${Build.VERSION.SDK_INT}\n\n" +
                         android.util.Log.getStackTraceString(e)
                 )
@@ -194,33 +246,164 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
     }
 
-    /** 上一次崩了就把堆栈先摆出来，方便截图发我 */
-    private fun showLastCrashIfAny() {
-        val f = File(filesDir, "last-crash.txt")
-        if (!f.exists()) return
-        val crashText = try { f.readText() } catch (_: Throwable) { "" }
-        try { f.delete() } catch (_: Throwable) { }
-        if (crashText.isBlank()) return
+    /** 日志同时写到 内部 files/logs 与 外部 Android/data/<pkg>/files/logs，方便导出 */
+    private fun logLine(stage: String) {
+        val line = "[" + SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date()) + "] " + stage + "\n"
         try {
-            val tv = android.widget.TextView(this).apply {
-                text = crashText
-                textSize = 10f
-                setTextIsSelectable(true)
-                setPadding(28, 24, 28, 12)
+            val dir = File(filesDir, "logs").apply { mkdirs() }
+            val f = File(dir, "session.log")
+            if (f.length() > 256 * 1024) f.delete()
+            f.appendText(line)
+        } catch (_: Throwable) {
+        }
+        try {
+            val ext = getExternalFilesDir(null)
+            if (ext != null) {
+                val dir = File(ext, "logs").apply { mkdirs() }
+                val f = File(dir, "session.log")
+                if (f.length() > 256 * 1024) f.delete()
+                f.appendText(line)
             }
-            val scroll = android.widget.ScrollView(this).apply { addView(tv) }
-            android.app.AlertDialog.Builder(this)
-                .setTitle("上次的崩溃日志（截图发我）")
-                .setView(scroll)
-                .setPositiveButton("知道了") { d, _ -> d.dismiss() }
-                .show()
         } catch (_: Throwable) {
         }
     }
 
+    private fun mark(stage: String) {
+        logLine(stage)
+        try {
+            File(filesDir, "boot-trace.txt").appendText("$stage\n")
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun collectLog(): String {
+        val sb = StringBuilder()
+        sb.append("Easy-platform-tools-GUI · 日志\n")
+        sb.append("device=").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
+            .append("  API ").append(Build.VERSION.SDK_INT).append('\n')
+        sb.append("style=").append(style.name).append("  dark=").append(Palette.dark)
+            .append("  safeRender=").append(safeRender).append('\n')
+        sb.append("---- last crash ----\n")
+        sb.append(readCrash() ?: "(无)")
+        sb.append("\n---- last action ----\n")
+        sb.append(readLastAction() ?: "(无)")
+        sb.append("\n---- session log ----\n")
+        try {
+            val f = File(File(filesDir, "logs"), "session.log")
+            if (f.exists()) sb.append(f.readText().takeLast(60_000))
+        } catch (_: Throwable) {
+        }
+        return sb.toString()
+    }
+
+    private fun shareLog() {
+        val text = try { collectLog() } catch (e: Throwable) { "collect failed: ${e.message}" }
+        try {
+            val i = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "EasyPT 日志")
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            startActivity(Intent.createChooser(i, "分享日志"))
+        } catch (_: Throwable) {
+            toast("没有可用的分享应用")
+        }
+    }
+
+    private fun readLastAction(): String? {
+        val f = File(filesDir, "last-action.txt")
+        if (!f.exists()) return null
+        return try { f.readText() } catch (_: Throwable) { null }
+    }
+
+    private fun readTrace(): String? {
+        val f = File(filesDir, "boot-trace.txt")
+        if (!f.exists()) return null
+        return try { f.readText() } catch (_: Throwable) { null }
+    }
+
+    private fun readCrash(): String? {
+        val f = File(filesDir, "last-crash.txt")
+        if (!f.exists()) return null
+        val s = try { f.readText() } catch (_: Throwable) { null }
+        return if (s.isNullOrBlank()) null else s
+    }
+
+    /** 纯 Android View 的崩溃页：不依赖 Compose，崩溃了也不会被带走 */
+    private fun showCrashScreen(text: String) {
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        val title = android.widget.TextView(this).apply {
+            this.text = "上次启动崩溃了"
+            textSize = 20f
+            setTypeface(getTypeface(), android.graphics.Typeface.BOLD)
+            setPadding(dp(20), dp(24), dp(20), dp(8))
+        }
+        val hint = android.widget.TextView(this).apply {
+            this.text = "下面是堆栈，点发送/截图给开发者即可；点「重试」重新启动"
+            textSize = 12f
+            setPadding(dp(20), 0, dp(20), dp(12))
+        }
+        val body = android.widget.TextView(this).apply {
+            this.text = text
+            textSize = 9f
+            setTextIsSelectable(true)
+            typeface = android.graphics.Typeface.MONOSPACE
+            setPadding(dp(16), dp(8), dp(16), dp(16))
+        }
+        val scroll = android.widget.ScrollView(this).apply {
+            addView(body)
+            setBackgroundColor(android.graphics.Color.parseColor("#F5F6F8"))
+        }
+        val share = android.widget.Button(this).apply {
+            this.text = "发送日志"
+            setOnClickListener { shareLog() }
+        }
+        val copy = android.widget.Button(this).apply {
+            this.text = "复制"
+            setOnClickListener {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text))
+                Toast.makeText(this@MainActivity, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+            }
+        }
+        val retry = android.widget.Button(this).apply {
+            this.text = "重试"
+            setOnClickListener {
+                try { File(filesDir, "last-crash.txt").delete() } catch (_: Throwable) { }
+                try { File(filesDir, "boot-trace.txt").delete() } catch (_: Throwable) { }
+                try {
+                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("bootFails", 0).apply()
+                } catch (_: Throwable) { }
+                val i = intent
+                finish()
+                startActivity(i)
+            }
+        }
+        val bar = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            setPadding(dp(12), dp(8), dp(12), dp(12))
+            addView(share, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(copy, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(retry, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        val root = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setBackgroundColor(android.graphics.Color.WHITE)
+            addView(title)
+            addView(hint)
+            addView(scroll, android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            ))
+            addView(bar)
+        }
+        setContentView(root)
+    }
+
     override fun onDestroy() {
         try { unregisterReceiver(usbReceiver) } catch (_: Exception) { }
-        fb.close()
+        try { fb.close() } catch (_: Throwable) { }
         super.onDestroy()
     }
 
@@ -722,6 +905,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private fun chooseStyle(s: UiStyle) {
+        try {
+            File(filesDir, "last-action.txt").writeText("切换到界面样式：${s.labelZh} (${s.name})")
+        } catch (_: Throwable) {
+        }
         style = s
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", s.ordinal).apply()
     }
@@ -765,8 +952,26 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             cs.primary
         } else null
 
-        val glassStyle = style == UiStyle.Glass
+        val glassStyle = style == UiStyle.Glass && !safeRender
         LaunchedEffect(assets, dark) { applyBars(assets) }
+        // 每次样式变化：两帧内没崩就认为这次切换是安全的
+        LaunchedEffect(style) {
+            withFrameNanos { }
+            withFrameNanos { }
+            try { File(filesDir, "last-action.txt").delete() } catch (_: Throwable) { }
+        }
+        LaunchedEffect(Unit) {
+            mark("06-composed")
+            withFrameNanos { }
+            mark("07-first-frame")
+            withFrameNanos { }
+            // 跑到这里说明这一帧画出来了：清轨迹、清面包屑、失败计数归零
+            try { File(filesDir, "boot-trace.txt").delete() } catch (_: Throwable) { }
+            try { File(filesDir, "last-action.txt").delete() } catch (_: Throwable) { }
+            try {
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("bootFails", 0).apply()
+            } catch (_: Throwable) { }
+        }
 
         val backdrop = rememberLayerBackdrop()
         val pickWallpaper = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -787,25 +992,18 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
 
         // 主题切换时整棵树重建，避免读到半新半旧的配色
-        key(dark, monet, style) {
+        key(dark, monet) {
             Box(Modifier.fillMaxSize().background(Bg)) {
-                val wallBackdrop = rememberLayerBackdrop()
                 val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
 
+                // 只保留一层 backdrop（给底栏取样）。嵌套两层在库里没有先例，先去掉。
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .then(if (realGlass) Modifier.layerBackdrop(backdrop) else Modifier)
+                        .then(if (useBackdrop) Modifier.layerBackdrop(backdrop) else Modifier)
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .then(if (realGlass) Modifier.layerBackdrop(wallBackdrop) else Modifier)
-                    ) {
-                        WallpaperView(assets)
-                    }
+                    WallpaperView(assets)
                     CompositionLocalProvider(
-                        LocalWallBackdrop provides wallBackdrop,
                         LocalTitleColor provides onWall,
                         LocalCardText provides Palette.text
                     ) {
@@ -887,6 +1085,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         density = glassDensity / 100f,
                                         alpha = uiAlpha / 100f,
                                         lang = lang,
+                                        onShareLog = { shareLog() },
                                         themeMode = themeMode,
                                         onTheme = { chooseTheme(it) },
                                         monet = monet,
@@ -1054,21 +1253,16 @@ fun KCard(
         }
         // 液态玻璃：真透明，从壁纸图层取样
         UiStyle.Glass -> {
-            val wall = LocalWallBackdrop.current
             val tint = if (Palette.dark) Color(0xFF0A0F16) else Color.White
-            val mod = if (realGlass && wall != null) {
-                Modifier.drawBackdrop(
-                    backdrop = wall,
-                    shape = { shape },
-                    effects = {
-                        vibrancy()
-                        blur((6f + blur * 16f).dp.toPx())
-                        lens((2f + density * 5f).dp.toPx(), (2f + density * 5f).dp.toPx())
-                    },
-                    onDrawSurface = { drawRect(tint.copy(alpha = 0.26f + alpha * 0.30f)) }
-                )
-            } else {
-                Modifier.glassSurface(
+            val mod = when {
+                // 降级模式：纯色，不碰任何渲染特效
+                safeRender -> Modifier
+                    .shadow(6.dp, shape, clip = false)
+                    .clip(shape)
+                    .background(if (Palette.dark) Color(0xFF1F2026) else Color.White)
+                // 卡片一律走软件取样：只画位图，不碰 RenderEffect / GraphicsLayer，
+                // 这样任何机型都不会因为渲染管线原生崩溃
+                else -> Modifier.glassSurface(
                     assets = assets,
                     shape = shape,
                     cornerDp = 22,
@@ -1076,10 +1270,11 @@ fun KCard(
                     blurLevel = blur,
                     density = density,
                     light = !Palette.dark,
-                    tintAlpha = 0.30f + alpha * 0.30f
+                    tint = if (Palette.dark) Color(0xFF0A0F16) else Color.White,
+                    tintAlpha = 0.16f + alpha * 0.24f
                 )
             }
-            CompositionLocalProvider(LocalCardText provides Color.White) {
+            CompositionLocalProvider(LocalCardText provides if (Palette.dark) Color.White else Palette.text) {
                 Column(modifier.fillMaxWidth().then(mod).padding(vertical = 6.dp), content = content)
             }
         }
@@ -1479,6 +1674,33 @@ fun HomePage(
             .padding(bottom = 110.dp)
             .verticalScroll(rememberScrollState())
     ) {
+        if (safeRender) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (Palette.dark) Color(0xFF3A2E12) else Color(0xFFFFF3D6))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Warning, null,
+                    tint = if (Palette.dark) Color(0xFFFFC04D) else Color(0xFF8A5A00),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    tr(
+                        lang,
+                        "上次启动异常，已用安全模式启动（关闭玻璃特效）。设置里可查看崩溃日志",
+                        "Last launch failed; running in safe mode (glass disabled). See crash log in Settings"
+                    ),
+                    color = if (Palette.dark) Color(0xFFFFD98A) else Color(0xFF6B4700),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        }
         PageTitle("Easy-platform-tools")
         Text(
             when (mode) {
@@ -1635,6 +1857,7 @@ fun SettingsPage(
     density: Float,
     alpha: Float,
     lang: Lang,
+    onShareLog: () -> Unit,
     themeMode: ThemeMode,
     onTheme: (ThemeMode) -> Unit,
     monet: Boolean,
@@ -1817,9 +2040,68 @@ fun SettingsPage(
         Spacer(Modifier.height(12.dp))
 
         KCard(style, assets, backdrop, screen, blur, density, alpha) {
+            val ctx = LocalContext.current
+            var showCrash by remember { mutableStateOf(false) }
+            val crashFile = remember { File(ctx.filesDir, "last-crash.txt") }
+            val actionFile = remember { File(ctx.filesDir, "last-action.txt") }
+            KRow(
+                Icons.Filled.Share,
+                tr(lang, "导出/分享日志", "Export / share log"),
+                tr(lang, "把日志发给开发者", "Send the log to the developer"),
+                onClick = { onShareLog() }
+            )
+            if (crashFile.exists() || actionFile.exists()) {
+                KRow(
+                    Icons.Filled.Warning,
+                    tr(lang, "查看崩溃日志", "View crash log"),
+                    if (actionFile.exists()) tr(lang, "上次崩在：切换样式", "Crashed after: style switch")
+                    else tr(lang, "上次启动的异常信息", "Last launch exception"),
+                    onClick = { showCrash = true }
+                )
+            }
+            KSwitchRow(
+                icon = Icons.Filled.Refresh,
+                title = tr(lang, "安全模式", "Safe mode"),
+                subtitle = tr(lang, "关闭玻璃特效，渲染出问题时用", "Disable glass effects when rendering fails"),
+                checked = safeRender,
+                enabled = false,
+                onCheckedChange = { }
+            )
+            if (showCrash) {
+                val crashText = remember {
+                    buildString {
+                        if (crashFile.exists()) append(runCatching { crashFile.readText() }.getOrDefault(""))
+                        if (actionFile.exists()) {
+                            append("\n\n—— 最后动作 ——\n")
+                            append(runCatching { actionFile.readText() }.getOrDefault(""))
+                        }
+                    }
+                }
+                KDialog(style, tr(lang, "崩溃日志", "Crash log"), onDismiss = { showCrash = false }) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(crashText, color = Palette.text2, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showCrash = false }) {
+                            Text(tr(lang, "关闭", "Close"), color = Palette.text2)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        KCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                 Text("Easy-platform-tools-GUI", color = LocalCardText.current, fontSize = 15.sp)
-                Text("3.2.0 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text("3.3.3 · adb / fastboot · MIT", color = LocalCardText.current.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -1899,7 +2181,7 @@ fun LiquidBottomBar(
                     }
             ) {
                 val surfaceMod = when {
-                    realGlass -> Modifier.drawBackdrop(
+                    useBackdrop -> Modifier.drawBackdrop(
                         backdrop = backdrop,
                         shape = { capsule },
                         effects = {
@@ -1915,7 +2197,7 @@ fun LiquidBottomBar(
                         },
                         shadow = null
                     )
-                    else -> Modifier.glassSurface(
+                    !safeRender -> Modifier.glassSurface(
                         assets = assets,
                         shape = capsule,
                         cornerDp = 32,
@@ -1923,8 +2205,13 @@ fun LiquidBottomBar(
                         blurLevel = 0.1f,
                         density = 0.5f,
                         light = !dark,
-                        tintAlpha = if (dark) 0.70f else 0.60f
+                        tint = if (dark) Color(0xFF14161A) else Color.White,
+                        tintAlpha = if (dark) 0.72f else 0.62f
                     )
+                    else -> Modifier
+                        .shadow(12.dp, capsule, clip = false)
+                        .clip(capsule)
+                        .background(if (dark) Color(0xFF1B1C20) else Color.White)
                 }
                 Box(Modifier.matchParentSize().then(surfaceMod))
 
