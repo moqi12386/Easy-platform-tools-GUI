@@ -1134,17 +1134,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
-                if (useBackdrop) {
-                    // 顶部渐变：照 demo 的 progressive blur，画在内容下面，标题仍清晰
-                    Box(Modifier.fillMaxSize()) {
-                        com.easypt.gui.glass.ProgressiveBlurEdge(
-                            backdrop = wallBackdrop,
-                            modifier = Modifier.align(Alignment.TopCenter),
-                            heightDp = 220f,
-                            tintColor = if (Palette.dark) Color(0xFF0A0F16) else Color.White,
-                            tintIntensity = 0.18f
-                        )
-                    }
+                if (true) {
+                    // 顶部渐变：和底栏同一套 Brush，标题仍然清晰
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(190.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Bg.copy(alpha = 0.85f),
+                                        Bg.copy(alpha = 0.45f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
                 }
                 Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
@@ -2595,7 +2600,7 @@ fun LiquidBottomBar(
                         density = 0.5f,
                         light = !dark,
                         tint = if (dark) Color(0xFF14161A) else Color.White,
-                        tintAlpha = if (dark) 0.72f else 0.62f
+                        tintAlpha = if (dark) 0.50f else 0.45f
                     )
                     else -> Modifier
                         .shadow(12.dp, capsule, clip = false)
@@ -3149,16 +3154,26 @@ fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
             Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.Center
         ) {
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.2f))
-                    .clickable { onDismiss() }
-                    .height(48.dp)
-                    .width(160.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+            val bd = LocalWallBackdrop.current
+            if (useBackdrop && bd != null) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = bd,
+                    modifier = Modifier.height(48.dp).width(160.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .width(160.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+            }
         }
     }
 }
