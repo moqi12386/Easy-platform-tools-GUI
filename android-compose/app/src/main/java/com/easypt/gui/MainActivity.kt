@@ -1050,7 +1050,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
                         LocalTitleColor provides onWall,
-                        LocalCardText provides Palette.text
+                        LocalCardText provides Palette.text,
+                        LocalStyle provides style
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -1295,8 +1296,16 @@ object Palette {
     var dark: Boolean = false
     var monetAccent: Color? = null
 
-    val bg: Color get() = if (dark) Color(0xFF101114) else Color(0xFFF2F3F5)
-    val surface: Color get() = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
+    val bg: Color
+        get() = run {
+            val base = if (dark) Color(0xFF101114) else Color(0xFFF2F3F5)
+            monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.10f else 0.05f) } ?: base
+        }
+    val surface: Color
+        get() = run {
+            val base = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
+            monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.12f else 0.06f) } ?: base
+        }
     val text: Color get() = if (dark) Color(0xFFECEDEF) else Color(0xFF16181D)
     val text2: Color get() = if (dark) Color(0xFF9A9DA5) else Color(0xFF8C9199)
     val accent: Color get() = monetAccent ?: Color(0xFF3B82F6)
@@ -1308,12 +1317,33 @@ object Palette {
 
 /** 卡片里的文字颜色：玻璃/深色卡片用白字，其余跟随主题 */
 val LocalCardText = androidx.compose.runtime.staticCompositionLocalOf { Palette.text }
+/** 当前界面风格，供组件内部做分化样式 */
+val LocalStyle = androidx.compose.runtime.staticCompositionLocalOf { UiStyle.Native }
 /** 只含壁纸的图层，卡片从这里取样 */
 val LocalWallBackdrop = androidx.compose.runtime.staticCompositionLocalOf<Backdrop?> { null }
 /** 直接画在壁纸上的标题颜色 */
 val LocalTitleColor = androidx.compose.runtime.staticCompositionLocalOf { Palette.text }
 
 data class BarItem(val icon: ImageVector, val label: String)
+
+/** MIUIX 风格下的彩色图标底色 */
+fun miuixIconColor(icon: ImageVector): Color = when (icon) {
+    Icons.Filled.PlayArrow -> Color(0xFF4C8DFF)
+    Icons.Filled.Info -> Color(0xFF9AA0A6)
+    Icons.Filled.List -> Color(0xFF5B8DEF)
+    Icons.Filled.Build -> Color(0xFFFF9F0A)
+    Icons.Filled.Refresh -> Color(0xFF34C759)
+    Icons.Filled.Delete -> Color(0xFFFF3B30)
+    Icons.Filled.Share -> Color(0xFF0A84FF)
+    Icons.Filled.Lock -> Color(0xFF636366)
+    Icons.Filled.Warning -> Color(0xFFFF9500)
+    Icons.Filled.Star -> Color(0xFFFFCC00)
+    Icons.Filled.Public -> Color(0xFF007AFF)
+    Icons.Filled.Home -> Color(0xFF4C8DFF)
+    Icons.Filled.Settings -> Color(0xFF8E8E93)
+    Icons.Filled.Search -> Color(0xFF8E8E93)
+    else -> Color(0xFF5B8DEF)
+}
 
 // ======================= 通用组件 =======================
 
@@ -1424,8 +1454,21 @@ fun KRow(
             .padding(horizontal = 18.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
+        val uiStyle = LocalStyle.current
+        if (icon != null && uiStyle != UiStyle.Glass) {
+            if (uiStyle == UiStyle.Miuix) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(miuixIconColor(icon)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                }
+            } else {
+                Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
+            }
             Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
@@ -1510,11 +1553,24 @@ fun KSwitchRow(
             .padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            icon, contentDescription = null,
-            tint = if (enabled) text else text.copy(alpha = 0.35f),
-            modifier = Modifier.size(23.dp)
-        )
+        val uiStyleS = LocalStyle.current
+        if (uiStyleS == UiStyle.Miuix) {
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (enabled) miuixIconColor(icon) else miuixIconColor(icon).copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+            }
+        } else {
+            Icon(
+                icon, contentDescription = null,
+                tint = if (enabled) text else text.copy(alpha = 0.35f),
+                modifier = Modifier.size(23.dp)
+            )
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -1941,42 +1997,42 @@ fun HomePage(
 
         when (mode) {
             0 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(null, tr(lang, "连接设备", "Connect device"),
+                KRow(Icons.Filled.PlayArrow, tr(lang, "连接设备", "Connect device"),
                     tr(lang, "USB 授权后自动打开", "auto after USB grant"), onClick = onConnect)
-                KRow(null, tr(lang, "设备信息", "Device info"),
+                KRow(Icons.Filled.Info, tr(lang, "设备信息", "Device info"),
                     "product / version / serialno", onClick = onInfo)
-                KRow(null, tr(lang, "读分区表", "Partitions"),
+                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"),
                     "fastboot getvar all", onClick = onParts)
-                KRow(null, tr(lang, "刷入镜像", "Flash image"),
+                KRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
-                KRow(null, tr(lang, "线刷 ROM", "Flash ROM"),
+                KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
                     tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), onClick = onRom)
-                KRow(null, tr(lang, "擦除分区", "Erase partition"), part,
+                KRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                KRow(null, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
-                KRow(null, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
+                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     onClick = { onReboot("recovery") })
-                KRow(null, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
+                KRow(Icons.Filled.Lock, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
                     onClick = { onReboot("bootloader") })
-                KRow(null, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
+                KRow(Icons.Filled.Warning, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl)
             }
             1 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(null, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
-                KRow(null, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
-                KRow(null, tr(lang, "备份分区", "Back up partition"),
+                KRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
+                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
+                KRow(Icons.Filled.Star, tr(lang, "备份分区", "Back up partition"),
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
-                KRow(null, tr(lang, "备份基带", "Back up baseband"),
+                KRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                KRow(null, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
-                KRow(null, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
+                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
                     onClick = { onReboot("recovery") })
-                KRow(null, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
+                KRow(Icons.Filled.Warning, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl)
             }
             else -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(null, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
-                KRow(null, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                KRow(null, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
-                KRow(null, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
+                KRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
+                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
+                KRow(Icons.Filled.Share, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") })
+                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     onClick = { onReboot("recovery") })
             }
         }
@@ -2283,12 +2339,14 @@ fun SettingsPage(
                 tr(lang, "版本信息与许可", "Version and license"),
                 onClick = { onAbout() }
             )
-            KRow(
-                Icons.Filled.Build,
-                tr(lang, "Glass Playground", "Glass Playground"),
-                tr(lang, "实时调玻璃参数", "Tune glass parameters live"),
-                onClick = { onPlayground() }
-            )
+            if (style == UiStyle.Glass) {
+                KRow(
+                    Icons.Filled.Build,
+                    tr(lang, "Glass Playground", "Glass Playground"),
+                    tr(lang, "实时调玻璃参数", "Tune glass parameters live"),
+                    onClick = { onPlayground() }
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -2314,7 +2372,7 @@ fun LiquidBottomBar(
     var drag by remember { mutableFloatStateOf(0f) }
     var pressed by remember { mutableStateOf(false) }
     val capsule = remember { RoundedCornerShape(32.dp) }
-    val pillShape = remember { RoundedCornerShape(14.dp) }
+    val pillShape = remember { RoundedCornerShape(26.dp) }
     val dark = Palette.dark
     val labelIdle = if (dark) Color(0xFFD8DAE0) else Palette.text
 
@@ -2409,7 +2467,7 @@ fun LiquidBottomBar(
                         }
                         .width(tabW)
                         .fillMaxHeight()
-                        .padding(horizontal = 6.dp, vertical = 7.dp)
+                        .padding(horizontal = 6.dp, vertical = 6.dp)
                         .clip(pillShape)
                         .background(Palette.accent.copy(alpha = if (dark) 0.28f else 0.14f))
                 )
