@@ -7,6 +7,7 @@ import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntSize
@@ -62,10 +63,12 @@ class DampedDragAnimation(
     val scaleY: Float get() = scaleYAnimation.value
     val velocity: Float get() = velocityAnimation.value
 
+    // demo 原来用 inspectDragGestures，在可滚动页面里不认拖拽；
+    // 换成标准 detectDragGestures，按下白点即可拖动
     val modifier: Modifier = Modifier.pointerInput(Unit) {
-        inspectDragGestures(
-            onDragStart = { down ->
-                onDragStarted(down.position)
+        detectDragGestures(
+            onDragStart = { position ->
+                onDragStarted(position)
                 press()
             },
             onDragEnd = {
@@ -75,10 +78,12 @@ class DampedDragAnimation(
             onDragCancel = {
                 onDragStopped()
                 release()
+            },
+            onDrag = { change, dragAmount ->
+                change.consume()
+                onDrag(size, dragAmount)
             }
-        ) { change, dragAmount ->
-            onDrag(size, dragAmount)
-        }
+        )
     }
 
     fun press() {
