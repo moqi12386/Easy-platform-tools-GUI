@@ -1716,14 +1716,12 @@ fun KSwitchRow(
         }
         val wall = LocalWallBackdrop.current
         if (useBackdrop && wall != null) {
-            Box(Modifier.width(58.dp).height(32.dp)) {
-                LiquidToggle(
-                    selected = { checked },
-                    onSelect = { if (enabled) onCheckedChange(it) },
-                    backdrop = wall,
-                    modifier = Modifier.matchParentSize()
-                )
-            }
+            // 照 demo 原样：LiquidToggle 自带 64x28 胶囊尺寸，不要套盒子改尺寸
+            LiquidToggle(
+                selected = { checked },
+                onSelect = { onCheckedChange(it) },
+                backdrop = wall
+            )
         } else {
             Switch(
                 checked = checked,
@@ -2471,10 +2469,13 @@ fun SettingsPage(
             KSwitchRow(
                 icon = Icons.Filled.Refresh,
                 title = tr(lang, "安全模式", "Safe mode"),
-                subtitle = tr(lang, "关闭玻璃特效，渲染出问题时用", "Disable glass effects when rendering fails"),
+                subtitle = tr(
+                    lang,
+                    "手动关闭玻璃特效（崩溃时不会自动开启，只回退上一步）",
+                    "Manually disable glass effects (crashes only roll back the last action)"
+                ),
                 checked = safeRender,
-                enabled = false,
-                onCheckedChange = { }
+                onCheckedChange = { onForceSafe(it) }
             )
             if (showCrash) {
                 val crashText = remember {
@@ -3023,6 +3024,15 @@ fun LiquidChoiceDialog(
                     Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                val bd = LocalWallBackdrop.current
+                if (useBackdrop && bd != null) {
+                    // demo 的 Transparent Liquid Button
+                    LiquidButton(
+                        onClick = onDismiss,
+                        backdrop = bd,
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+                } else {
                     Row(
                         Modifier
                             .clip(RoundedCornerShape(50))
@@ -3037,6 +3047,7 @@ fun LiquidChoiceDialog(
             }
         }
     }
+}
 }
 
 /**
