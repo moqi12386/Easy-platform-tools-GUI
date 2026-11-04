@@ -1069,6 +1069,137 @@ namespace EasyPlatformTools
                 }
             };
 
+            Button btnWallOnline = AddDlgButton("在线壁纸", 256, 382, 110, 32);
+            btnWallOnline.Click += delegate
+            {
+                using (Form dlgOnline = new Form())
+                {
+                    dlgOnline.Text = "在线壁纸 · 必应";
+                    dlgOnline.Size = new Size(720, 520);
+                    dlgOnline.StartPosition = FormStartPosition.CenterParent;
+                    dlgOnline.BackColor = theme.Bg;
+                    dlgOnline.ForeColor = theme.Text;
+                    dlgOnline.Font = fSmall;
+
+                    Label tip = new Label();
+                    tip.Text = "正在获取必应壁纸…";
+                    tip.AutoSize = true;
+                    tip.Location = new Point(16, 12);
+                    dlgOnline.Controls.Add(tip);
+
+                    ListView lv = new ListView();
+                    lv.View = View.LargeIcon;
+                    lv.LargeImageList = new ImageList();
+                    lv.LargeImageList.ImageSize = new Size(160, 90);
+                    lv.Dock = DockStyle.Fill;
+                    lv.MultiSelect = false;
+                    lv.BackColor = theme.Panel;
+                    lv.ForeColor = theme.Text;
+
+                    Panel host = new Panel();
+                    host.Dock = DockStyle.Fill;
+                    host.Padding = new Padding(16, 36, 16, 60);
+                    host.Controls.Add(lv);
+                    dlgOnline.Controls.Add(host);
+
+                    List<string> urls = new List<string>();
+                    string[] titles = new string[0];
+
+                    System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try
+                        {
+                            using (System.Net.WebClient wc = new System.Net.WebClient())
+                            {
+                                wc.Encoding = System.Text.Encoding.UTF8;
+                                string json = wc.DownloadString("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN");
+                                MatchCollection ms = Regex.Matches(json, "\"urlbase\":\"([^\"]+)\"");
+                                List<string> bases = new List<string>();
+                                foreach (Match m in ms) bases.Add(m.Groups[1].Value);
+                                dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                {
+                                    tip.Text = bases.Count == 0 ? "没有获取到壁纸" : "点一张设为背景";
+                                    int i = 0;
+                                    foreach (string b in bases)
+                                    {
+                                        string full = "https://www.bing.com" + b + "_UHD.jpg";
+                                        string thumb = "https://www.bing.com" + b + "_400x240.jpg";
+                                        urls.Add(full);
+                                        try
+                                        {
+                                            byte[] bytes = wc.DownloadData(thumb);
+                                            using (MemoryStream ms2 = new MemoryStream(bytes))
+                                            {
+                                                lv.LargeImageList.Images.Add(Image.FromStream(ms2));
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            lv.LargeImageList.Images.Add(new Bitmap(160, 90));
+                                        }
+                                        lv.Items.Add(new ListViewItem("壁纸 " + (++i), i - 1));
+                                    }
+                                });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            try { dlgOnline.BeginInvoke((MethodInvoker)delegate { tip.Text = "获取失败：" + ex.Message; }); }
+                            catch { }
+                        }
+                    });
+
+                    Button ok = new Button();
+                    ok.Text = "应用";
+                    ok.Location = new Point(520, 430);
+                    ok.Size = new Size(80, 32);
+                    ok.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                    ok.Click += delegate
+                    {
+                        if (lv.SelectedIndices.Count == 0) return;
+                        string url = urls[lv.SelectedIndices[0]];
+                        ok.Enabled = false;
+                        tip.Text = "正在下载…";
+                        System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            try
+                            {
+                                string dir = Path.Combine(Path.GetTempPath(), "easypt-walls");
+                                Directory.CreateDirectory(dir);
+                                string file = Path.Combine(dir, "bing-" + DateTime.Now.Ticks + ".jpg");
+                                using (System.Net.WebClient wc2 = new System.Net.WebClient())
+                                {
+                                    wc2.DownloadFile(url, file);
+                                }
+                                dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                {
+                                    wallpaperPath = file;
+                                    SaveConfig();
+                                    ApplyTheme(theme);
+                                    lblWall.Text = Path.GetFileName(file);
+                                    dlgOnline.Close();
+                                });
+                            }
+                            catch (Exception ex2)
+                            {
+                                try { dlgOnline.BeginInvoke((MethodInvoker)delegate { tip.Text = "下载失败：" + ex2.Message; ok.Enabled = true; }); }
+                                catch { }
+                            }
+                        });
+                    };
+                    dlgOnline.Controls.Add(ok);
+
+                    Button cancel = new Button();
+                    cancel.Text = "取消";
+                    cancel.Location = new Point(608, 430);
+                    cancel.Size = new Size(80, 32);
+                    cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                    cancel.Click += delegate { dlgOnline.Close(); };
+                    dlgOnline.Controls.Add(cancel);
+
+                    dlgOnline.ShowDialog(dlgSettings);
+                }
+            };
             Button btnWallOff = AddDlgButton("移除", 156, 382, 90, 32);
             btnWallOff.Click += delegate
             {

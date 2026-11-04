@@ -2008,7 +2008,7 @@ fun HomePage(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 20.dp)
+            .padding(bottom = 120.dp)
             .verticalScroll(rememberScrollState())
     ) {
         if (crashBannerVisible) {
@@ -2232,7 +2232,7 @@ fun SettingsPage(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 20.dp)
+            .padding(bottom = 120.dp)
             .verticalScroll(rememberScrollState())
     ) {
         var showPartPicker by remember { mutableStateOf(false) }
