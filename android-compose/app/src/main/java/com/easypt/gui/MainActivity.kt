@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
@@ -167,16 +168,25 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var style by mutableStateOf(UiStyle.Native)
     private var lang by mutableStateOf(Lang.Zh)
     private var page by mutableIntStateOf(0)
-    private var uiAlpha by mutableFloatStateOf(85f)
-    private var glassBlur by mutableFloatStateOf(55f)
-    private var glassDensity by mutableFloatStateOf(40f)
+    private var uiAlpha by mutableFloatStateOf(0f)
+    private var glassBlur by mutableFloatStateOf(30f)
+    private var glassDensity by mutableFloatStateOf(100f)
     private var glassAssets by mutableStateOf<GlassAssets?>(null)
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
     private var fontChoice by mutableStateOf(AppFont.System)
     private var customFont by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
+    /** 字体下载进度 0..100，-1 表示没在下载 */
+    private var fontProgress by mutableIntStateOf(-1)
+    private var logCmdColor by mutableStateOf(Color(0xFF60A5FA))
+    private var logOkColor by mutableStateOf(Color(0xFF3DD68C))
+    private var logErrColor by mutableStateOf(Color(0xFFFF7B72))
+    private var logTextColor by mutableStateOf(Color(0xFF7C8598))
+    private var showLogColors by mutableStateOf(false)
     private var fontPicker: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
+    private var pickFlash: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
+    private var pickRomZip: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
     private var crashBannerClosed by mutableStateOf(false)
@@ -188,6 +198,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // root 快捷刷入镜像 / 线刷压缩包
+        pickFlash = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri -> if (uri != null) localFlash(uri) }
+        pickRomZip = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri -> if (uri != null) loadRomArchive(uri) }
+
         // 本地字体选择器（ttf / otf / ttc）
         fontPicker = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -235,13 +253,17 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         token = sp.getString("token", "") ?: ""
         style = UiStyle.entries.getOrElse(sp.getInt("style", UiStyle.Glass.ordinal)) { UiStyle.Glass }
         lang = if (sp.getInt("lang", 0) == 1) Lang.En else Lang.Zh
-        uiAlpha = sp.getFloat("alpha", 85f)
-        glassBlur = sp.getFloat("gblur", 55f)
-        glassDensity = sp.getFloat("gdens", 40f)
+        uiAlpha = sp.getFloat("alpha", 0f)
+        glassBlur = sp.getFloat("gblur", 30f)
+        glassDensity = sp.getFloat("gdens", 100f)
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
+        logCmdColor = Color(sp.getInt("lcCmd", 0xFF60A5FA.toInt()))
+        logOkColor = Color(sp.getInt("lcOk", 0xFF3DD68C.toInt()))
+        logErrColor = Color(sp.getInt("lcErr", 0xFFFF7B72.toInt()))
+        logTextColor = Color(sp.getInt("lcText", 0xFF7C8598.toInt()))
         runCatching {
             val f = File(filesDir, "custom-font.ttf")
             if (f.exists()) customFont = androidx.compose.ui.text.font.FontFamily(
@@ -258,7 +280,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         append("Android ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}", TextSecondary)
 
         mark("04-prefs")
-        reloadWallpaper()
+        reloadWallpaper(sync = true)
         mark("05-setContent")
         setContent { EasyApp() }
     }
@@ -471,10 +493,20 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     // ---------------- 壁纸 ----------------
 
-    private fun reloadWallpaper() {
+    private fun reloadWallpaper(sync: Boolean = false) {
         val dm = resources.displayMetrics
         val w = dm.widthPixels
         val h = dm.heightPixels
+        if (sync) {
+            // 冷启动：同步准备好，第一帧就有壁纸
+            try {
+                val src = Wallpaper.load(this) ?: Wallpaper.default(w, h)
+                glassAssets = Wallpaper.build(Wallpaper.prepare(src, w, h))
+            } catch (e: Throwable) {
+                append("壁纸加载失败：${e.message}", ErrColor)
+            }
+            return
+        }
         Thread {
             try {
                 val src = Wallpaper.load(this) ?: Wallpaper.default(w, h)
@@ -732,6 +764,109 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 "${steps.size} steps${if (miss > 0) ", $miss missing" else ""}"),
             if (miss > 0) ErrColor else OkColor
         )
+    }
+
+    /** root 模式：拷到 cache 再用 su dd 写分区 */
+    fun localFlash(uri: Uri) = bg {
+        val tmp = File(cacheDir, "flash-tmp.img")
+        try {
+            contentResolver.openInputStream(uri)?.use { i ->
+                tmp.outputStream().use { o -> i.copyTo(o) }
+            } ?: run {
+                append(t("无法读取镜像", "Cannot read image"), ErrColor)
+                return@bg
+            }
+        } catch (e: Exception) {
+            append(t("读取失败：${e.message}", "Read failed: ${e.message}"), ErrColor)
+            return@bg
+        }
+        append(t("刷入 $part ← ${tmp.length() / 1024 / 1024} MB", "Flashing $part ← ${tmp.length() / 1024 / 1024} MB"), Accent)
+        val r = RootShell.run("dd if='${tmp.absolutePath}' of=/dev/block/by-name/$part bs=4M")
+        if (r.out.isNotBlank()) append(r.out, if (r.ok) LogColor else ErrColor)
+        append(
+            if (r.ok) t("刷入完成", "Flash complete") else t("刷入失败", "Flash failed"),
+            if (r.ok) OkColor else ErrColor
+        )
+        tmp.delete()
+    }
+
+    /** 线刷压缩包：zip 用 ZipInputStream，tgz 用系统 tar，解到 cache 后按目录解析 */
+    fun loadRomArchive(uri: Uri) = bg {
+        val name = uri.lastPathSegment ?: "rom"
+        append(t("解压线刷包 $name …", "Extracting $name …"), TextSecondary)
+        val dir = File(cacheDir, "rom-extract")
+        dir.deleteRecursively()
+        dir.mkdirs()
+        val tmp = File(cacheDir, "rom-archive.bin")
+        try {
+            contentResolver.openInputStream(uri)?.use { i ->
+                tmp.outputStream().use { o -> i.copyTo(o) }
+            }
+        } catch (e: Exception) {
+            append(t("读取失败：${e.message}", "Read failed: ${e.message}"), ErrColor)
+            return@bg
+        }
+        val lower = name.lowercase(Locale.US)
+        val ok = try {
+            when {
+                lower.endsWith(".zip") -> {
+                    java.util.zip.ZipInputStream(tmp.inputStream().buffered()).use { zis ->
+                        while (true) {
+                            val e = zis.nextEntry ?: break
+                            val out = File(dir, e.name)
+                            if (e.isDirectory) { out.mkdirs() } else {
+                                out.parentFile?.mkdirs()
+                                out.outputStream().use { o -> zis.copyTo(o) }
+                            }
+                            zis.closeEntry()
+                        }
+                    }
+                    true
+                }
+                else -> {
+                    // tgz / tar.gz / tar：交给系统 tar
+                    val p = ProcessBuilder("tar", "-xf", tmp.absolutePath, "-C", dir.absolutePath)
+                        .redirectErrorStream(true).start()
+                    p.waitFor() == 0
+                }
+            }
+        } catch (e: Exception) {
+            append(t("解压失败：${e.message}", "Extract failed: ${e.message}"), ErrColor)
+            false
+        }
+        tmp.delete()
+        if (!ok) {
+            append(t("解压失败（zip 用内置解压，tgz 需要系统 tar）", "Extract failed"), ErrColor)
+            return@bg
+        }
+        loadRomFromDir(dir)
+    }
+
+    /** 从解压后的目录解析刷机脚本 */
+    private fun loadRomFromDir(dir: File) = bg {
+        val files = dir.walkTopDown().filter { it.isFile }.toList()
+        if (files.isEmpty()) {
+            append(t("压缩包里没有文件", "Archive is empty"), ErrColor)
+            return@bg
+        }
+        val byName = HashMap<String, Uri>()
+        files.forEach { f -> byName[f.name.lowercase(Locale.US)] = Uri.fromFile(f) }
+        val script = files.firstOrNull { it.name.lowercase(Locale.US).startsWith("flash_all") }
+        val steps = if (script != null) {
+            append(t("使用脚本 ${script.name}", "Using script ${script.name}"), Accent)
+            RomFlasher.fromScript(script.readText())
+        } else {
+            append(t("没有 flash_all 脚本，按镜像名推断", "No flash_all script, inferring from names"), TextSecondary)
+            RomFlasher.fromImages(files.map { it.name })
+        }
+        if (steps.isEmpty()) {
+            append(t("没有可刷写的步骤", "Nothing to flash"), ErrColor)
+            return@bg
+        }
+        romFiles = byName
+        romSteps = steps
+        showRom = true
+        append(t("已解析 ${steps.size} 步", "Parsed ${steps.size} steps"), OkColor)
     }
 
     private fun runRom() = bg {
@@ -1043,8 +1178,21 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             val out = File(filesDir, "custom-font.ttf")
             try {
                 if (!out.exists()) {
-                    java.net.URL("https://registry.npmmirror.com/harmonyos-sans/1.0.0/files/HarmonyOS%20Sans.zip").openStream().use { i ->
-                        zip.outputStream().use { o -> i.copyTo(o) }
+                    val conn = java.net.URL("https://registry.npmmirror.com/harmonyos-sans/1.0.0/files/HarmonyOS%20Sans.zip").openConnection()
+                    val total = conn.contentLengthLong
+                    fontProgress = 0
+                    conn.getInputStream().use { i ->
+                        zip.outputStream().use { o ->
+                            val buf = ByteArray(64 * 1024)
+                            var done = 0L
+                            while (true) {
+                                val r = i.read(buf)
+                                if (r <= 0) break
+                                o.write(buf, 0, r)
+                                done += r
+                                if (total > 0) fontProgress = ((done * 100) / total).toInt().coerceIn(0, 100)
+                            }
+                        }
                     }
                     java.util.zip.ZipFile(zip).use { zf ->
                         val all = zf.entries().asSequence().filter {
@@ -1064,10 +1212,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     )
                     fontChoice = AppFont.Harmony
                     getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.Harmony.ordinal).apply()
+                    fontProgress = -1
                     append(t("HarmonyOS Sans 已应用", "HarmonyOS Sans applied"), OkColor)
                 }
             } catch (e: Throwable) {
-                ui.post { append(t("HarmonyOS 下载/解压失败：${e.message}", "HarmonyOS failed: ${e.message}"), ErrColor) }
+                ui.post { fontProgress = -1; append(t("HarmonyOS 下载/解压失败：${e.message}", "HarmonyOS failed: ${e.message}"), ErrColor) }
             }
         }.start()
     }
@@ -1240,6 +1389,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onInfo = { otgInfo() },
                                         onParts = { if (mode == 1) localParts() else otgParts() },
                                         onFlash = { pickImage.launch(arrayOf("*/*")) },
+                                        onLocalFlash = { pickFlash?.launch(arrayOf("*/*")) },
+                                        onRomArchive = { pickRomZip?.launch(arrayOf("application/zip","application/gzip","application/x-tar","*/*")) },
                                         onRom = { pickRom.launch(null) },
                                         onBackup = { p ->
                                             pendingDest = p
@@ -1288,6 +1439,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onLang = { chooseLang(it) },
                                         font = fontChoice,
                                         onFont = { chooseFont(it) },
+                                        onResetGlass = {
+                                            uiAlpha = 0f; glassBlur = 30f; glassDensity = 100f
+                                            getSharedPreferences(PREF, MODE_PRIVATE).edit()
+                                                .putFloat("alpha", 0f).putFloat("gblur", 30f).putFloat("gdens", 100f).apply()
+                                        },
+                                        fontProgress = fontProgress,
+                                        onLogColors = { showLogColors = true },
                                         opacity = uiAlpha,
                                         onOpacity = {
                                             uiAlpha = it
@@ -1407,6 +1565,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 }
                 if (showBing) {
                     BingWallpaperDialog(
+                        lang = lang,
                         onPick = { url -> showBing = false; setWallpaperFromUrl(url) },
                         onDismiss = { showBing = false }
                     )
@@ -1431,7 +1590,21 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         if (showRom) {
                             RomDialog(style, lang, romSteps, onStart = { runRom() }, onDismiss = { showRom = false })
                         }
-                        if (showAbout) {
+                        if (showLogColors) {
+                    LogColorDialog(
+                        lang = lang,
+                        initial = listOf(logCmdColor, logOkColor, logErrColor, logTextColor),
+                        onSave = { c ->
+                            logCmdColor = c[0]; logOkColor = c[1]; logErrColor = c[2]; logTextColor = c[3]
+                            getSharedPreferences(PREF, MODE_PRIVATE).edit()
+                                .putInt("lcCmd", android.graphics.Color.argb(c[0].alpha, c[0].red, c[0].green, c[0].blue)).putInt("lcOk", android.graphics.Color.argb(c[1].alpha, c[1].red, c[1].green, c[1].blue))
+                                .putInt("lcErr", android.graphics.Color.argb(c[2].alpha, c[2].red, c[2].green, c[2].blue)).putInt("lcText", android.graphics.Color.argb(c[3].alpha, c[3].red, c[3].green, c[3].blue)).apply()
+                            showLogColors = false
+                        },
+                        onDismiss = { showLogColors = false }
+                    )
+                }
+                if (showAbout) {
                             AboutDialog(style, lang, wallBackdrop, onDismiss = { showAbout = false })
                         }
                         eraseTarget?.let { target ->
@@ -2025,6 +2198,8 @@ fun HomePage(
     onInfo: () -> Unit,
     onParts: () -> Unit,
     onFlash: () -> Unit,
+    onLocalFlash: () -> Unit,
+    onRomArchive: () -> Unit,
     onRom: () -> Unit,
     onBackup: (String) -> Unit,
     onBackupBaseband: () -> Unit,
@@ -2184,6 +2359,7 @@ fun HomePage(
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
                 KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
                     tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Color(0xFF5E5CE6), onClick = onRom)
+                KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
                 KRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
                 KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
@@ -2195,6 +2371,7 @@ fun HomePage(
             }
             1 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
                 KRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
+                KRow(Icons.Filled.Build, tr(lang, "快捷刷入镜像", "Quick flash image"), tr(lang, "选镜像，直接 dd 到 $part", "pick an image, dd to $part"), onClick = onLocalFlash)
                 KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
                 KRow(Icons.Filled.Star, tr(lang, "备份分区", "Back up partition"),
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
@@ -2244,6 +2421,9 @@ fun SettingsPage(
     onLang: (Lang) -> Unit,
     font: AppFont,
     onFont: (AppFont) -> Unit,
+    onResetGlass: () -> Unit,
+    fontProgress: Int,
+    onLogColors: () -> Unit,
     opacity: Float,
     onOpacity: (Float) -> Unit,
     glassBlur: Float,
@@ -2269,6 +2449,7 @@ fun SettingsPage(
             .padding(bottom = 120.dp)
             .verticalScroll(rememberScrollState())
     ) {
+        val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
         var showPartPicker by remember { mutableStateOf(false) }
         val partOptions = remember(parts) {
             if (parts.isEmpty()) listOf("boot", "init_boot", "vbmeta", "dtbo", "super", "system", "vendor", "recovery")
@@ -2283,9 +2464,9 @@ fun SettingsPage(
                 title = tr(lang, "界面样式", "Style"),
                 subtitle = tr(lang, "选择应用的界面风格", "Choose the app style"),
                 value = tr(lang, style.labelZh, style.labelEn),
-                options = UiStyle.entries.map { tr(lang, it.labelZh, it.labelEn) },
-                selected = style.ordinal,
-                onPick = { onStyle(UiStyle.entries[it]) }
+                options = styleOrder.map { tr(lang, it.labelZh, it.labelEn) },
+                selected = styleOrder.indexOf(style),
+                onPick = { onStyle(styleOrder[it]) }
             )
             KSelectRow(
                 icon = Icons.Filled.Public,
@@ -2295,6 +2476,27 @@ fun SettingsPage(
                 options = listOf("中文", "English"),
                 selected = lang.ordinal,
                 onPick = { onLang(Lang.entries[it]) }
+            )
+            if (fontProgress >= 0) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)) {
+                    Text(
+                        tr(lang, "字体下载中 $fontProgress%", "Downloading font $fontProgress%"),
+                        color = LocalCardText.current.copy(alpha = 0.75f), fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { fontProgress / 100f },
+                        modifier = Modifier.fillMaxWidth().height(4.dp),
+                        color = Palette.accent,
+                        trackColor = LocalCardText.current.copy(alpha = 0.15f)
+                    )
+                }
+            }
+            KRow(
+                Icons.Filled.Edit,
+                tr(lang, "日志颜色（高级）", "Log colors (advanced)"),
+                tr(lang, "命令 / 成功 / 失败 / 普通", "command / ok / error / normal"),
+                onClick = { onLogColors() }
             )
             KSelectRow(
                 icon = Icons.Filled.Build,
@@ -2394,6 +2596,12 @@ fun SettingsPage(
                     tr(lang, "玻璃参数", "Glass parameters"),
                     if (slidersOpen) tr(lang, "点收起", "tap to collapse") else tr(lang, "点展开", "tap to expand"),
                     onClick = { slidersOpen = !slidersOpen }
+                )
+                KRow(
+                    Icons.Filled.Refresh,
+                    tr(lang, "重置参数", "Reset parameters"),
+                    tr(lang, "不透明度 0 · 模糊 30 · 浓度 100", "opacity 0 · blur 30 · density 100"),
+                    onClick = { onResetGlass() }
                 )
                 if (slidersOpen) {
             Column(Modifier.padding(vertical = 8.dp)) {
@@ -3153,40 +3361,56 @@ fun GlassField(
 
 /** 必应壁纸选择：拉 https://www.bing.com/HPImageArchive.aspx 的最近 10 张 */
 @Composable
-fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    var urls by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    var urls by remember { mutableStateOf<List<String>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
+    var reload by remember { mutableIntStateOf(0) }
+    // 正在下载第几张 + 进度
+    var busyIndex by remember { mutableIntStateOf(-1) }
+    var progress by remember { mutableIntStateOf(0) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
 
-    LaunchedEffect(Unit) {
-        val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    LaunchedEffect(reload) {
+        loading = true
+        err = null
+        urls = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
-                val conn = java.net.URL("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN")
-                    .openConnection()
+                val conn = java.net.URL(
+                    "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN&nc=" +
+                        System.currentTimeMillis()
+                ).openConnection()
                 conn.connectTimeout = 8000
                 conn.readTimeout = 8000
+                conn.setRequestProperty("Cache-Control", "no-cache")
                 val body = conn.getInputStream().bufferedReader().readText()
                 val arr = org.json.JSONObject(body).getJSONArray("images")
                 (0 until arr.length()).map { i ->
-                    val o = arr.getJSONObject(i)
-                    val base = o.getString("urlbase")
-                    val title = o.optString("title", "")
-                    title to ("https://www.bing.com" + base + "_UHD.jpg")
+                    "https://www.bing.com" + arr.getJSONObject(i).getString("urlbase") + "_UHD.jpg"
                 }
-            }
+            }.onFailure { err = it.message ?: "error" }.getOrDefault(emptyList())
         }
-        result.onSuccess { urls = it }.onFailure { err = it.message ?: "error" }
         loading = false
     }
 
     GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
-        Text(
-            "Bing Wallpaper",
-            color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(28.dp, 24.dp, 28.dp, 8.dp)
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(28.dp, 24.dp, 20.dp, 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Bing Wallpaper",
+                color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                tr(lang, "刷新", "Refresh"),
+                color = Palette.accent, fontSize = 14.sp,
+                modifier = Modifier.clickable { reload++ }
+            )
+        }
         when {
             loading -> Text(
                 "加载中…",
@@ -3205,19 +3429,86 @@ fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(urls.size) { i ->
-                    val (title, url) = urls[i]
-                    coil.compose.AsyncImage(
-                        model = url,
-                        contentDescription = title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .height(100.dp)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { onPick(url) }
-                    )
+                    val url = urls[i]
+                    val bd = LocalWallBackdrop.current
+                    Column {
+                        coil.compose.AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .height(92.dp)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        val isBusy = busyIndex == i
+                        if (useBackdrop && bd != null) {
+                            LiquidButton(
+                                onClick = {
+                                    if (!isBusy) { busyIndex = i; progress = 0 }
+                                },
+                                backdrop = bd,
+                                modifier = Modifier.fillMaxWidth().height(38.dp),
+                                tint = if (isBusy) Palette.accent else Color.Unspecified
+                            ) {
+                                Text(
+                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                    else tr(lang, "选择", "Select"),
+                                    color = contentColor, fontSize = 13.sp
+                                )
+                            }
+                        } else {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(19.dp))
+                                    .background(if (isBusy) Palette.accent else Palette.accent.copy(alpha = 0.18f))
+                                    .clickable { if (!isBusy) { busyIndex = i; progress = 0 } },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                    else tr(lang, "选择", "Select"),
+                                    color = if (isBusy) Color.White else contentColor,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
+        }
+        // 下载任务：用协程按 64KB 分块读，进度写进 progress
+        LaunchedEffect(busyIndex) {
+            if (busyIndex < 0 || busyIndex >= urls.size) return@LaunchedEffect
+            val url = urls[busyIndex]
+            val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val f = File(
+                        ctx.cacheDir,
+                        "wp_online.jpg"
+                    )
+                    val conn = java.net.URL(url).openConnection()
+                    val total = conn.contentLengthLong
+                    conn.getInputStream().use { i ->
+                        f.outputStream().use { o ->
+                            val buf = ByteArray(64 * 1024)
+                            var done = 0L
+                            while (true) {
+                                val r = i.read(buf)
+                                if (r <= 0) break
+                                o.write(buf, 0, r)
+                                done += r
+                                if (total > 0) progress = ((done * 100) / total).toInt().coerceIn(0, 100)
+                            }
+                        }
+                    }
+                    f
+                }.getOrNull()
+            }
+            if (file != null) onPick(url) else busyIndex = -1
         }
         Row(
             Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
@@ -3230,7 +3521,7 @@ fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                     backdrop = bd,
                     modifier = Modifier.height(48.dp).width(160.dp),
                     surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
             } else {
                 Row(
                     Modifier
@@ -3241,9 +3532,129 @@ fun BingWallpaperDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                         .width(160.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
-                ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
             }
         }
     }
 }
 
+
+/** 日志颜色高级设置：上面预览，下面选色，并按背景自动保证对比度 */
+@Composable
+fun LogColorDialog(
+    lang: Lang,
+    initial: List<Color>,
+    onSave: (List<Color>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val light = !Palette.dark
+    val contentColor = if (light) Color.Black else Color.White
+    val bgSample = Palette.bg
+    var colors by remember { mutableStateOf(initial) }
+    val names = listOf(
+        tr(lang, "命令", "Command"),
+        tr(lang, "成功", "Success"),
+        tr(lang, "失败", "Error"),
+        tr(lang, "普通", "Normal")
+    )
+    val palette = listOf(
+        Color(0xFF60A5FA), Color(0xFF3DD68C), Color(0xFFFF7B72), Color(0xFFFFC04D),
+        Color(0xFFB794F6), Color(0xFF7DD3FC), Color(0xFFECEDEF), Color(0xFF9AA0A6)
+    )
+
+    GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
+        Text(
+            tr(lang, "日志颜色", "Log colors"),
+            color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(28.dp, 24.dp, 28.dp, 10.dp)
+        )
+        // 预览
+        Column(
+            Modifier
+                .padding(horizontal = 24.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(bgSample.copy(alpha = 0.65f))
+                .padding(14.dp)
+        ) {
+            Text("[12:00:00] > fastboot devices", color = colors[0], fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            Text("[12:00:01] ok 刷入完成", color = colors[1], fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            Text("[12:00:02] fail 失败：no such partition", color = colors[2], fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            Text("[12:00:03] 普通输出一行", color = colors[3], fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        }
+        Spacer(Modifier.height(12.dp))
+        names.forEachIndexed { idx, name ->
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(name, color = contentColor, fontSize = 14.sp, modifier = Modifier.width(56.dp))
+                palette.forEach { c ->
+                    Box(
+                        Modifier
+                            .size(24.dp)
+                            .padding(2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(c)
+                            .then(
+                                if (colors[idx] == c) Modifier.border(2.dp, contentColor, RoundedCornerShape(8.dp))
+                                else Modifier
+                            )
+                            .clickable {
+                                val next = colors.toMutableList()
+                                next[idx] = ensureContrast(c, bgSample)
+                                colors = next
+                            }
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.padding(24.dp, 10.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.2f))
+                    .clickable { onDismiss() }
+                    .height(48.dp)
+                    .weight(1f),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Palette.accent)
+                    .clickable { onSave(colors) }
+                    .height(48.dp)
+                    .weight(1f),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
+        }
+    }
+}
+
+/** 颜色跟背景太近时往黑/白方向拉，保证可读 */
+fun ensureContrast(c: Color, bg: Color): Color {
+    fun lum(x: Color): Float = 0.2126f * x.red + 0.7152f * x.green + 0.0722f * x.blue
+    val lb = lum(bg)
+    var out = c
+    var guard = 0
+    while (kotlin.math.abs(lum(out) - lb) < 0.28f && guard < 12) {
+        out = if (lb > 0.5f) {
+            Color(out.red * 0.82f, out.green * 0.82f, out.blue * 0.82f, out.alpha)
+        } else {
+            Color(
+                (out.red + (1f - out.red) * 0.22f),
+                (out.green + (1f - out.green) * 0.22f),
+                (out.blue + (1f - out.blue) * 0.22f),
+                out.alpha
+            )
+        }
+        guard++
+    }
+    return out
+}
