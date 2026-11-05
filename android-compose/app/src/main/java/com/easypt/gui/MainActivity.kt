@@ -264,10 +264,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
+        val dk = sp.getBoolean("dark", false)
         logCmdColor = Color(sp.getInt("lcCmd", 0xFF60A5FA.toInt()))
         logOkColor = Color(sp.getInt("lcOk", 0xFF3DD68C.toInt()))
         logErrColor = Color(sp.getInt("lcErr", 0xFFFF7B72.toInt()))
-        logTextColor = Color(sp.getInt("lcText", 0xFF7C8598.toInt()))
+        logTextColor = Color(sp.getInt("lcText", if (Palette.dark) 0xFFC9CDD6.toInt() else 0xFF4A5160.toInt()))
         runCatching {
             val f = File(filesDir, "custom-font.ttf")
             if (f.exists()) customFont = androidx.compose.ui.text.font.FontFamily(
@@ -1202,6 +1203,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     }
                 }
             }
+            if (url.endsWith(".ttf", true)) {
+                zip.copyTo(out, overwrite = true)
+            } else {
             java.util.zip.ZipFile(zip).use { zf ->
                 val all = zf.entries().asSequence().filter {
                     it.name.endsWith(".ttf", true) || it.name.endsWith(".otf", true)
@@ -1211,6 +1215,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     ?: all.firstOrNull()
                     ?: throw IllegalStateException("压缩包里没有字体文件")
                 zf.getInputStream(pick).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+            }
             }
             zip.delete()
             val fam = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(out))
@@ -1310,6 +1315,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             } catch (_: Throwable) { }
         }
 
+        LaunchedEffect(useBackdrop, style, safeRender) {
+            append("玻璃诊断：useBackdrop=$useBackdrop · style=${style.name} · safe=$safeRender · API=${Build.VERSION.SDK_INT}", TextSecondary)
+        }
         val backdrop = rememberLayerBackdrop()
         val pickWallpaper = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) setWallpaperFrom(uri)
@@ -1361,6 +1369,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
+                        LocalGlassAssets provides assets,
+                        LocalGlassScreen provides screen,
                         LocalTitleColor provides onWall,
                         LocalCardText provides Palette.text,
                         LocalStyle provides style
@@ -1546,16 +1556,16 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             LiquidBottomTab(onClick = { page = 0 }) {
                                 Icon(
                                     Icons.Filled.Home, contentDescription = null,
-                                    tint = Color.White, modifier = Modifier.size(24.dp)
+                                    tint = onWall, modifier = Modifier.size(24.dp)
                                 )
-                                Text(t("主页", "Home"), color = if (Palette.dark) Color.White else Color(0xFF16181D), fontSize = 10.sp)
+                                Text(t("主页", "Home"), color = onWall, fontSize = 10.sp)
                             }
                             LiquidBottomTab(onClick = { page = 1 }) {
                                 Icon(
                                     Icons.Filled.Settings, contentDescription = null,
-                                    tint = Color.White, modifier = Modifier.size(24.dp)
+                                    tint = onWall, modifier = Modifier.size(24.dp)
                                 )
-                                Text(t("设置", "Settings"), color = if (Palette.dark) Color.White else Color(0xFF16181D), fontSize = 10.sp)
+                                Text(t("设置", "Settings"), color = onWall, fontSize = 10.sp)
                             }
                         }
                     } else {
@@ -1701,6 +1711,10 @@ val LocalCardText = androidx.compose.runtime.staticCompositionLocalOf { Palette.
 val LocalStyle = androidx.compose.runtime.staticCompositionLocalOf { UiStyle.Native }
 /** 只含壁纸的图层，卡片从这里取样 */
 val LocalWallBackdrop = androidx.compose.runtime.staticCompositionLocalOf<Backdrop?> { null }
+/** 弹窗降级用：壁纸资源（拿来做取样玻璃） */
+val LocalGlassAssets = androidx.compose.runtime.staticCompositionLocalOf<GlassAssets?> { null }
+/** 弹窗降级用：屏幕尺寸 */
+val LocalGlassScreen = androidx.compose.runtime.staticCompositionLocalOf<IntSize> { IntSize.Zero }
 /** 直接画在壁纸上的标题颜色 */
 val LocalTitleColor = androidx.compose.runtime.staticCompositionLocalOf { Palette.text }
 
@@ -2525,37 +2539,12 @@ fun SettingsPage(
                 icon = Icons.Filled.Build,
                 title = tr(lang, "字体", "Font"),
                 subtitle = null,
-                value = font.zh,
-                options = listOf(
-                    AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive, AppFont.Local
-                ).map { it.zh },
-                selected = listOf(
-                    AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive, AppFont.Local
-                ).indexOf(font),
-                onPick = {
-                    val list = listOf(
-                        AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive, AppFont.Local
-                    )
-                    onFont(list[it])
-                }
-            )
-            OnlineFontRow(
-                lang = lang,
-                title = "MiSans",
-                sizeText = tr(lang, "约 227 MB", "about 227 MB"),
-                ready = miSansReady,
-                downloading = fontTarget == 1,
-                progress = fontProgress,
-                onStart = { onOnlineFont(1) }
-            )
-            OnlineFontRow(
-                lang = lang,
-                title = "HarmonyOS Sans",
-                sizeText = tr(lang, "约 50 MB", "about 50 MB"),
-                ready = harmonyReady,
-                downloading = fontTarget == 2,
-                progress = fontProgress,
-                onStart = { onOnlineFont(2) }
+                value = if (fontProgress >= 0 && fontTarget > 0)
+                    tr(lang, "下载中 $fontProgress%", "downloading $fontProgress%")
+                else font.zh,
+                options = AppFont.entries.map { it.zh },
+                selected = AppFont.entries.indexOf(font),
+                onPick = { onFont(AppFont.entries[it]) }
             )
         }
 
@@ -2647,17 +2636,27 @@ fun SettingsPage(
                     if (slidersOpen) tr(lang, "点收起", "tap to collapse") else tr(lang, "点展开", "tap to expand"),
                     onClick = { slidersOpen = !slidersOpen }
                 )
-                KRow(
-                    Icons.Filled.Refresh,
-                    tr(lang, "重置参数", "Reset parameters"),
-                    tr(lang, "不透明度 0 · 模糊 30 · 浓度 100", "opacity 0 · blur 30 · density 100"),
-                    onClick = { onResetGlass() }
-                )
                 if (slidersOpen) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 SliderRow(style, tr(lang, "面板不透明度", "Panel opacity"), opacity, onOpacity)
                 SliderRow(style, tr(lang, "玻璃模糊", "Glass blur"), glassBlur, onGlassBlur)
                 SliderRow(style, tr(lang, "玻璃浓度", "Glass density"), glassDensity, onGlassDensity)
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Palette.accent.copy(alpha = 0.14f))
+                        .clickable { onResetGlass() }
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        tr(lang, "重置为默认参数", "Reset to defaults"),
+                        color = Palette.accent, fontSize = 14.sp
+                    )
+                }
                 if (!realGlass) {
                     Text(
                         tr(
@@ -3027,9 +3026,25 @@ fun GlassDialogPanel(
                                 onDrawSurface = { drawRect(containerColor) }
                             )
                         } else {
-                            Modifier
-                                .clip(RoundedCornerShape(48.dp))
-                                .background(if (light) Color(0xFFFAFAFA) else Color(0xFF1B1C20))
+                            val as2 = LocalGlassAssets.current
+                            val sc = LocalGlassScreen.current
+                            if (as2 != null && sc.width > 0) {
+                                Modifier.glassSurface(
+                                    assets = as2,
+                                    shape = RoundedCornerShape(48.dp),
+                                    cornerDp = 48,
+                                    screen = sc,
+                                    blurLevel = 0.25f,
+                                    density = 0.6f,
+                                    light = light,
+                                    tint = if (light) Color.White else Color(0xFF121212),
+                                    tintAlpha = if (light) 0.55f else 0.5f
+                                )
+                            } else {
+                                Modifier
+                                    .clip(RoundedCornerShape(48.dp))
+                                    .background(if (light) Color(0xFFFAFAFA) else Color(0xFF1B1C20))
+                            }
                         }
                     )
             ) {
@@ -3429,7 +3444,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
         urls = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val conn = java.net.URL(
-                    "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN&nc=" +
+                    "https://www.bing.com/HPImageArchive.aspx?format=js&idx=" + (0..7).random() + "&n=10&mkt=zh-CN&nc=" +
                         System.currentTimeMillis()
                 ).openConnection()
                 conn.connectTimeout = 8000
