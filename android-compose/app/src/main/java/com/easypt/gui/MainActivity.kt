@@ -2312,7 +2312,7 @@ fun KSelectRow(
                 onPick = { open = false; onPick(it) },
                 onDismiss = { open = false },
                 deletable = deletable,
-                onDelete = onDelete
+                onDelete = if (onDelete == null) null else { i -> open = false; onDelete!!.invoke(i) }
             )
         }
     }
@@ -2973,6 +2973,8 @@ fun SettingsPage(
             .verticalScroll(rememberScrollState())
     ) {
         val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
+        // 删字体要确认一次（液态玻璃弹窗）
+        var pendingDeleteFont by remember { mutableStateOf<String?>(null) }
         var showPartPicker by remember { mutableStateOf(false) }
         val partOptions = remember(parts) {
             if (parts.isEmpty()) listOf("boot", "init_boot", "vbmeta", "dtbo", "super", "system", "vendor", "recovery")
@@ -3030,7 +3032,8 @@ fun SettingsPage(
                 // 只有自己导入的字体能删
                 deletable = customFontNames.indices.map { AppFontOrder.size + it }.toSet(),
                 onDelete = { i ->
-                    customFontNames.getOrNull(i - AppFontOrder.size)?.let { onDeleteCustomFont(it) }
+                    // 先弹确认，不直接删
+                    customFontNames.getOrNull(i - AppFontOrder.size)?.let { pendingDeleteFont = it }
                 }
             )
             // 预览：当前字体到底有没有生效，一眼就能看出来
@@ -3041,6 +3044,20 @@ fun SettingsPage(
                 fontFamily = appliedFont,
                 modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 8.dp)
             )
+            // 删字体的确认框（液态玻璃）
+            pendingDeleteFont?.let { name ->
+                GlassConfirmDialog(
+                    lang = lang,
+                    title = tr(lang, "删除字体", "Delete font"),
+                    message = tr(lang, "确定删除「$name」？文件会一起删掉。", "Delete \"$name\"? The file will be removed too."),
+                    confirmText = tr(lang, "删除", "Delete"),
+                    onConfirm = {
+                        onDeleteCustomFont(name)
+                        pendingDeleteFont = null
+                    },
+                    onDismiss = { pendingDeleteFont = null }
+                )
+            }
             // 系统自带字体（预装，不联网），只在选了「系统字体文件」时出现
             if (font == AppFont.SystemFile && systemFontNames.isNotEmpty()) {
                 KSelectRow(
@@ -3590,6 +3607,72 @@ fun GlassDialogPanel(
                 ) {
                     content()
                 }
+            }
+        }
+    }
+}
+
+/** 液态玻璃确认框：取消 / 确认，两个都是 demo 的 LiquidButton */
+@Composable
+fun GlassConfirmDialog(
+    lang: Lang,
+    title: String,
+    message: String,
+    confirmText: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val light = !Palette.dark
+    val contentColor = if (light) Color.Black else Color.White
+    val destructive = LocalStyle.current != UiStyle.Native
+    GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
+        Text(
+            title, color = contentColor, fontSize = 22.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(28.dp, 26.dp, 28.dp, 8.dp)
+        )
+        Text(
+            message, color = contentColor.copy(alpha = 0.72f), fontSize = 14.sp, lineHeight = 20.sp,
+            modifier = Modifier.padding(28.dp, 0.dp, 28.dp, 10.dp)
+        )
+        Row(
+            Modifier.padding(24.dp, 6.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val bd = LocalWallBackdrop.current
+            if (useBackdrop && bd != null) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+                LiquidButton(
+                    onClick = onConfirm,
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = if (destructive) Color(0xFFFF3B30) else LocalAccent.current
+                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(contentColor.copy(alpha = 0.10f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (destructive) Color(0xFFFF3B30) else LocalAccent.current)
+                        .clickable { onConfirm() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
             }
         }
     }
