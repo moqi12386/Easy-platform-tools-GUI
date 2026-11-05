@@ -183,6 +183,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /** 正在下载哪个在线字体：0 无 1 MiSans 2 HarmonyOS */
     /** 正在下载的在线字体 key（"" = 没有在下载） */
     private var fontTargetKey by mutableStateOf("")
+    /** /system/fonts 里能直接加载的字体文件（预装，不用下载） */
+    private val systemFonts =
+        androidx.compose.runtime.mutableStateListOf<Pair<String, java.io.File>>()
+    /** 当前选中的系统字体文件绝对路径 */
+    private var sysFontPath by mutableStateOf<String?>(null)
     /** 字体下载进度 0..100，-1 表示没在下载 */
     private var fontProgress by mutableIntStateOf(-1)
     // 日志 4 种颜色：null = 用主题默认（和以前逐像素一致），非 null = 用户在「日志颜色」里选过的
@@ -296,13 +301,33 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 再点一次还得重新下 227MB）。路径：/data/data/com.easypt.gui.compose/files/font-*.ttf
         fun loadFont(fileName: String): androidx.compose.ui.text.font.FontFamily? = runCatching {
             val f = File(filesDir, fileName)
-            if (f.exists() && f.length() > 4096) {
-                androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(f))
-            } else null
+            if (!f.exists() || f.length() < 4096) return@runCatching null
+            // 以前只判断「文件存在」就当已下载，坏文件会让字体静默失效（界面看不出任何变化）。
+            // 现在要求：文件头是合法字体 + 系统真的能创建 Typeface，否则视为没下载。
+            if (!isFontFile(f)) {
+                android.util.Log.w("EasyPT", "loadFont $fileName 文件头不是字体，忽略")
+                return@runCatching null
+            }
+            android.graphics.Typeface.createFromFile(f)
+            android.util.Log.d("EasyPT", "loadFont $fileName OK (${f.length()} B)")
+            androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(f))
+        }.onFailure {
+            android.util.Log.w("EasyPT", "loadFont $fileName 失败：${it.message}")
         }.getOrNull()
         OnlineFonts.forEach { def ->
             loadFont(def.fileName)?.let { onlineFamilies[def.app.name] = it }
         }
+        // 扫一遍系统字体：这些是「预装」字体，选中后直接 File 加载，不联网
+        runCatching {
+            val pref = Regex("(?i)(noto|cjk|sans|serif|mono|misans|milan|harmony|oppo|roboto|droid)")
+            val list = File("/system/fonts").listFiles()?.filter {
+                it.isFile && (it.name.endsWith(".ttf", true) || it.name.endsWith(".otf", true)) &&
+                    pref.containsMatchIn(it.name)
+            }.orEmpty().sortedBy { it.name }.take(20).map { it.nameWithoutExtension to it }
+            systemFonts.clear(); systemFonts.addAll(list)
+            android.util.Log.d("EasyPT", "系统字体发现 ${list.size} 个：${list.joinToString { it.first }}")
+        }
+        sysFontPath = sp.getString("sysFont", null)
         runCatching {
             val f = File(filesDir, "custom-font.ttf")
             if (f.exists()) customFont = androidx.compose.ui.text.font.FontFamily(
@@ -1201,6 +1226,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /** 字体 -> Compose FontFamily：在线字体用已下载的，其余用系统族 */
     fun familyFor(f: AppFont): androidx.compose.ui.text.font.FontFamily? = when (f) {
         AppFont.Local -> customFont
+        AppFont.SystemFile -> sysFontPath?.let { p ->
+            runCatching {
+                androidx.compose.ui.text.font.FontFamily(
+                    androidx.compose.ui.text.font.Font(File(p))
+                )
+            }.getOrNull()
+        }
         else -> onlineFamilies[f.name] ?: f.family
     }
 
@@ -1208,6 +1240,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         when {
             f == AppFont.Local ->
                 fontPicker?.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
+            f == AppFont.SystemFile -> {
+                fontChoice = f
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
+            }
             f.isOnline -> chooseOnlineFont(f)
             else -> {
                 fontChoice = f
@@ -1348,6 +1384,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             return@bg
         }
         try {
+            // 落盘后再用系统真正解一次，坏文件当场报错，不留下「看起来下载好了但没效果」
+            android.graphics.Typeface.createFromFile(out)
             val fam = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(out))
             runOnUiThread {
                 onlineFamilies[def.app.name] = fam
@@ -1453,6 +1491,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
         LaunchedEffect(useBackdrop, style, safeRender) {
             append("玻璃诊断：useBackdrop=$useBackdrop · style=${style.name} · safe=$safeRender · API=${Build.VERSION.SDK_INT}", TextSecondary)
+        }
+        // 字体诊断：每次字体变化打一条，便于确认「已应用但没效果」到底卡在哪
+        LaunchedEffect(fontChoice, onlineFamilies.size) {
+            val fam = familyFor(fontChoice)
+            android.util.Log.d(
+                "EasyPT",
+                "字体: choice=${fontChoice.name} family=${fam != null} loaded=${onlineFamilies.keys}"
+            )
         }
         val backdrop = rememberLayerBackdrop()
         val pickWallpaper = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -1617,6 +1663,20 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onLang = { chooseLang(it) },
                                         font = fontChoice,
                                         onFont = { chooseFont(it) },
+                                        systemFontNames = systemFonts.map { it.first },
+                                        sysFontName = sysFontPath?.let { File(it).nameWithoutExtension },
+                                        onPickSystemFont = { name ->
+                                            val hit = systemFonts.firstOrNull { it.first == name }
+                                            if (hit != null) {
+                                                sysFontPath = hit.second.absolutePath
+                                                fontChoice = AppFont.SystemFile
+                                                getSharedPreferences(PREF, MODE_PRIVATE).edit()
+                                                    .putString("sysFont", hit.second.absolutePath)
+                                                    .putInt("font", AppFont.SystemFile.ordinal).apply()
+                                                append(t("系统字体：$name", "System font: $name"), OkColor)
+                                            }
+                                        },
+                                        appliedFont = familyFor(fontChoice),
                                         onResetGlass = {
                                             uiAlpha = 0f; glassBlur = 30f; glassDensity = 100f
                                             getSharedPreferences(PREF, MODE_PRIVATE).edit()
@@ -2757,6 +2817,10 @@ fun SettingsPage(
     onLang: (Lang) -> Unit,
     font: AppFont,
     onFont: (AppFont) -> Unit,
+    systemFontNames: List<String>,
+    sysFontName: String?,
+    onPickSystemFont: (String) -> Unit,
+    appliedFont: androidx.compose.ui.text.font.FontFamily?,
     onResetGlass: () -> Unit,
     fontProgress: Int,
     onLogColors: () -> Unit,
@@ -2838,6 +2902,26 @@ fun SettingsPage(
                 selected = AppFontOrder.indexOf(font),
                 onPick = { onFont(AppFontOrder[it]) }
             )
+            // 预览：当前字体到底有没有生效，一眼就能看出来
+            Text(
+                tr(lang, "预览：Aa 汉字永字八法 123", "Preview: Aa 汉字永字八法 123"),
+                color = LocalCardText.current.copy(alpha = 0.8f),
+                fontSize = 16.sp,
+                fontFamily = appliedFont,
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 8.dp)
+            )
+            // 系统自带字体（预装，不联网），只在选了「系统字体文件」时出现
+            if (font == AppFont.SystemFile && systemFontNames.isNotEmpty()) {
+                KSelectRow(
+                    icon = Icons.Filled.Build,
+                    title = tr(lang, "系统字体文件", "System font file"),
+                    subtitle = tr(lang, "来自 /system/fonts，不用下载", "From /system/fonts, no download"),
+                    value = sysFontName ?: tr(lang, "未选择", "none"),
+                    options = systemFontNames,
+                    selected = systemFontNames.indexOf(sysFontName),
+                    onPick = { onPickSystemFont(systemFontNames[it]) }
+                )
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -3841,11 +3925,23 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                tr(lang, "刷新", "Refresh"),
-                color = LocalAccent.current, fontSize = 14.sp,
-                modifier = Modifier.clickable { reload++ }
-            )
+            val refreshBd = LocalWallBackdrop.current
+            if (useBackdrop && refreshBd != null) {
+                // 刷新也是玻璃按钮，不是一行蓝字
+                LiquidButton(onClick = { reload++ }, backdrop = refreshBd) {
+                    Text(tr(lang, "刷新", "Refresh"), color = contentColor, fontSize = 14.sp)
+                }
+            } else {
+                Text(
+                    tr(lang, "刷新", "Refresh"),
+                    color = LocalAccent.current, fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(LocalAccent.current.copy(alpha = 0.12f))
+                        .clickable { reload++ }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
         }
         when {
             loading -> Text(

@@ -1,3 +1,16 @@
+# Easy-platform-tools-GUI v3.41.0 — 字体生效可验证 + 系统预装字体
+
+- **字体应用后看不出差别**：判「已下载」的条件只有「文件存在且 >4 KB」，坏文件会被当成可用，
+  系统创建 Typeface 失败后一路静默回退到系统字体，界面毫无变化。
+  现在要求：文件头合法（`00 01 00 00` / `OTTO` / `true` / `ttcf`）**并且** `Typeface.createFromFile` 真的能解出来，
+  否则视为没下载；下载完成后也做同样校验
+- 设置里加**字体预览行**：`预览：Aa 汉字永字八法 123`，直接用生效的 FontFamily 渲染，一眼看出有没有生效
+- 新增**「系统字体文件」**：扫描 `/system/fonts` 里能直接加载的 ttf/otf（MiLanPro / NotoSansCJK /
+  NotoSerifCJK / Roboto / DroidSansMono 等），纯本地文件加载，**不用联网、零等待**
+- 必应壁纸右上角「刷新」改成玻璃按钮（原来是纯文字）
+- 诊断日志（logcat tag `EasyPT`）：`系统字体发现 N 个：...`、`字体: choice=… family=… loaded=[…]`
+
+---
 # Easy-platform-tools-GUI v3.39.0 — 在线壁纸预览修复
 
 - **预览一直空白**：网格里每张缩略图挂的是 `_UHD.jpg`（单张约 3.7 MB），10 张同时拉 ~37 MB，
