@@ -222,3 +222,9 @@ fillPaint.setColor((fillColor & 0x00FFFFFF) | (a << 24));
 
 本项目代码 MIT。
 `LiquidGlassShader.java` 内的 AGSL 片段来自 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Apache-2.0）。
+
+### Windows 端（v3.44.0）
+
+- 版本号对齐 3.44.0（源码无功能改动）
+
+---
