@@ -65,6 +65,12 @@ fun LiquidSlider(
         if (isLightTheme) Color(0xFF787878).copy(0.2f)
         else Color(0xFF787880).copy(0.36f)
 
+    // demo 的 value 是个 getter()，依靠调用时读状态来触发 snapshotFlow。
+    // 我们传进来的是普通 Float 参数，闭包会被"定格"在第一次组合时的值，
+    // 导致外部改值（比如重置参数）滑块不动 —— 这里用 rememberUpdatedState 保证永远读到最新。
+    val currentValue = androidx.compose.runtime.rememberUpdatedState(value)
+    val currentOnChange = androidx.compose.runtime.rememberUpdatedState(onValueChange)
+
     val trackBackdrop = rememberLayerBackdrop()
 
     BoxWithConstraints(
@@ -79,7 +85,7 @@ fun LiquidSlider(
         val dampedDragAnimation = remember(animationScope) {
             DampedDragAnimation(
                 animationScope = animationScope,
-                initialValue = value(),
+                initialValue = currentValue.value(),
                 valueRange = valueRange,
                 visibilityThreshold = visibilityThreshold,
                 initialScale = 1f,
@@ -87,7 +93,7 @@ fun LiquidSlider(
                 onDragStarted = {},
                 onDragStopped = {
                     if (didDrag) {
-                        onValueChange(targetValue)
+                        currentOnChange.value(targetValue)
                     }
                 },
                 onDrag = { _, dragAmount ->
@@ -95,7 +101,7 @@ fun LiquidSlider(
                         didDrag = dragAmount.x != 0f
                     }
                     val delta = (valueRange.endInclusive - valueRange.start) * (dragAmount.x / trackWidth)
-                    onValueChange(
+                    currentOnChange.value(
                         if (isLtr) (targetValue + delta).coerceIn(valueRange)
                         else (targetValue - delta).coerceIn(valueRange)
                     )
@@ -103,7 +109,7 @@ fun LiquidSlider(
             )
         }
         LaunchedEffect(dampedDragAnimation) {
-            snapshotFlow { value() }
+            snapshotFlow { currentValue.value() }
                 .collectLatest { value ->
                     if (dampedDragAnimation.targetValue != value) {
                         dampedDragAnimation.updateValue(value)
@@ -130,7 +136,7 @@ fun LiquidSlider(
                                 else valueRange.endInclusive - delta)
                                     .coerceIn(valueRange)
                             dampedDragAnimation.animateToValue(targetValue)
-                            onValueChange(targetValue)
+                            currentOnChange.value(targetValue)
                         }
                     }
                     .height(6f.dp)
@@ -256,7 +262,7 @@ fun LiquidSlider(
                                 if (!ch.pressed) { dampedDragAnimation.release(); break }
                                 val v = valueAt(ch.position.x)
                                 dampedDragAnimation.updateValue(v)
-                                onValueChange(v)
+                                currentOnChange.value(v)
                             }
                         }
                     }
