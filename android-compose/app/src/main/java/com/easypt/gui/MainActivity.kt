@@ -572,6 +572,16 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     /** 在线壁纸：下载后走本地同一套流程 */
+    /** 在线壁纸已经在弹窗里下好了，这里直接用本地文件，不要再下一遍 */
+    fun setWallpaperFromFile(path: String) {
+        val f = File(path)
+        if (!f.exists() || f.length() < 1024) {
+            append(t("壁纸文件无效：$path", "Invalid wallpaper file: $path"), ErrColor)
+            return
+        }
+        setWallpaperFrom(Uri.fromFile(f))
+    }
+
     fun setWallpaperFromUrl(url: String) {
         append(t("下载壁纸…", "Downloading wallpaper…"), TextSecondary)
         Thread {
@@ -1772,7 +1782,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 if (showBing) {
                     BingWallpaperDialog(
                         lang = lang,
-                        onPick = { url -> showBing = false; setWallpaperFromUrl(url) },
+                        onPick = { path -> showBing = false; setWallpaperFromFile(path) },
                         onDismiss = { showBing = false }
                     )
                 }
@@ -3768,7 +3778,10 @@ fun GlassField(
 /** 必应壁纸选择：拉 https://www.bing.com/HPImageArchive.aspx 的最近 10 张 */
 @Composable
 fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    var urls by remember { mutableStateOf<List<String>>(emptyList()) }
+    // 预览图和原图分开：预览用 400x240（约 20 KB），原图才用 UHD（约 3.7 MB）。
+    // 之前预览直接挂 UHD，10 张同时拉 ~37 MB，手机上基本等于永远空白。
+    data class BingItem(val preview: String, val full: String)
+    var items by remember { mutableStateOf<List<BingItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
@@ -3782,20 +3795,37 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
     LaunchedEffect(reload) {
         loading = true
         err = null
-        urls = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        items = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
-                val conn = java.net.URL(
-                    "https://www.bing.com/HPImageArchive.aspx?format=js&idx=" + (0..7).random() + "&n=10&mkt=zh-CN&nc=" +
-                        System.currentTimeMillis()
-                ).openConnection()
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
-                conn.setRequestProperty("Cache-Control", "no-cache")
-                val body = conn.getInputStream().bufferedReader().readText()
-                val arr = org.json.JSONObject(body).getJSONArray("images")
-                (0 until arr.length()).map { i ->
-                    "https://www.bing.com" + arr.getJSONObject(i).getString("urlbase") + "_UHD.jpg"
+                // 国内连 www.bing.com 经常不通，按顺序试；用哪个域名成功，图片也跟着用那个域名
+                val hosts = listOf("https://cn.bing.com", "https://www.bing.com")
+                var lastErr: String? = null
+                var list: List<BingItem>? = null
+                for (host in hosts) {
+                    try {
+                        val conn = java.net.URL(
+                            "$host/HPImageArchive.aspx?format=js&idx=" + (0..7).random() +
+                                "&n=10&mkt=zh-CN&nc=" + System.currentTimeMillis()
+                        ).openConnection()
+                        conn.connectTimeout = 8000
+                        conn.readTimeout = 10000
+                        conn.setRequestProperty("Cache-Control", "no-cache")
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) EasyPT")
+                        val body = conn.getInputStream().bufferedReader().readText()
+                        val arr = org.json.JSONObject(body).getJSONArray("images")
+                        list = (0 until arr.length()).map { i ->
+                            val base = arr.getJSONObject(i).getString("urlbase")
+                            BingItem(
+                                preview = host + base + "_400x240.jpg",
+                                full = host + base + "_UHD.jpg"
+                            )
+                        }
+                        break
+                    } catch (e: Throwable) {
+                        lastErr = "${host.substringAfter("//")}: ${e.message ?: e.javaClass.simpleName}"
+                    }
                 }
+                list ?: throw IllegalStateException(lastErr ?: "unknown")
             }.onFailure { err = it.message ?: "error" }.getOrDefault(emptyList())
         }
         loading = false
@@ -3834,8 +3864,8 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(urls.size) { i ->
-                    val url = urls[i]
+                items(items.size) { i ->
+                    val url = items[i].preview
                     val bd = LocalWallBackdrop.current
                     Column {
                         coil.compose.AsyncImage(
@@ -3888,8 +3918,8 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
         }
         // 下载任务：用协程按 64KB 分块读，进度写进 progress
         LaunchedEffect(busyIndex) {
-            if (busyIndex < 0 || busyIndex >= urls.size) return@LaunchedEffect
-            val url = urls[busyIndex]
+            if (busyIndex < 0 || busyIndex >= items.size) return@LaunchedEffect
+            val url = items[busyIndex].full
             val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     val f = File(
@@ -3914,7 +3944,8 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                     f
                 }.getOrNull()
             }
-            if (file != null) onPick(url) else busyIndex = -1
+            // 这里已经下好了，把本地文件路径交出去；以前传的是 url，上层又下一遍（3.7 MB 白下两次）
+            if (file != null) onPick(file.absolutePath) else busyIndex = -1
         }
         Row(
             Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),

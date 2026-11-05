@@ -1,3 +1,13 @@
+# Easy-platform-tools-GUI v3.39.0 — 在线壁纸预览修复
+
+- **预览一直空白**：网格里每张缩略图挂的是 `_UHD.jpg`（单张约 3.7 MB），10 张同时拉 ~37 MB，
+  手机上基本等于永远加载不出来。现在缩略图用 `_400x240.jpg`（约 20 KB），原图仍用 UHD
+- 必应接口增加域名回退：`cn.bing.com` → `www.bing.com`（国内直连 www 常不通），
+  并带上浏览器 UA；失败时把具体域名和异常写进弹窗
+- **选择壁纸要下两遍**：弹窗里已经下载完成，却把 *URL* 交给上层，`setWallpaperFromUrl` 又整份重下；
+  改成把本地文件路径交给新增的 `setWallpaperFromFile`，一次下载
+
+---
 # Easy-platform-tools-GUI v3.38.0 — 原生风格纯中性色 / Material 风格改用 Material Design 3
 
 ## 界面
