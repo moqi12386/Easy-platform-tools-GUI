@@ -1,3 +1,15 @@
+# Easy-platform-tools-GUI v3.42.0 — 导入的字体常驻字体列表
+
+- **导入一次就能一直用**：以前只会覆盖同一个 `custom-font.ttf`，列表里永远只有一条「本地字体」。
+  现在每次导入单独存成 `custom-<时间戳>.ttf`，**并以原文件名加进「字体」下拉**，重启后依然在
+- 支持导入多个字体；同名文件再导入会替换旧条目，不会堆重复项
+- 导入的条目落盘为 `prefs.customFonts = "名字|路径"`，启动时逐个用 `Typeface.createFromFile` 校验，
+  解不出来的自动丢弃（不放死项）
+- 老版本留下的 `custom-font.ttf` 自动迁移成一条记录
+- 真机验证（MIX 2S / Android 17）：导入 `宋体测试.ttc` → 下拉出现该条目 → 全界面变宋体 →
+  force-stop 重启后字体与选中态仍在；logcat `字体: choice=Local family=true`
+
+---
 # Easy-platform-tools-GUI v3.41.0 — 双端
 
 ## Windows 端

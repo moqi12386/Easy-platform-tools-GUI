@@ -188,6 +188,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         androidx.compose.runtime.mutableStateListOf<Pair<String, java.io.File>>()
     /** 当前选中的系统字体文件绝对路径 */
     private var sysFontPath by mutableStateOf<String?>(null)
+    /** 导入过的本地字体（显示名 -> 文件），持久化在 prefs，导入一次就一直可选 */
+    private val customFonts =
+        androidx.compose.runtime.mutableStateListOf<Pair<String, java.io.File>>()
+    /** 当前使用的本地字体路径 */
+    private var customFontPath by mutableStateOf<String?>(null)
+    /** 路径 -> FontFamily 缓存 */
+    private val customFamilies =
+        androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.text.font.FontFamily>()
     /** 字体下载进度 0..100，-1 表示没在下载 */
     private var fontProgress by mutableIntStateOf(-1)
     // 日志 4 种颜色：null = 用主题默认（和以前逐像素一致），非 null = 用户在「日志颜色」里选过的
@@ -328,12 +336,41 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             android.util.Log.d("EasyPT", "系统字体发现 ${list.size} 个：${list.joinToString { it.first }}")
         }
         sysFontPath = sp.getString("sysFont", null)
+        // 导入过的本地字体：从 prefs 恢复，逐个用系统解一次，坏的丢掉
         runCatching {
-            val f = File(filesDir, "custom-font.ttf")
-            if (f.exists()) customFont = androidx.compose.ui.text.font.FontFamily(
-                androidx.compose.ui.text.font.Font(f)
-            )
+            val raw = sp.getString("customFonts", "") ?: ""
+            raw.split("\n").forEach { line ->
+                if (line.isNotBlank()) {
+                    val parts = line.split("|")
+                    if (parts.size >= 2) {
+                        val f2 = File(parts[1])
+                        if (f2.exists() && f2.length() > 4096) {
+                            runCatching {
+                                android.graphics.Typeface.createFromFile(f2)
+                                customFamilies[f2.absolutePath] = androidx.compose.ui.text.font.FontFamily(
+                                    androidx.compose.ui.text.font.Font(f2)
+                                )
+                                customFonts.add(parts[0] to f2)
+                            }
+                        }
+                    }
+                }
+            }
         }
+        // 老版本只存过 custom-font.ttf，迁移成一条记录
+        runCatching {
+            val legacy = File(filesDir, "custom-font.ttf")
+            if (legacy.exists() && customFonts.isEmpty()) {
+                if (runCatching { android.graphics.Typeface.createFromFile(legacy) }.isSuccess) {
+                    customFamilies[legacy.absolutePath] = androidx.compose.ui.text.font.FontFamily(
+                        androidx.compose.ui.text.font.Font(legacy)
+                    )
+                    customFonts.add("custom-font" to legacy)
+                }
+            }
+        }
+        customFontPath = sp.getString("customFontPath", customFonts.firstOrNull()?.second?.absolutePath)
+        customFont = customFontPath?.let { customFamilies[it] }
         forceSafe = sp.getBoolean("forceSafe", false)
 
         androidx.core.content.ContextCompat.registerReceiver(
@@ -1225,7 +1262,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     /** 字体 -> Compose FontFamily：在线字体用已下载的，其余用系统族 */
     fun familyFor(f: AppFont): androidx.compose.ui.text.font.FontFamily? = when (f) {
-        AppFont.Local -> customFont
+        AppFont.Local -> customFontPath?.let { customFamilies[it] } ?: customFont
         AppFont.SystemFile -> sysFontPath?.let { p ->
             runCatching {
                 androidx.compose.ui.text.font.FontFamily(
@@ -1253,23 +1290,58 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     /** 本地字体：拷进 filesDir 后加载（ttf / otf / ttc） */
+    /** 导入的字体文件名（用于列表显示） */
+    private fun queryDisplayName(uri: android.net.Uri): String {
+        return runCatching {
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+            }
+        }.getOrNull()?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+            ?: (uri.lastPathSegment ?: "字体").substringBeforeLast('.').ifBlank { "字体" }
+    }
+
+    /** 把列表写回 prefs */
+    private fun saveCustomFonts() {
+        val raw = customFonts.joinToString("\n") { "${it.first}|${it.second.absolutePath}" }
+        getSharedPreferences(PREF, MODE_PRIVATE).edit()
+            .putString("customFonts", raw)
+            .putString("customFontPath", customFontPath)
+            .apply()
+    }
+
+    /**
+     * 导入本地字体：拷进 filesDir 后【加进字体列表】，之后一直可以在「字体」下拉里直接选，
+     * 不用每次再导入一遍。
+     */
     fun installLocalFont(uri: android.net.Uri) {
+        val name = queryDisplayName(uri)
         Thread {
+            val out = File(filesDir, "custom-" + System.currentTimeMillis() + ".ttf")
             try {
-                val out = File(filesDir, "custom-font.ttf")
                 contentResolver.openInputStream(uri)?.use { i ->
                     out.outputStream().use { o -> i.copyTo(o) }
                 } ?: throw IllegalStateException("无法读取文件")
+                // 必须是系统能解的字体，否则不要塞进列表当死项
+                android.graphics.Typeface.createFromFile(out)
                 val fam = androidx.compose.ui.text.font.FontFamily(
                     androidx.compose.ui.text.font.Font(out)
                 )
                 runOnUiThread {
+                    // 同名替换，避免重复导入出现一堆同类条目
+                    val dup = customFonts.indexOfFirst { it.first == name }
+                    if (dup >= 0) customFonts.removeAt(dup)
+                    customFonts.add(name to out)
+                    customFamilies[out.absolutePath] = fam
                     customFont = fam
+                    customFontPath = out.absolutePath
                     fontChoice = AppFont.Local
+                    saveCustomFonts()
                     getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.Local.ordinal).apply()
-                    append(t("本地字体已应用", "Local font applied"), OkColor)
+                    append(t("已导入字体：$name（已加入字体列表）", "Font imported: $name (added to the list)"), OkColor)
                 }
             } catch (e: Throwable) {
+                runCatching { out.delete() }
                 ui.post { append(t("字体加载失败（支持 ttf/otf/ttc）：${e.message}", "Font load failed: ${e.message}"), ErrColor) }
             }
         }.start()
@@ -1674,6 +1746,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                                     .putString("sysFont", hit.second.absolutePath)
                                                     .putInt("font", AppFont.SystemFile.ordinal).apply()
                                                 append(t("系统字体：$name", "System font: $name"), OkColor)
+                                            }
+                                        },
+                                        customFontNames = customFonts.map { it.first },
+                                        customFontName = customFontPath?.let { p ->
+                                            customFonts.firstOrNull { it.second.absolutePath == p }?.first
+                                        },
+                                        onPickCustomFont = { name ->
+                                            val hit = customFonts.firstOrNull { it.first == name }
+                                            if (hit != null) {
+                                                customFontPath = hit.second.absolutePath
+                                                customFont = customFamilies[hit.second.absolutePath]
+                                                fontChoice = AppFont.Local
+                                                saveCustomFonts()
+                                                getSharedPreferences(PREF, MODE_PRIVATE).edit()
+                                                    .putInt("font", AppFont.Local.ordinal).apply()
+                                                append(t("已切换字体：$name", "Font switched: $name"), OkColor)
                                             }
                                         },
                                         appliedFont = familyFor(fontChoice),
@@ -2820,6 +2908,9 @@ fun SettingsPage(
     systemFontNames: List<String>,
     sysFontName: String?,
     onPickSystemFont: (String) -> Unit,
+    customFontNames: List<String>,
+    customFontName: String?,
+    onPickCustomFont: (String) -> Unit,
     appliedFont: androidx.compose.ui.text.font.FontFamily?,
     onResetGlass: () -> Unit,
     fontProgress: Int,
@@ -2887,6 +2978,7 @@ fun SettingsPage(
                 value = when {
                     fontProgress >= 0 && fontTargetKey.isNotEmpty() ->
                         tr(lang, "下载中 $fontProgress%", "downloading $fontProgress%")
+                    customFontName != null -> customFontName
                     font.isOnline && font in downloadedFonts ->
                         tr(lang, "${font.zh}（已下载）", "${font.en} (downloaded)")
                     font.isOnline -> tr(lang, "${font.zh}（在线）", "${font.en} (online)")
@@ -2898,9 +2990,14 @@ fun SettingsPage(
                         f.isOnline -> tr(lang, "${f.zh}（在线）", "${f.en} (online)")
                         else -> tr(lang, f.zh, f.en)
                     }
-                },
-                selected = AppFontOrder.indexOf(font),
-                onPick = { onFont(AppFontOrder[it]) }
+                } + customFontNames,
+                selected = if (customFontName != null)
+                    AppFontOrder.size + customFontNames.indexOf(customFontName)
+                else AppFontOrder.indexOf(font),
+                onPick = { i ->
+                    if (i < AppFontOrder.size) onFont(AppFontOrder[i])
+                    else customFontNames.getOrNull(i - AppFontOrder.size)?.let { onPickCustomFont(it) }
+                }
             )
             // 预览：当前字体到底有没有生效，一眼就能看出来
             Text(
