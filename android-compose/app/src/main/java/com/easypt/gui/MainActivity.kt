@@ -1301,6 +1301,29 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ?: (uri.lastPathSegment ?: "字体").substringBeforeLast('.').ifBlank { "字体" }
     }
 
+    /** 删除一个导入的字体：文件 + 列表 + prefs 一起清；正在用的就退回系统字体 */
+    fun deleteCustomFont(name: String) {
+        val idx = customFonts.indexOfFirst { it.first == name }
+        if (idx < 0) return
+        val entry = customFonts[idx]
+        val label = entry.first
+        val file = entry.second
+        val wasActive = customFontPath == file.absolutePath
+        customFonts.removeAt(idx)
+        customFamilies.remove(file.absolutePath)
+        runCatching { file.delete() }
+        if (wasActive) {
+            customFontPath = customFonts.lastOrNull()?.second?.absolutePath
+            customFont = customFontPath?.let { customFamilies[it] }
+            if (customFontPath == null) {
+                fontChoice = AppFont.System
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.System.ordinal).apply()
+            }
+        }
+        saveCustomFonts()
+        append(t("已删除字体：$label", "Font deleted: $label"), OkColor)
+    }
+
     /** 把列表写回 prefs */
     private fun saveCustomFonts() {
         val raw = customFonts.joinToString("\n") { "${it.first}|${it.second.absolutePath}" }
@@ -1752,6 +1775,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         customFontName = customFontPath?.let { p ->
                                             customFonts.firstOrNull { it.second.absolutePath == p }?.first
                                         },
+                                        onDeleteCustomFont = { name -> deleteCustomFont(name) },
                                         onPickCustomFont = { name ->
                                             val hit = customFonts.firstOrNull { it.first == name }
                                             if (hit != null) {
@@ -2253,7 +2277,9 @@ fun KSelectRow(
     value: String,
     options: List<String>,
     selected: Int,
-    onPick: (Int) -> Unit
+    onPick: (Int) -> Unit,
+    deletable: Set<Int> = emptySet(),
+    onDelete: ((Int) -> Unit)? = null
 ) {
     var open by remember { mutableStateOf(false) }
     val text = LocalCardText.current
@@ -2284,7 +2310,9 @@ fun KSelectRow(
                 options = options,
                 selected = selected,
                 onPick = { open = false; onPick(it) },
-                onDismiss = { open = false }
+                onDismiss = { open = false },
+                deletable = deletable,
+                onDelete = onDelete
             )
         }
     }
@@ -2911,6 +2939,7 @@ fun SettingsPage(
     customFontNames: List<String>,
     customFontName: String?,
     onPickCustomFont: (String) -> Unit,
+    onDeleteCustomFont: (String) -> Unit,
     appliedFont: androidx.compose.ui.text.font.FontFamily?,
     onResetGlass: () -> Unit,
     fontProgress: Int,
@@ -2997,6 +3026,11 @@ fun SettingsPage(
                 onPick = { i ->
                     if (i < AppFontOrder.size) onFont(AppFontOrder[i])
                     else customFontNames.getOrNull(i - AppFontOrder.size)?.let { onPickCustomFont(it) }
+                },
+                // 只有自己导入的字体能删
+                deletable = customFontNames.indices.map { AppFontOrder.size + it }.toSet(),
+                onDelete = { i ->
+                    customFontNames.getOrNull(i - AppFontOrder.size)?.let { onDeleteCustomFont(it) }
                 }
             )
             // 预览：当前字体到底有没有生效，一眼就能看出来
@@ -3772,7 +3806,10 @@ fun LiquidChoiceDialog(
     options: List<String>,
     selected: Int,
     onPick: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** 这些下标（可删的项，比如自己导入的字体）右侧会多一个删除按钮 */
+    deletable: Set<Int> = emptySet(),
+    onDelete: ((Int) -> Unit)? = null
 ) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
@@ -3844,6 +3881,29 @@ fun LiquidChoiceDialog(
                     ) {
                         Text(name, color = if (sel) LocalAccent.current else contentColor, fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
+                        if (onDelete != null && deletable.contains(i)) {
+                            val delBd = LocalWallBackdrop.current
+                            if (useBackdrop && delBd != null) {
+                                LiquidButton(
+                                    onClick = { onDelete(i) },
+                                    backdrop = delBd,
+                                    modifier = Modifier.height(48.dp)
+                                ) {
+                                    Text("删除", color = contentColor, fontSize = 12.sp)
+                                }
+                            } else {
+                                Text(
+                                    "删除",
+                                    color = contentColor, fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(contentColor.copy(alpha = 0.12f))
+                                        .clickable { onDelete(i) }
+                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
                         if (sel) Icon(Icons.Filled.Check, null, tint = LocalAccent.current, modifier = Modifier.size(20.dp))
                     }
                 }
