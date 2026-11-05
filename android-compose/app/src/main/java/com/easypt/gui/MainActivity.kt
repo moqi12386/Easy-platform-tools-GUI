@@ -177,6 +177,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var monet by mutableStateOf(false)
     private var fontChoice by mutableStateOf(AppFont.System)
     private var customFont by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
+    private var miSansFamily by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
+    private var harmonyFamily by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
+    /** 正在下载哪个在线字体：0 无 1 MiSans 2 HarmonyOS */
+    private var fontTarget by mutableIntStateOf(0)
     /** 字体下载进度 0..100，-1 表示没在下载 */
     private var fontProgress by mutableIntStateOf(-1)
     private var logCmdColor by mutableStateOf(Color(0xFF60A5FA))
@@ -1131,14 +1135,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     private fun chooseFont(f: AppFont) {
         when (f) {
-            AppFont.Harmony -> {
-                if (customFont != null) {
-                    fontChoice = f
-                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
-                } else {
-                    downloadHarmony()
-                }
-            }
+            AppFont.MiSans -> chooseOnlineFont(1)
+            AppFont.Harmony -> chooseOnlineFont(2)
             AppFont.Local -> fontPicker?.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
             else -> {
                 fontChoice = f
@@ -1171,54 +1169,78 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     /** HarmonyOS Sans：下载官方压缩包，取第一个 ttf */
-    private fun downloadHarmony() {
-        append(t("开始下载 HarmonyOS Sans（约 50MB，请稍候）…", "Downloading HarmonyOS Sans (~50MB)…"), TextSecondary)
-        Thread {
-            val zip = File(cacheDir, "harmony.zip")
-            val out = File(filesDir, "custom-font.ttf")
-            try {
-                if (!out.exists()) {
-                    val conn = java.net.URL("https://registry.npmmirror.com/harmonyos-sans/1.0.0/files/HarmonyOS%20Sans.zip").openConnection()
-                    val total = conn.contentLengthLong
-                    fontProgress = 0
-                    conn.getInputStream().use { i ->
-                        zip.outputStream().use { o ->
-                            val buf = ByteArray(64 * 1024)
-                            var done = 0L
-                            while (true) {
-                                val r = i.read(buf)
-                                if (r <= 0) break
-                                o.write(buf, 0, r)
-                                done += r
-                                if (total > 0) fontProgress = ((done * 100) / total).toInt().coerceIn(0, 100)
-                            }
+    /** 下载在线字体：1 = MiSans，2 = HarmonyOS Sans */
+    private fun downloadFont(which: Int) = bg {
+        val (url, outName, label) = when (which) {
+            1 -> Triple("https://hyperos.mi.com/font-download/MiSans.zip", "font-misans.ttf", "MiSans")
+            else -> Triple(
+                "https://registry.npmmirror.com/harmonyos-sans/1.0.0/files/HarmonyOS%20Sans.zip",
+                "font-harmony.ttf", "HarmonyOS Sans"
+            )
+        }
+        val out = File(filesDir, outName)
+        val zip = File(cacheDir, "font-$which.zip")
+        fontTarget = which
+        fontProgress = 0
+        append(t("开始下载 $label（约 ${if (which == 1) "227 MB" else "50 MB"}）…", "Downloading $label…"), TextSecondary)
+        try {
+            val conn = java.net.URL(url).openConnection()
+            val total = conn.contentLengthLong
+            conn.getInputStream().use { i ->
+                zip.outputStream().use { o ->
+                    val buf = ByteArray(64 * 1024)
+                    var done = 0L
+                    while (true) {
+                        val r = i.read(buf)
+                        if (r <= 0) break
+                        o.write(buf, 0, r)
+                        done += r
+                        if (total > 0) {
+                            val pc = ((done * 100) / total).toInt().coerceIn(0, 100)
+                            if (pc != fontProgress) ui.post { fontProgress = pc }
                         }
                     }
-                    java.util.zip.ZipFile(zip).use { zf ->
-                        val all = zf.entries().asSequence().filter {
-                            it.name.endsWith(".ttf", true) || it.name.endsWith(".otf", true)
-                        }.toList()
-                        val entry = all.firstOrNull { it.name.contains("Regular", true) && it.name.contains("SC", true) }
-                            ?: all.firstOrNull { it.name.contains("Regular", true) }
-                            ?: all.firstOrNull()
-                            ?: throw IllegalStateException("压缩包里没有字体文件")
-                        zf.getInputStream(entry).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
-                    }
-                    zip.delete()
                 }
-                runOnUiThread {
-                    customFont = androidx.compose.ui.text.font.FontFamily(
-                        androidx.compose.ui.text.font.Font(out)
-                    )
-                    fontChoice = AppFont.Harmony
-                    getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", AppFont.Harmony.ordinal).apply()
-                    fontProgress = -1
-                    append(t("HarmonyOS Sans 已应用", "HarmonyOS Sans applied"), OkColor)
-                }
-            } catch (e: Throwable) {
-                ui.post { fontProgress = -1; append(t("HarmonyOS 下载/解压失败：${e.message}", "HarmonyOS failed: ${e.message}"), ErrColor) }
             }
-        }.start()
+            java.util.zip.ZipFile(zip).use { zf ->
+                val all = zf.entries().asSequence().filter {
+                    it.name.endsWith(".ttf", true) || it.name.endsWith(".otf", true)
+                }.toList()
+                val pick = all.firstOrNull { it.name.contains("Regular", true) && it.name.contains("SC", true) }
+                    ?: all.firstOrNull { it.name.contains("Regular", true) }
+                    ?: all.firstOrNull()
+                    ?: throw IllegalStateException("压缩包里没有字体文件")
+                zf.getInputStream(pick).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+            }
+            zip.delete()
+            val fam = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(out))
+            runOnUiThread {
+                if (which == 1) { miSansFamily = fam; fontChoice = AppFont.MiSans }
+                else { harmonyFamily = fam; fontChoice = AppFont.Harmony }
+                fontProgress = -1
+                fontTarget = 0
+                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", fontChoice.ordinal).apply()
+                append(t("$label 已应用", "$label applied"), OkColor)
+            }
+        } catch (e: Throwable) {
+            ui.post {
+                fontProgress = -1
+                fontTarget = 0
+                append(t("$label 下载/解压失败：${e.message}", "$label failed: ${e.message}"), ErrColor)
+            }
+        }
+    }
+
+    /** 已经下过就直接应用，没有才开始下 */
+    fun chooseOnlineFont(which: Int) {
+        val fam = if (which == 1) miSansFamily else harmonyFamily
+        if (fam != null) {
+            fontChoice = if (which == 1) AppFont.MiSans else AppFont.Harmony
+            getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", fontChoice.ordinal).apply()
+            append(t("已切换字体", "Font switched"), OkColor)
+        } else {
+            downloadFont(which)
+        }
     }
 
     private fun chooseMonet(v: Boolean) {
@@ -1345,7 +1367,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
-                                typography = typographyWith(if (fontChoice == AppFont.Harmony || fontChoice == AppFont.Local) customFont else fontChoice.family),
+                                typography = typographyWith(
+                                    when (fontChoice) {
+                                        AppFont.MiSans -> miSansFamily
+                                        AppFont.Harmony -> harmonyFamily
+                                        AppFont.Local -> customFont
+                                        else -> fontChoice.family
+                                    }
+                                ),
                                 colorScheme = if (dark) {
                                     darkColorScheme(
                                         primary = Accent,
@@ -1446,6 +1475,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         },
                                         fontProgress = fontProgress,
                                         onLogColors = { showLogColors = true },
+                                        miSansReady = miSansFamily != null,
+                                        harmonyReady = harmonyFamily != null,
+                                        fontTarget = fontTarget,
+                                        onOnlineFont = { chooseOnlineFont(it) },
                                         opacity = uiAlpha,
                                         onOpacity = {
                                             uiAlpha = it
@@ -1515,14 +1548,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     Icons.Filled.Home, contentDescription = null,
                                     tint = Color.White, modifier = Modifier.size(24.dp)
                                 )
-                                Text(t("主页", "Home"), color = Color.White, fontSize = 10.sp)
+                                Text(t("主页", "Home"), color = if (Palette.dark) Color.White else Color(0xFF16181D), fontSize = 10.sp)
                             }
                             LiquidBottomTab(onClick = { page = 1 }) {
                                 Icon(
                                     Icons.Filled.Settings, contentDescription = null,
                                     tint = Color.White, modifier = Modifier.size(24.dp)
                                 )
-                                Text(t("设置", "Settings"), color = Color.White, fontSize = 10.sp)
+                                Text(t("设置", "Settings"), color = if (Palette.dark) Color.White else Color(0xFF16181D), fontSize = 10.sp)
                             }
                         }
                     } else {
@@ -1573,7 +1606,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
                 MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                     MaterialTheme(
-                        typography = typographyWith(if (fontChoice == AppFont.Harmony || fontChoice == AppFont.Local) customFont else fontChoice.family),
+                        typography = typographyWith(
+                                    when (fontChoice) {
+                                        AppFont.MiSans -> miSansFamily
+                                        AppFont.Harmony -> harmonyFamily
+                                        AppFont.Local -> customFont
+                                        else -> fontChoice.family
+                                    }
+                                ),
                         colorScheme = if (dark) {
                             darkColorScheme(primary = Accent, surface = Surface, onSurface = TextPrimary)
                         } else {
@@ -2424,6 +2464,10 @@ fun SettingsPage(
     onResetGlass: () -> Unit,
     fontProgress: Int,
     onLogColors: () -> Unit,
+    miSansReady: Boolean,
+    harmonyReady: Boolean,
+    fontTarget: Int,
+    onOnlineFont: (Int) -> Unit,
     opacity: Float,
     onOpacity: (Float) -> Unit,
     glassBlur: Float,
@@ -2477,35 +2521,41 @@ fun SettingsPage(
                 selected = lang.ordinal,
                 onPick = { onLang(Lang.entries[it]) }
             )
-            if (fontProgress >= 0) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)) {
-                    Text(
-                        tr(lang, "字体下载中 $fontProgress%", "Downloading font $fontProgress%"),
-                        color = LocalCardText.current.copy(alpha = 0.75f), fontSize = 12.sp
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { fontProgress / 100f },
-                        modifier = Modifier.fillMaxWidth().height(4.dp),
-                        color = Palette.accent,
-                        trackColor = LocalCardText.current.copy(alpha = 0.15f)
-                    )
-                }
-            }
-            KRow(
-                Icons.Filled.Edit,
-                tr(lang, "日志颜色（高级）", "Log colors (advanced)"),
-                tr(lang, "命令 / 成功 / 失败 / 普通", "command / ok / error / normal"),
-                onClick = { onLogColors() }
-            )
             KSelectRow(
                 icon = Icons.Filled.Build,
                 title = tr(lang, "字体", "Font"),
                 subtitle = null,
                 value = font.zh,
-                options = AppFont.entries.map { it.zh },
-                selected = font.ordinal,
-                onPick = { onFont(AppFont.entries[it]) }
+                options = listOf(
+                    AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive, AppFont.Local
+                ).map { it.zh },
+                selected = listOf(
+                    AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive, AppFont.Local
+                ).indexOf(font),
+                onPick = {
+                    val list = listOf(
+                        AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive, AppFont.Local
+                    )
+                    onFont(list[it])
+                }
+            )
+            OnlineFontRow(
+                lang = lang,
+                title = "MiSans",
+                sizeText = tr(lang, "约 227 MB", "about 227 MB"),
+                ready = miSansReady,
+                downloading = fontTarget == 1,
+                progress = fontProgress,
+                onStart = { onOnlineFont(1) }
+            )
+            OnlineFontRow(
+                lang = lang,
+                title = "HarmonyOS Sans",
+                sizeText = tr(lang, "约 50 MB", "about 50 MB"),
+                ready = harmonyReady,
+                downloading = fontTarget == 2,
+                progress = fontProgress,
+                onStart = { onOnlineFont(2) }
             )
         }
 
@@ -3657,4 +3707,48 @@ fun ensureContrast(c: Color, bg: Color): Color {
         guard++
     }
     return out
+}
+
+/** 在线字体行：右侧显示体积 + 下载按钮 / 进度 */
+@Composable
+fun OnlineFontRow(
+    lang: Lang,
+    title: String,
+    sizeText: String,
+    ready: Boolean,
+    downloading: Boolean,
+    progress: Int,
+    onStart: () -> Unit
+) {
+    val wall = LocalWallBackdrop.current
+    KRow(
+        null,
+        title,
+        if (ready) tr(lang, "已下载", "downloaded") else sizeText,
+        trailing = {
+            if (downloading) {
+                Text("$progress%", color = Palette.accent, fontSize = 13.sp)
+            } else {
+                if (useBackdrop && wall != null) {
+                    LiquidButton(
+                        onClick = onStart,
+                        backdrop = wall,
+                        modifier = Modifier.height(36.dp),
+                        tint = if (ready) Palette.accent else Color.Unspecified
+                    ) {
+                        Text(
+                            if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
+                            color = if (ready) Color.White else Palette.text, fontSize = 13.sp
+                        )
+                    }
+                } else {
+                    Text(
+                        if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
+                        color = Palette.accent, fontSize = 13.sp,
+                        modifier = Modifier.clickable { onStart() }
+                    )
+                }
+            }
+        }
+    )
 }
