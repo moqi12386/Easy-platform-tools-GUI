@@ -178,6 +178,13 @@ namespace EasyPlatformTools
 
             if (path == "/api/partitions")
             {
+                // 没有 fastboot 设备时 `fastboot getvar all` 会一直等，请求就挂住了
+                string fbNow = RunCapture(Program.FastbootPathPublic, "devices");
+                if (FirstDevice(fbNow, "fastboot").Length == 0)
+                {
+                    Write(ns, 200, "没有读到分区（设备是否在 fastboot？）");
+                    return;
+                }
                 string outp;
                 Program.RunConsoleCommand("fastboot getvar all", out outp);
                 List<string[]> parts = Program.ParseGetvarPublic(outp);

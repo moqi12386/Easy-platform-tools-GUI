@@ -251,6 +251,16 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 spBoot.edit().putInt("bootFails", 0).apply()
             }
         }
+        // Android 16+ 访问局域网（遥控 PC）要运行时授权，否则 TCP 连接直接超时
+        runCatching {
+            val perm = "android.permission.ACCESS_LOCAL_NETWORK"
+            if (Build.VERSION.SDK_INT >= 36 &&
+                checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(perm), 2001)
+            }
+        }
+
         // 上一次没跑完？（成功启动会把轨迹删掉，残留 = 上次没跑完）
         val prevTrace = readTrace()
         val prevCrash = readCrash()

@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "3.44.0";
+        private const string AppVersion = "3.45.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -477,6 +477,10 @@ namespace EasyPlatformTools
         private static string proxyUrl = "";
         private static string customPtSource = "";
         private static string remoteToken = "";
+        // 开机是否自动起遥控服务（默认开，省得每次手动点）
+        private static bool remoteAuto = true;
+        // 用户显式清空过配对码：不再自动生成，服务端不校验
+        private static bool remoteNoToken = false;
         private static string wallpaperPath = "";
         private static int btnAlpha = 100;
         private static Color backdrop = Color.FromArgb(20, 22, 28);   // 用于自动黑白字
@@ -516,7 +520,11 @@ namespace EasyPlatformTools
             ResolveTools();
             LoadFonts();
             LoadConfig();
-            if (string.IsNullOrEmpty(remoteToken)) { remoteToken = new Random().Next(100000, 999999).ToString(); SaveConfig(); }
+            if (string.IsNullOrEmpty(remoteToken) && !remoteNoToken)
+            {
+                remoteToken = new Random().Next(100000, 999999).ToString();
+                SaveConfig();
+            }
 
             // .NET Framework 默认可能只协商 TLS 1.0，镜像站普遍要求 1.2
             try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; } catch { }
@@ -641,6 +649,14 @@ namespace EasyPlatformTools
                     {
                         remoteToken = val;
                     }
+                    else if (key == "auto")
+                    {
+                        remoteAuto = (val != "0");
+                    }
+                    else if (key == "tokenoff")
+                    {
+                        remoteNoToken = (val == "1");
+                    }
                     else if (key == "pt_source")
                     {
                         customPtSource = val;
@@ -661,6 +677,8 @@ namespace EasyPlatformTools
                 sb.AppendLine("size=" + fontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("lang=" + Lang.Current);
                 sb.AppendLine("token=" + remoteToken);
+                sb.AppendLine("auto=" + (remoteAuto ? "1" : "0"));
+                sb.AppendLine("tokenoff=" + (remoteNoToken ? "1" : "0"));
                 sb.AppendLine("wall=" + wallpaperPath);
                 sb.AppendLine("alpha=" + btnAlpha);
                 File.WriteAllText(ConfigPath, sb.ToString(), new UTF8Encoding(false));
@@ -727,6 +745,19 @@ namespace EasyPlatformTools
                 AddOut("", Role.Dim);
                 txtInput.Focus();
                 RefreshStatusAsync();
+                // 遥控服务默认随机启动：以前要手动点「启动服务」，忘了就永远连不上
+                if (remoteAuto)
+                {
+                    if (RemoteServer.Start(8765, remoteToken))
+                    {
+                        AddOut("遥控服务已启动：http://" + RemoteServer.LocalIp() + ":8765"
+                            + (remoteToken.Length > 0 ? "　配对码 " + remoteToken : "　（未设配对码）"), Role.Ok);
+                    }
+                    else
+                    {
+                        AddOut("遥控服务启动失败：" + RemoteServer.LastError, Role.Err);
+                    }
+                }
                 if (!File.Exists(adbPath)) { ShowSetupDialog(); }
             };
 
@@ -3627,7 +3658,7 @@ namespace EasyPlatformTools
         {
             if (dlgRemote != null && !dlgRemote.IsDisposed) { dlgRemote.Activate(); return; }
 
-            dlgRemote = NewToolDialog("手机遥控服务", new Size(520, 330));
+            dlgRemote = NewToolDialog("手机遥控服务", new Size(520, 380));
 
             lblRemoteInfo = new Label();
             lblRemoteInfo.Location = new Point(20, 18);
@@ -3680,10 +3711,32 @@ namespace EasyPlatformTools
             Button btnClose = DialogButton(dlgRemote, "关闭", 314, 192, 90, 40, false);
             btnClose.Click += delegate { dlgRemote.Close(); };
 
-            Button btnReload = DialogButton(dlgRemote, "换一个配对码", 20, 242, 160, 34, false);
+            Button btnClear = DialogButton(dlgRemote, "清除配对码", 188, 242, 130, 34, false);
+            btnClear.Click += delegate
+            {
+                remoteToken = "";
+                remoteNoToken = true;
+                SaveConfig();
+                if (RemoteServer.Running) { RemoteServer.Start(8765, remoteToken); }
+                RefreshRemoteInfo();
+                SetLbl(lblRemoteStatus, "配对码已清空：手机端配对码留空即可直接连");
+                lblRemoteStatus.ForeColor = theme.Ok;
+            };
+
+            Button btnAuto = DialogButton(dlgRemote, remoteAuto ? "自启：开" : "自启：关", 326, 242, 120, 34, false);
+            btnAuto.Click += delegate
+            {
+                remoteAuto = !remoteAuto;
+                btnAuto.Text = remoteAuto ? "自启：开" : "自启：关";
+                SaveConfig();
+                SetLbl(lblRemoteStatus, remoteAuto ? "下次启动会自动开启遥控服务" : "下次启动不再自动开启");
+            };
+
+            Button btnReload = DialogButton(dlgRemote, "换一个配对码", 20, 284, 160, 34, false);
             btnReload.Click += delegate
             {
                 remoteToken = new Random().Next(100000, 999999).ToString();
+                remoteNoToken = false;
                 SaveConfig();
                 RefreshRemoteInfo();
                 SetLbl(lblRemoteStatus, "配对码已更换，需要重启服务才生效");

@@ -3,6 +3,8 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Android 16+（targetSdk 37）访问局域网设备（遥控 PC）必须声明，否则连接直接超时 -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <application
         android:label="EasyPT"
         android:icon="@mipmap/ic_launcher"
