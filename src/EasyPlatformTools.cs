@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "3.38.0";
+        private const string AppVersion = "3.41.0";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -1281,117 +1281,171 @@ namespace EasyPlatformTools
                     close.Click += delegate { dlgOnline.Close(); };
                     dlgOnline.Controls.Add(close);
 
-                    System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                    Button refresh = new RoundButton();
+                    refresh.Text = "刷新";
+                    refresh.Size = new Size(88, 30);
+                    refresh.Location = new Point(548, 512);
+                    refresh.FlatStyle = FlatStyle.Flat;
+                    refresh.FlatAppearance.BorderSize = 1;
+                    refresh.BackColor = theme.Btn;
+                    refresh.ForeColor = theme.Text;
+                    refresh.FlatAppearance.BorderColor = theme.Border;
+                    dlgOnline.Controls.Add(refresh);
+
+                    Action loadWallpapers = delegate
                     {
-                        try
+                        refresh.Enabled = false;
+                        tip.Text = "正在获取必应壁纸…";
+                        while (flow.Controls.Count > 0)
                         {
-                            using (System.Net.WebClient wc = new System.Net.WebClient())
+                            Control old = flow.Controls[0];
+                            flow.Controls.Remove(old);
+                            old.Dispose();
+                        }
+                        System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            try
                             {
-                                wc.Encoding = System.Text.Encoding.UTF8;
-                                wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                                string json = wc.DownloadString("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=10&mkt=zh-CN");
-                                MatchCollection ms = Regex.Matches(json, "\"urlbase\":\"([^\"]+)\"");
-                                System.Collections.Generic.List<string> bases = new System.Collections.Generic.List<string>();
-                                foreach (Match m in ms) { bases.Add(m.Groups[1].Value); }
-
-                                dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                string json = null;
+                                string host = "https://cn.bing.com";
+                                string lastErr = "";
+                                using (System.Net.WebClient wc = new System.Net.WebClient())
                                 {
-                                    tip.Text = bases.Count == 0 ? "没有获取到壁纸" : "点每一项下面的「选择」即可应用";
-                                    int idx = 0;
-                                    foreach (string b in bases)
+                                    wc.Encoding = System.Text.Encoding.UTF8;
+                                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                    wc.Headers.Add("Cache-Control", "no-cache");
+                                    // idx=0 永远是同一批图；随机 0..7 才能刷出新壁纸
+                                    int idxRand = new Random(Guid.NewGuid().GetHashCode()).Next(0, 8);
+                                    string[] hosts = new string[] { "https://cn.bing.com", "https://www.bing.com" };
+                                    foreach (string hh in hosts)
                                     {
-                                        string full = "https://www.bing.com" + b + "_UHD.jpg";
-                                        string thumb = "https://www.bing.com" + b + "_400x240.jpg";
-                                        Panel card = new Panel();
-                                        card.Size = new Size(226, 156);
-                                        card.Margin = new Padding(6);
-                                        card.BackColor = theme.Btn;
-
-                                        PictureBox pic = new PictureBox();
-                                        pic.Size = new Size(206, 92);
-                                        pic.Location = new Point(10, 8);
-                                        pic.SizeMode = PictureBoxSizeMode.Zoom;
-                                        pic.BackColor = theme.Output;
                                         try
                                         {
-                                            byte[] bytes = wc.DownloadData(thumb);
-                                            using (System.IO.MemoryStream m2 = new System.IO.MemoryStream(bytes))
-                                            {
-                                                pic.Image = Image.FromStream(m2);
-                                            }
+                                            string u = hh + "/HPImageArchive.aspx?format=js&idx=" + idxRand
+                                                + "&n=10&mkt=zh-CN&nc=" + DateTime.Now.Ticks;
+                                            json = wc.DownloadString(u);
+                                            if (!string.IsNullOrEmpty(json)) { host = hh; break; }
                                         }
-                                        catch { }
-                                        card.Controls.Add(pic);
+                                        catch (Exception ex2) { lastErr = ex2.Message; }
+                                    }
+                                    if (string.IsNullOrEmpty(json)) { throw new Exception(lastErr); }
+                                    MatchCollection ms = Regex.Matches(json, "\"urlbase\":\"([^\"]+)\"");
+                                    System.Collections.Generic.List<string> bases = new System.Collections.Generic.List<string>();
+                                    foreach (Match m in ms) { bases.Add(m.Groups[1].Value); }
+                                    string hostUsed = host;
+                                    if (bases.Count == 0) { throw new Exception("没有获取到壁纸"); }
 
-                                        string captured = full;
-                                        Button pick = new RoundButton();
-                                        pick.Text = "选择";
-                                        pick.Size = new Size(206, 30);
-                                        pick.Location = new Point(10, 110);
-                                        pick.FlatStyle = FlatStyle.Flat;
-                                        pick.FlatAppearance.BorderSize = 1;
-                                        pick.BackColor = theme.RunBtn;
-                                        pick.ForeColor = Color.White;
-                                        pick.FlatAppearance.BorderColor = theme.Border;
-                                        pick.Click += delegate
+                                    dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                    {
+                                        refresh.Enabled = true;
+                                        tip.Text = "点每一项下面的「选择」即可应用（换一批点「刷新」）";
+                                        foreach (string b in bases)
                                         {
-                                            pick.Enabled = false;
-                                            pick.Text = "下载中…";
-                                            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                                            string full = hostUsed + b + "_UHD.jpg";
+                                            string thumb = hostUsed + b + "_400x240.jpg";
+                                            Panel card = new Panel();
+                                            card.Size = new Size(226, 156);
+                                            card.Margin = new Padding(6);
+                                            card.BackColor = theme.Btn;
+
+                                            PictureBox pic = new PictureBox();
+                                            pic.Size = new Size(206, 92);
+                                            pic.Location = new Point(10, 8);
+                                            pic.SizeMode = PictureBoxSizeMode.Zoom;
+                                            pic.BackColor = theme.Output;
+                                            try
                                             {
-                                                try
+                                                using (System.Net.WebClient wc3 = new System.Net.WebClient())
                                                 {
-                                                    string dir = Path.Combine(Path.GetTempPath(), "easypt-walls");
-                                                    Directory.CreateDirectory(dir);
-                                                    string file = Path.Combine(dir, "bing-" + DateTime.Now.Ticks + ".jpg");
-                                                    using (System.Net.WebClient wc2 = new System.Net.WebClient())
+                                                    wc3.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                                    byte[] bytes = wc3.DownloadData(thumb);
+                                                    using (System.IO.MemoryStream m2 = new System.IO.MemoryStream(bytes))
                                                     {
-                                                        wc2.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                                                        wc2.DownloadFile(captured, file);
+                                                        pic.Image = Image.FromStream(m2);
                                                     }
-                                                    using (Image probe = Image.FromFile(file))
-                                                    {
-                                                        if (probe.Width < 100) { throw new Exception("不是有效图片"); }
-                                                    }
-                                                    dlgOnline.BeginInvoke((MethodInvoker)delegate
-                                                    {
-                                                        wallpaperPath = file;
-                                                        SaveConfig();
-                                                        ApplyTheme(theme);
-                                                        try { form.Invalidate(true); form.Refresh(); } catch { }
-                                                        lblWall.Text = Path.GetFileName(file);
-                                                        dlgOnline.Close();
-                                                    });
                                                 }
-                                                catch (Exception ex)
+                                            }
+                                            catch { }
+                                            card.Controls.Add(pic);
+
+                                            string captured = full;
+                                            RoundButton pick = new RoundButton();
+                                            pick.Text = "选择";
+                                            pick.Size = new Size(206, 30);
+                                            pick.Location = new Point(10, 110);
+                                            pick.FlatStyle = FlatStyle.Flat;
+                                            pick.FlatAppearance.BorderSize = 1;
+                                            pick.BackColor = theme.RunBtn;
+                                            pick.ForeColor = Color.White;
+                                            pick.FlatAppearance.BorderColor = theme.Border;
+                                            pick.Click += delegate
+                                            {
+                                                pick.Enabled = false;
+                                                pick.Text = "下载中…";
+                                                System.Threading.ThreadPool.QueueUserWorkItem(delegate
                                                 {
                                                     try
                                                     {
+                                                        string dir = Path.Combine(Path.GetTempPath(), "easypt-walls");
+                                                        Directory.CreateDirectory(dir);
+                                                        string file = Path.Combine(dir, "bing-" + DateTime.Now.Ticks + ".jpg");
+                                                        using (System.Net.WebClient wc2 = new System.Net.WebClient())
+                                                        {
+                                                            wc2.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                                            wc2.DownloadFile(captured, file);
+                                                        }
+                                                        using (Image probe = Image.FromFile(file))
+                                                        {
+                                                            if (probe.Width < 100) { throw new Exception("不是有效图片"); }
+                                                        }
                                                         dlgOnline.BeginInvoke((MethodInvoker)delegate
                                                         {
-                                                            pick.Enabled = true;
-                                                            pick.Text = "选择";
-                                                            tip.Text = "下载失败：" + ex.Message;
+                                                            wallpaperPath = file;
+                                                            SaveConfig();
+                                                            ApplyTheme(theme);
+                                                            try { form.Invalidate(true); form.Refresh(); } catch { }
+                                                            lblWall.Text = Path.GetFileName(file);
+                                                            dlgOnline.Close();
                                                         });
                                                     }
-                                                    catch { }
-                                                }
-                                            });
-                                        };
-                                        card.Controls.Add(pick);
+                                                    catch (Exception ex)
+                                                    {
+                                                        try
+                                                        {
+                                                            dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                                            {
+                                                                pick.Enabled = true;
+                                                                pick.Text = "选择";
+                                                                tip.Text = "下载失败：" + ex.Message;
+                                                            });
+                                                        }
+                                                        catch { }
+                                                    }
+                                                });
+                                            };
+                                            card.Controls.Add(pick);
 
-                                        flow.Controls.Add(card);
-                                        idx++;
-                                    }
-                                });
+                                            flow.Controls.Add(card);
+                                        }
+                                    });
+                                }
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            try { dlgOnline.BeginInvoke((MethodInvoker)delegate { tip.Text = "获取失败：" + ex.Message; }); }
-                            catch { }
-                        }
-                    });
+                            catch (Exception ex)
+                            {
+                                try
+                                {
+                                    dlgOnline.BeginInvoke((MethodInvoker)delegate
+                                    {
+                                        refresh.Enabled = true;
+                                        tip.Text = "获取失败：" + ex.Message;
+                                    });
+                                }
+                                catch { }
+                            }
+                        });
+                    };
+                    refresh.Click += delegate { loadWallpapers(); };
+                    loadWallpapers();
 
                     dlgOnline.ShowDialog(dlgSettings);
                 }
