@@ -25,21 +25,21 @@ enum class AppFont(val zh: String, val en: String, val family: FontFamily?) {
     Honor("荣耀 HONOR Sans", "HONOR Sans", null),
     Vivo("vivo Sans", "vivo Sans", null),
 
-    /** 直接用 /system/fonts 里的字体文件（预装，不下载） */
-    SystemFile("系统字体文件", "System font file", null);
+    /** 电脑端打包的同款等宽字体，保持一致 */
+    JetBrainsMono("JetBrains Mono", "JetBrains Mono", null);
 
     val label: String get() = zh
 
     /** 是不是需要下载的在线字体 */
     val isOnline: Boolean get() = this != System && this != Serif && this != Mono &&
-        this != Cursive && this != Local && this != SystemFile
+        this != Cursive && this != Local
 }
 
 /** 下拉框里的显示顺序（和 ordinal 无关，可以随便排） */
 val AppFontOrder = listOf(
     AppFont.System, AppFont.Serif, AppFont.Mono, AppFont.Cursive,
     AppFont.MiSans, AppFont.Harmony, AppFont.Oppo, AppFont.OnePlus,
-    AppFont.Honor, AppFont.Vivo, AppFont.SystemFile,
+    AppFont.Honor, AppFont.Vivo, AppFont.JetBrainsMono,
     AppFont.Local
 )
 

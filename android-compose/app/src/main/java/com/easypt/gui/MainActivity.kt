@@ -183,11 +183,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /** 正在下载哪个在线字体：0 无 1 MiSans 2 HarmonyOS */
     /** 正在下载的在线字体 key（"" = 没有在下载） */
     private var fontTargetKey by mutableStateOf("")
-    /** /system/fonts 里能直接加载的字体文件（预装，不用下载） */
-    private val systemFonts =
-        androidx.compose.runtime.mutableStateListOf<Pair<String, java.io.File>>()
-    /** 当前选中的系统字体文件绝对路径 */
-    private var sysFontPath by mutableStateOf<String?>(null)
+
     /** 导入过的本地字体（显示名 -> 文件），持久化在 prefs，导入一次就一直可选 */
     private val customFonts =
         androidx.compose.runtime.mutableStateListOf<Pair<String, java.io.File>>()
@@ -214,6 +210,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var pickRomZip: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
+    /** 首次使用向导 */
+    private var showOnboarding by mutableStateOf(false)
     private var crashBannerClosed by mutableStateOf(false)
     private var showWpSource by mutableStateOf(false)
     private var showBing by mutableStateOf(false)
@@ -335,17 +333,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         OnlineFonts.forEach { def ->
             loadFont(def.fileName)?.let { onlineFamilies[def.app.name] = it }
         }
-        // 扫一遍系统字体：这些是「预装」字体，选中后直接 File 加载，不联网
-        runCatching {
-            val pref = Regex("(?i)(noto|cjk|sans|serif|mono|misans|milan|harmony|oppo|roboto|droid)")
-            val list = File("/system/fonts").listFiles()?.filter {
-                it.isFile && (it.name.endsWith(".ttf", true) || it.name.endsWith(".otf", true)) &&
-                    pref.containsMatchIn(it.name)
-            }.orEmpty().sortedBy { it.name }.take(20).map { it.nameWithoutExtension to it }
-            systemFonts.clear(); systemFonts.addAll(list)
-            android.util.Log.d("EasyPT", "系统字体发现 ${list.size} 个：${list.joinToString { it.first }}")
-        }
-        sysFontPath = sp.getString("sysFont", null)
+
         // 导入过的本地字体：从 prefs 恢复，逐个用系统解一次，坏的丢掉
         runCatching {
             val raw = sp.getString("customFonts", "") ?: ""
@@ -382,6 +370,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customFontPath = sp.getString("customFontPath", customFonts.firstOrNull()?.second?.absolutePath)
         customFont = customFontPath?.let { customFamilies[it] }
         forceSafe = sp.getBoolean("forceSafe", false)
+        // 第一次用：弹一次向导（看完写 onboarded=true，不再弹）
+        showOnboarding = !sp.getBoolean("onboarded", false)
 
         androidx.core.content.ContextCompat.registerReceiver(
             this, usbReceiver, IntentFilter(ACTION_PERM),
@@ -1273,13 +1263,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /** 字体 -> Compose FontFamily：在线字体用已下载的，其余用系统族 */
     fun familyFor(f: AppFont): androidx.compose.ui.text.font.FontFamily? = when (f) {
         AppFont.Local -> customFontPath?.let { customFamilies[it] } ?: customFont
-        AppFont.SystemFile -> sysFontPath?.let { p ->
-            runCatching {
-                androidx.compose.ui.text.font.FontFamily(
-                    androidx.compose.ui.text.font.Font(File(p))
-                )
-            }.getOrNull()
-        }
+
         else -> onlineFamilies[f.name] ?: f.family
     }
 
@@ -1287,10 +1271,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         when {
             f == AppFont.Local ->
                 fontPicker?.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
-            f == AppFont.SystemFile -> {
-                fontChoice = f
-                getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
-            }
+
             f.isOnline -> chooseOnlineFont(f)
             else -> {
                 fontChoice = f
@@ -1758,6 +1739,15 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onShareLog = { shareLog() },
                                         onForceSafe = { chooseForceSafe(it) },
                                         onAbout = { showAbout = true },
+                                        onShowGuide = { showOnboarding = true },
+                                        onOpenSource = {
+                                            runCatching {
+                                                startActivity(
+                                                    Intent(Intent.ACTION_VIEW,
+                                                        android.net.Uri.parse("https://github.com/moqi12386/Easy-platform-tools-GUI"))
+                                                )
+                                            }
+                                        },
                                         onPlayground = { showPlayground = true },
                                         themeMode = themeMode,
                                         onTheme = { chooseTheme(it) },
@@ -1768,19 +1758,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onLang = { chooseLang(it) },
                                         font = fontChoice,
                                         onFont = { chooseFont(it) },
-                                        systemFontNames = systemFonts.map { it.first },
-                                        sysFontName = sysFontPath?.let { File(it).nameWithoutExtension },
-                                        onPickSystemFont = { name ->
-                                            val hit = systemFonts.firstOrNull { it.first == name }
-                                            if (hit != null) {
-                                                sysFontPath = hit.second.absolutePath
-                                                fontChoice = AppFont.SystemFile
-                                                getSharedPreferences(PREF, MODE_PRIVATE).edit()
-                                                    .putString("sysFont", hit.second.absolutePath)
-                                                    .putInt("font", AppFont.SystemFile.ordinal).apply()
-                                                append(t("系统字体：$name", "System font: $name"), OkColor)
-                                            }
-                                        },
+
                                         customFontNames = customFonts.map { it.first },
                                         customFontName = customFontPath?.let { p ->
                                             customFonts.firstOrNull { it.second.absolutePath == p }?.first
@@ -1941,6 +1919,15 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     LocalCardText provides Palette.text,
                     LocalStyle provides style
                 ) {
+                if (showOnboarding) {
+                    OnboardingDialog(
+                        lang = lang,
+                        onDone = {
+                            showOnboarding = false
+                            getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("onboarded", true).apply()
+                        }
+                    )
+                }
                 if (showPlayground) {
                     GlassPlaygroundOverlay(assets, lang) { showPlayground = false }
                 }
@@ -2933,6 +2920,8 @@ fun SettingsPage(
     onShareLog: () -> Unit,
     onForceSafe: (Boolean) -> Unit,
     onAbout: () -> Unit,
+    onOpenSource: () -> Unit,
+    onShowGuide: () -> Unit,
     onPlayground: () -> Unit,
     themeMode: ThemeMode,
     onTheme: (ThemeMode) -> Unit,
@@ -2943,9 +2932,7 @@ fun SettingsPage(
     onLang: (Lang) -> Unit,
     font: AppFont,
     onFont: (AppFont) -> Unit,
-    systemFontNames: List<String>,
-    sysFontName: String?,
-    onPickSystemFont: (String) -> Unit,
+
     customFontNames: List<String>,
     customFontName: String?,
     onPickCustomFont: (String) -> Unit,
@@ -3068,18 +3055,7 @@ fun SettingsPage(
                     onDismiss = { pendingDeleteFont = null }
                 )
             }
-            // 系统自带字体（预装，不联网），只在选了「系统字体文件」时出现
-            if (font == AppFont.SystemFile && systemFontNames.isNotEmpty()) {
-                KSelectRow(
-                    icon = Icons.Filled.Build,
-                    title = tr(lang, "系统字体文件", "System font file"),
-                    subtitle = tr(lang, "来自 /system/fonts，不用下载", "From /system/fonts, no download"),
-                    value = sysFontName ?: tr(lang, "未选择", "none"),
-                    options = systemFontNames,
-                    selected = systemFontNames.indexOf(sysFontName),
-                    onPick = { onPickSystemFont(systemFontNames[it]) }
-                )
-            }
+
         }
 
         Spacer(Modifier.height(12.dp))
@@ -3364,7 +3340,20 @@ fun SettingsPage(
                 tr(lang, "版本信息与许可", "Version and license"),
                 onClick = { onAbout() }
             )
-            if (style == UiStyle.Glass) {
+            KRow(
+                Icons.Filled.Info,
+                tr(lang, "使用向导", "Guide"),
+                tr(lang, "再看一遍新手引导", "Show the intro again"),
+                onClick = { onShowGuide() }
+            )
+            KRow(
+                Icons.Filled.Share,
+                tr(lang, "开源地址", "Source code"),
+                "github.com/moqi12386/Easy-platform-tools-GUI",
+                onClick = { onOpenSource() }
+            )
+            // Glass Playground 暂时隐藏（保留代码，需要时把上面这行注释去掉）
+            if (false && style == UiStyle.Glass) {
                 KRow(
                     Icons.Filled.Build,
                     tr(lang, "Glass Playground", "Glass Playground"),
@@ -3616,6 +3605,117 @@ fun GlassDialogPanel(
                     LocalAccent provides (if (light) Color(0xFF16181D) else Color(0xFFECEDEF))
                 ) {
                     content()
+                }
+            }
+        }
+    }
+}
+
+/** 首次使用向导：几页说明 + 跳过/下一步，液态玻璃面板 */
+@Composable
+fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
+    var page by remember { mutableIntStateOf(0) }
+    val light = !Palette.dark
+    val contentColor = if (light) Color.Black else Color.White
+    val pages = listOf(
+        Triple(
+            tr(lang, "欢迎使用 EasyPT", "Welcome to EasyPT"),
+            tr(lang,
+                "这是 adb / fastboot 的图形界面。\n\n三种使用模式：\n· OTG 主机 —— 手机直连设备，不依赖 adb、不需要 root\n· 本机 root —— 用 su 备份 / 刷写本机分区\n· 遥控 PC —— 和电脑端配合，命令在电脑上执行",
+                "A GUI for adb / fastboot.\n\nThree modes:\n· OTG host — talk to fastboot over USB directly, no adb, no root\n· Local root — back up / flash this phone's partitions with su\n· Remote PC — pair with the desktop app and run commands there"),
+            Icons.Filled.Info
+        ),
+        Triple(
+            tr(lang, "先选界面样式", "Pick a look"),
+            tr(lang,
+                "设置 → 界面样式：\n· 液态玻璃 —— 从壁纸取样的真玻璃，可拖动底栏切换页面\n· Material —— Material Design 3\n· MIUIX —— 小米风格\n· 原生 —— 深色半透明板\n\n同一页里还能换字体、背景图和夜间模式。",
+                "Settings → Style:\n· Liquid Glass — real sampled glass, drag the bottom bar\n· Material — Material Design 3\n· MIUIX — Xiaomi style\n· Native — dark translucent panels\n\nSame page: fonts, wallpaper, dark mode."),
+            Icons.Filled.Build
+        ),
+        Triple(
+            tr(lang, "遥控 PC 怎么连", "Pairing with the PC"),
+            tr(lang,
+                "1. 电脑端打开「手机遥控服务」，地址和配对码会显示出来（默认自动启动）\n2. 手机连同一个 Wi-Fi\n3. 手机切到「遥控 PC」模式，填地址和配对码\n4. 点「测试连接」，看到「遥控服务在线」就成了\n\n首次会请求「访问本地网络设备」权限，必须允许。",
+                "1. On the PC open 'Remote service' — it shows the address and pairing code (auto-starts by default)\n2. Phone on the same Wi-Fi\n3. Switch the phone to 'Remote PC', enter address + code\n4. Tap 'Test' until it says online\n\nThe first time Android asks for local-network permission — allow it."),
+            Icons.Filled.Share
+        )
+    )
+    // 点了外面 / 返回键都不关，只有「先不看」「开始使用」能关掉（之前被广告跳过软件自动点掉了）
+    GlassDialogPanel(LocalWallBackdrop.current, onDismiss = { }) {
+        Column(Modifier.padding(28.dp, 26.dp, 26.dp, 0.dp)) {
+            Text(
+                pages[page].first, color = contentColor, fontSize = 22.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                pages[page].second, color = contentColor.copy(alpha = 0.78f),
+                fontSize = 14.sp, lineHeight = 21.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                pages.indices.forEach { i ->
+                    Box(
+                        Modifier
+                            .size(if (i == page) 8.dp else 6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (i == page) contentColor else contentColor.copy(alpha = 0.28f)
+                            )
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(
+            Modifier.padding(24.dp, 0.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val bd = LocalWallBackdrop.current
+            val last = page == pages.lastIndex
+            if (useBackdrop && bd != null) {
+                LiquidButton(
+                    onClick = { if (last) onDone() else onDone() },
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
+                LiquidButton(
+                    onClick = { if (last) onDone() else page++ },
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = LocalAccent.current
+                ) {
+                    Text(
+                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
+                        color = Color.White, fontSize = 15.sp
+                    )
+                }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(contentColor.copy(alpha = 0.10f))
+                        .clickable { onDone() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(LocalAccent.current)
+                        .clickable { if (last) onDone() else page++ }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
+                        color = Color.White, fontSize = 15.sp
+                    )
                 }
             }
         }
@@ -4560,6 +4660,10 @@ val OnlineFonts: List<OnlineFontDef> = listOf(
     OnlineFontDef(
         AppFont.Honor, "HONOR Sans CN（荣耀）", "font-honor.ttf", "8 MB",
         ghSources("hechao98", "HONORSansCN", "main", "fonts/HONORSansCN-Regular.ttf")
+    ),
+    OnlineFontDef(
+        AppFont.JetBrainsMono, "JetBrains Mono", "font-jetbrains.ttf", "0.3 MB",
+        ghSources("JetBrains", "JetBrainsMono", "master", "fonts/ttf/JetBrainsMono-Regular.ttf")
     ),
     OnlineFontDef(
         AppFont.Vivo, "vivo Sans", "font-vivo.ttf", "7 MB",
