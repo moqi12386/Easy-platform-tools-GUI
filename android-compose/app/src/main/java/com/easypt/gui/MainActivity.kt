@@ -2160,7 +2160,16 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             )
                         }
                         if (showRom) {
-                            RomDialog(style, lang, romSteps, onStart = { runRom() }, onDismiss = { showRom = false })
+                            RomDialog(
+                                style, lang, romSteps,
+                                onStart = {
+                                    // 点了「开始刷写」立刻给个反馈：弹窗马上关掉，
+                                    // 后面是跑几分钟的刷写，不给提示会以为没反应
+                                    toast(tr(lang, "已开始线刷，请在日志里看进度", "Flashing started — see the log"))
+                                    runRom()
+                                },
+                                onDismiss = { showRom = false }
+                            )
                         }
                         if (showBigLog) {
                             BigLogOverlay(
@@ -2743,14 +2752,33 @@ fun ConfirmDialog(
     KDialog(style, title, onDismiss) {
         Text(message, color = Palette.text2, fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
-            Spacer(Modifier.width(6.dp))
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text(tr(lang, "擦除", "Erase")) }
+        val eraseBd = LocalWallBackdrop.current
+        if (useBackdrop && eraseBd != null) {
+            // 玻璃风格：跟「线刷步骤」「选择脚本」那几个框一样，用 demo 的 LiquidButton
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = eraseBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
+                LiquidButton(
+                    onClick = onConfirm,
+                    backdrop = eraseBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Danger
+                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White, fontSize = 15.sp) }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
+                Spacer(Modifier.width(6.dp))
+                Button(
+                    onClick = onConfirm,
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(tr(lang, "擦除", "Erase")) }
+            }
         }
     }
 }
@@ -2796,17 +2824,37 @@ private fun BigLogOverlay(
                 Spacer(Modifier.width(8.dp))
                 Text("(${logs.size})", color = text.copy(alpha = 0.45f), fontSize = 12.sp)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    tr(lang, "清空", "Clear"),
-                    color = LocalAccent.current, fontSize = 14.sp,
-                    modifier = Modifier.clickable { onClear() }
-                )
-                Spacer(Modifier.width(18.dp))
-                Text(
-                    tr(lang, "关闭", "Close"),
-                    color = LocalAccent.current, fontSize = 14.sp,
-                    modifier = Modifier.clickable { onClose() }
-                )
+                val bigBd = LocalWallBackdrop.current
+                if (useBackdrop && bigBd != null) {
+                    // 放大后的「清空」「关闭」也用液态按钮，和主页日志头那两个一致
+                    val btnSurface = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                    else Color.White.copy(alpha = 0.35f)
+                    LiquidButton(
+                        onClick = onClear,
+                        backdrop = bigBd,
+                        modifier = Modifier.height(48.dp),
+                        surfaceColor = btnSurface
+                    ) { Text(tr(lang, "清空", "Clear"), color = text, fontSize = 13.sp) }
+                    Spacer(Modifier.width(22.dp))
+                    LiquidButton(
+                        onClick = onClose,
+                        backdrop = bigBd,
+                        modifier = Modifier.height(48.dp),
+                        surfaceColor = btnSurface
+                    ) { Text(tr(lang, "关闭", "Close"), color = text, fontSize = 13.sp) }
+                } else {
+                    Text(
+                        tr(lang, "清空", "Clear"),
+                        color = LocalAccent.current, fontSize = 14.sp,
+                        modifier = Modifier.clickable { onClear() }
+                    )
+                    Spacer(Modifier.width(18.dp))
+                    Text(
+                        tr(lang, "关闭", "Close"),
+                        color = LocalAccent.current, fontSize = 14.sp,
+                        modifier = Modifier.clickable { onClose() }
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             val inset = if (style == UiStyle.Glass) {
@@ -2857,14 +2905,33 @@ private fun RomDialog(
             }
         }
         Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
-            Spacer(Modifier.width(6.dp))
-            Button(
-                onClick = onStart,
-                colors = primaryButtonColors(),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text(tr(lang, "开始刷写", "Start")) }
+        val romBd = LocalWallBackdrop.current
+        if (useBackdrop && romBd != null) {
+            // 「开始刷写」也要是液态按钮，之前这里还是 Material 的实心蓝按钮
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = romBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
+                LiquidButton(
+                    onClick = onStart,
+                    backdrop = romBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = LocalAccent.current
+                ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White, fontSize = 15.sp) }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
+                Spacer(Modifier.width(6.dp))
+                Button(
+                    onClick = onStart,
+                    colors = primaryButtonColors(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(tr(lang, "开始刷写", "Start")) }
+            }
         }
     }
 }
@@ -2898,8 +2965,21 @@ private fun PartsDialog(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onClose) { Text(tr(lang, "关闭", "Close"), color = Palette.text2) }
+        val partsBd = LocalWallBackdrop.current
+        if (useBackdrop && partsBd != null) {
+            // 「关闭」也换成液态按钮，读分区表这一屏之前只有一行蓝字
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LiquidButton(
+                    onClick = onClose,
+                    backdrop = partsBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onClose) { Text(tr(lang, "关闭", "Close"), color = Palette.text2) }
+            }
         }
     }
 }
@@ -3618,9 +3698,21 @@ fun SettingsPage(
                         Text(crashText, color = Palette.text2, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                     }
                     Spacer(Modifier.height(10.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { showCrash = false }) {
-                            Text(tr(lang, "关闭", "Close"), color = Palette.text2)
+                    val crashBd = LocalWallBackdrop.current
+                    if (useBackdrop && crashBd != null) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            LiquidButton(
+                                onClick = { showCrash = false },
+                                backdrop = crashBd,
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                surfaceColor = Color.White.copy(alpha = 0.3f)
+                            ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { showCrash = false }) {
+                                Text(tr(lang, "关闭", "Close"), color = Palette.text2)
+                            }
                         }
                     }
                 }
@@ -4304,10 +4396,8 @@ fun LiquidChoiceDialog(
     val contentColor = if (light) Color.Black else Color.White
     val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
-    android.util.Log.d("EasyPT", "ChoiceDialog compose: useBackdrop=$useBackdrop backdrop=${backdrop != null}")
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        android.util.Log.d("EasyPT", "ChoiceDialog INSIDE: useBackdrop=$useBackdrop backdrop=${backdrop != null} localWall=${LocalWallBackdrop.current != null}")
     CompositionLocalProvider(
         LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else LocalAccent.current)
     ) {
