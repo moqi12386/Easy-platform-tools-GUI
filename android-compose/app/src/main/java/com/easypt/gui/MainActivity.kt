@@ -2694,6 +2694,24 @@ fun KSwitchRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+/**
+ * 页面底部要给悬浮底栏 + 系统导航栏让出的高度。
+ * 以前这里写死 120dp，是拍脑袋的常数：手势导航和三键导航的导航栏差很多，
+ * 换字体/语言后底栏高度也会变，于是内容可能被遮住或留一大块空白。
+ * 现在按「当前风格的底栏高度 + 系统导航栏 inset + 12dp 呼吸」算。
+ */
+fun bottomSpacer(): androidx.compose.ui.unit.Dp {
+    val barHeight = when (LocalStyle.current) {
+        UiStyle.Material -> 80.dp   // M3 NavigationBar 默认 80dp
+        UiStyle.Miuix -> 64.dp      // miuix NavigationBar ItemHeight 64dp
+        else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
+    }
+    val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return barHeight + nav + 12.dp
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun PageTitle(text: String) {
     val color = LocalTitleColor.current
     val shadow = if (color.luminance() > 0.5f) {
@@ -3170,7 +3188,7 @@ fun HomePage(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 120.dp)
+            .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
     ) {
         if (crashBannerVisible) {
@@ -3517,7 +3535,7 @@ fun SettingsPage(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 120.dp)
+            .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
     ) {
         val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
