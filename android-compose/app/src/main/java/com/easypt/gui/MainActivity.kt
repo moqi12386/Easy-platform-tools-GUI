@@ -1736,23 +1736,59 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             var latest: String? = null
             var err: String? = null
             runCatching {
-                val conn = (java.net.URL(
-                    "https://api.github.com/repos/moqi12386/Easy-platform-tools-GUI/releases/latest"
-                ).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 10000
-                    readTimeout = 15000
-                    instanceFollowRedirects = true
-                    setRequestProperty("Accept", "application/vnd.github+json")
-                    setRequestProperty("User-Agent", "EasyPT")
+                // 多个源依次试：官方 API -> 两个 GitHub 加速代理 -> 直接读 releases/latest 的跳转
+                val repoPath = "moqi12386/Easy-platform-tools-GUI"
+                val api = "https://api.github.com/repos/$repoPath/releases/latest"
+                val sources = listOf(
+                    api,
+                    "https://gh-proxy.com/$api",
+                    "https://ghproxy.net/$api"
+                )
+                var lastErr = ""
+                for (u in sources) {
+                    try {
+                        val conn = (java.net.URL(u).openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 10000
+                            readTimeout = 15000
+                            instanceFollowRedirects = true
+                            setRequestProperty("Accept", "application/vnd.github+json")
+                            setRequestProperty("User-Agent", "EasyPT")
+                        }
+                        try {
+                            if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
+                            val body = conn.inputStream.bufferedReader().use { it.readText() }
+                            val m = Regex("\"tag_name\"\\s*:\\s*\"v?([0-9][0-9.]*)\"").find(body)
+                            if (m != null) { latest = m.groupValues[1]; break }
+                            throw IllegalStateException("没有 tag_name")
+                        } finally {
+                            conn.disconnect()
+                        }
+                    } catch (e: Throwable) {
+                        lastErr = e.message ?: e.javaClass.simpleName
+                    }
                 }
-                try {
-                    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val m = Regex("\"tag_name\"\\s*:\\s*\"v?([0-9][0-9.]*)\"").find(body)
-                    latest = m?.groupValues?.get(1)
-                } finally {
-                    conn.disconnect()
+                // 兜底：不查 API，直接看 releases/latest 会 302 到哪个 tag
+                if (latest == null) {
+                    try {
+                        val conn = (java.net.URL("https://github.com/$repoPath/releases/latest")
+                            .openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 10000
+                            readTimeout = 15000
+                            instanceFollowRedirects = false
+                            setRequestProperty("User-Agent", "EasyPT")
+                        }
+                        try {
+                            val loc = conn.getHeaderField("Location") ?: conn.url.toString()
+                            val m = Regex("/tag/v?([0-9][0-9.]*)").find(loc)
+                            if (m != null) latest = m.groupValues[1] else lastErr = "跳转里没有版本号"
+                        } finally {
+                            conn.disconnect()
+                        }
+                    } catch (e: Throwable) {
+                        lastErr = e.message ?: e.javaClass.simpleName
+                    }
                 }
+                if (latest == null) throw IllegalStateException(lastErr.ifBlank { "所有源都不可用" })
             }.onFailure { err = it.message ?: it.javaClass.simpleName }
 
             ui.post {
