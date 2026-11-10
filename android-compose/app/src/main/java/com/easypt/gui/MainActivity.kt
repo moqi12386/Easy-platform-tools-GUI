@@ -1984,6 +1984,25 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         val pickWallpaper = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) setWallpaperFrom(uri)
         }
+        // 实况通知要 POST_NOTIFICATIONS（Android 13+）：开刷前申请一次，
+        // 不申请的话 updateFlashLive 会被静默跳过，用户永远看不到进度通知
+        val askNotifyPerm = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (!granted) append(
+                t("没有通知权限，刷机进度不会显示在通知栏", "No notification permission — progress won't show"),
+                ErrColor
+            )
+        }
+        fun ensureNotifyPerm() {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    this, android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                askNotifyPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
         val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             flashImage(uri)
         }
@@ -2450,6 +2469,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             RomDialog(
                                 style, lang, romSteps,
                                 onStart = {
+                                    // 先要通知权限，否则实况进度条会被静默跳过
+                                    ensureNotifyPerm()
                                     // 点了「开始刷写」立刻给个反馈：弹窗马上关掉，
                                     // 后面是跑几分钟的刷写，不给提示会以为没反应
                                     toast(tr(lang, "已开始线刷，请在日志里看进度", "Flashing started — see the log"))
