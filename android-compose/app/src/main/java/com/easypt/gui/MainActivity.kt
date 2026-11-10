@@ -4031,6 +4031,27 @@ fun SettingsPage(
                 subtitle = tr(lang, "手动查一次最新版本", "look up the latest release now"),
                 onClick = { onCheckUpdate() }
             )
+            // Shizuku 授权：绕过小米超级岛白名单需要它去掐 XMSF 网络。
+            // 状态实时反映，点一下就去 Shizuku 拉授权。
+            AppRow(
+                icon = Icons.Filled.Lock,
+                title = tr(lang, "Shizuku 授权", "Shizuku permission"),
+                subtitle = when {
+                    !XmsfBypass.hasShizuku() -> tr(
+                        lang, "Shizuku 未运行：先打开 Shizuku 并启动服务",
+                        "Shizuku is not running: start it first"
+                    )
+                    XmsfBypass.hasPermission() -> tr(
+                        lang, "已授权 · 点一下重新申请",
+                        "Granted · tap to re-request"
+                    )
+                    else -> tr(
+                        lang, "未授权 · 点一下拉起 Shizuku 授权框",
+                        "Not granted · tap to request"
+                    )
+                },
+                onClick = { XmsfBypass.requestPermission() }
+            )
             AppSwitchRow(
                 icon = Icons.Filled.Refresh,
                 title = tr(lang, "安全模式", "Safe mode"),
