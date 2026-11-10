@@ -90,6 +90,13 @@ import com.easypt.gui.glass.LiquidToggle
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Slider as MiuixSlider
+// 官方 miuix 组件（照 https://github.com/compose-miuix-ui/miuix 的文档用法直接调）：
+// 行一律 BasicComponent，开关/输入框/底栏都用库里自己的实现，不再自绘
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
+import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
+import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.darkColorScheme as miuixDark
 import top.yukonga.miuix.kmp.theme.lightColorScheme as miuixLight
@@ -1772,11 +1779,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
             // 主题切换时整棵树重建，避免读到半新半旧的配色
         key(dark, monet) {
-            // Material 风格不铺壁纸：M3 的观感是「纯色 surface + surfaceContainer 卡片」，
-            // 底下垫一张照片会把三种样式的区别抹平（这也是之前 Material 看着跟 MIUIX / 原生差不多主因）。
-            val plain = style == UiStyle.Material
-            val onWall = if (plain) Palette.text
-            else if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
+            val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
             // 底栏在屏幕最下面，得用壁纸「底部」的亮度；以前用 topLum，壁纸上下亮度不一样就看不见字。
             // 再叠上底栏那层 40% 玻璃底料，算出真实底色亮度，然后按对比度挑黑字还是白字
             val veilLum = if (dark) 0.07f else 0.93f
@@ -1785,32 +1788,28 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
             val wallBackdrop = rememberLayerBackdrop()
             Box(Modifier.fillMaxSize().background(Bg)) {
-                if (!plain) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .then(if (useBackdrop) Modifier.layerBackdrop(wallBackdrop) else Modifier)
-                    ) {
-                        WallpaperView(assets)
-                    }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .then(if (useBackdrop) Modifier.layerBackdrop(wallBackdrop) else Modifier)
+                ) {
+                    WallpaperView(assets)
                 }
-                if (!plain) {
-                    // 顶部渐变：和底栏同一套 Brush，标题仍然清晰（纯色背景用不上）
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(190.dp)
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Bg.copy(alpha = 0.85f),
-                                        Bg.copy(alpha = 0.45f),
-                                        Color.Transparent
-                                    )
+                // 顶部渐变：和底栏同一套 Brush，标题仍然清晰
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Bg.copy(alpha = 0.85f),
+                                    Bg.copy(alpha = 0.45f),
+                                    Color.Transparent
                                 )
                             )
-                    )
-                }
+                        )
+                )
                 Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
@@ -2056,6 +2055,27 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 )
                             }
                         }
+                    } else if (style == UiStyle.Miuix) {
+                        // MIUIX：直接用库里的 NavigationBar / NavigationBarItem（自带分割线和 inset 处理）
+                        // 这段在页面 MiuixTheme 外面，必须自己套一层，否则深色模式下底栏还是白的
+                        MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
+                            MiuixNavigationBar(
+                                modifier = Modifier.align(Alignment.BottomCenter)
+                            ) {
+                                MiuixNavigationBarItem(
+                                    selected = page == 0,
+                                    onClick = { page = 0 },
+                                    icon = Icons.Filled.Home,
+                                    label = t("主页", "Home")
+                                )
+                                MiuixNavigationBarItem(
+                                    selected = page == 1,
+                                    onClick = { page = 1 },
+                                    icon = Icons.Filled.Settings,
+                                    label = t("设置", "Settings")
+                                )
+                            }
+                        }
                     } else if (useBackdrop) {
                         // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
                         // 底栏上方的渐变淡出：内容照样能滑到底栏下面，只是越靠下越淡
@@ -2272,7 +2292,9 @@ enum class ThemeMode(val zh: String, val en: String) {
 /** 全局调色：用普通 var 存，配合 key() 重建整棵树，避免组合期间写状态 */
 object Palette {
     var dark: Boolean = false
-    var monetAccent: Color? = null
+    // 必须是 Compose 状态：之前是普通 var，莫奈取色是异步算出来的，
+    // 赋值时没有任何订阅者会重组，于是底栏/按钮一直停在默认蓝，切了莫奈也不变
+    var monetAccent: Color? by androidx.compose.runtime.mutableStateOf(null)
 
     val bg: Color
         get() = run {
@@ -2444,6 +2466,40 @@ fun KRow(
     onClick: (() -> Unit)? = null
 ) {
     val text = LocalCardText.current
+    // MIUIX：直接用库里的 BasicComponent（标题 / 摘要 / 起始图标 / 结束动作都是它的官方参数）
+    if (LocalStyle.current == UiStyle.Miuix) {
+        // 官方签名：startAction 是 @Composable () -> Unit，endActions 是 @Composable RowScope.() -> Unit
+        val lead: (@Composable () -> Unit)? = icon?.let { ic ->
+            {
+                Icon(
+                    ic, contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        val tail: (@Composable RowScope.() -> Unit)? = when {
+            trailing != null -> { { trailing() } }
+            chevron && onClick != null -> {
+                {
+                    Icon(
+                        Icons.Filled.KeyboardArrowRight, contentDescription = null,
+                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            else -> null
+        }
+        BasicComponent(
+            title = title,
+            summary = subtitle,
+            startAction = lead,
+            endActions = tail,
+            onClick = onClick
+        )
+        return
+    }
     // Material Design 3：一行就是 M3 的 ListItem（leading / headline / supporting / trailing）
     if (LocalStyle.current == UiStyle.Material) {
         val lead: (@Composable () -> Unit)? = icon?.let { ic ->
@@ -2571,6 +2627,26 @@ fun KSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val text = LocalCardText.current
+    // MIUIX：BasicComponent + 库里的 Switch（官方推荐写法）
+    if (LocalStyle.current == UiStyle.Miuix) {
+        BasicComponent(
+            title = title,
+            summary = subtitle,
+            startAction = {
+                Icon(icon, contentDescription = null, tint = MiuixTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(24.dp))
+            },
+            endActions = {
+                MiuixSwitch(
+                    checked = checked,
+                    onCheckedChange = { onCheckedChange(it) },
+                    enabled = enabled
+                )
+            },
+            onClick = if (enabled) ({ onCheckedChange(!checked) }) else null
+        )
+        return
+    }
     // Material Design 3：ListItem + M3 Switch
     if (LocalStyle.current == UiStyle.Material) {
         ListItem(
@@ -4636,6 +4712,17 @@ fun GlassField(
             shape = RoundedCornerShape(12.dp),
             keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
             else KeyboardOptions.Default,
+            modifier = modifier.fillMaxWidth()
+        )
+        return
+    }
+    // MIUIX：用库里的 TextField，label 直接当占位符（官方的 useLabelAsPlaceholder）
+    if (LocalStyle.current == UiStyle.Miuix) {
+        MiuixTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = placeholder,
+            useLabelAsPlaceholder = true,
             modifier = modifier.fillMaxWidth()
         )
         return
