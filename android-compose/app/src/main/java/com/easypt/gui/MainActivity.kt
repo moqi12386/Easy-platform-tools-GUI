@@ -4175,6 +4175,37 @@ fun GlassDialogPanel(
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        // MIUIX：容器换成库里的 Card。只加这一个分支，所有基于 GlassDialogPanel 的弹窗
+        // （开机向导 / 确认框 / 关于 / 在线壁纸 / 日志颜色）一起变成 MIUIX 皮，
+        // 液态玻璃那条路一行没动
+        if (LocalStyle.current == UiStyle.Miuix) {
+            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(dimColor)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onDismiss() }
+                    )
+                    Column(
+                        Modifier
+                            .align(Alignment.Center)
+                            .padding(32.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 620.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                            Column { content() }
+                        }
+                    }
+                }
+            }
+            return@Dialog
+        }
         Box(Modifier.fillMaxSize()) {
             // 压暗层（点空白关闭）
             Box(
@@ -5013,7 +5044,12 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 modifier = Modifier.weight(1f)
             )
             val refreshBd = LocalWallBackdrop.current
-            if (useBackdrop && refreshBd != null) {
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "刷新", "Refresh"),
+                    onClick = { reload++ }
+                )
+            } else if (useBackdrop && refreshBd != null) {
                 // 刷新也是玻璃按钮，不是一行蓝字
                 LiquidButton(onClick = { reload++ }, backdrop = refreshBd) {
                     Text(tr(lang, "刷新", "Refresh"), color = contentColor, fontSize = 14.sp)
@@ -5062,7 +5098,22 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                         )
                         Spacer(Modifier.height(6.dp))
                         val isBusy = busyIndex == i
-                        if (useBackdrop && bd != null) {
+                        if (LocalStyle.current == UiStyle.Miuix) {
+                            top.yukonga.miuix.kmp.basic.Button(
+                                onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
+                                colors = if (isBusy) {
+                                    top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary()
+                                } else {
+                                    top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                    else tr(lang, "选择", "Select")
+                                )
+                            }
+                        } else if (useBackdrop && bd != null) {
                             LiquidButton(
                                 onClick = {
                                     if (!isBusy) { busyIndex = i; progress = 0 }
