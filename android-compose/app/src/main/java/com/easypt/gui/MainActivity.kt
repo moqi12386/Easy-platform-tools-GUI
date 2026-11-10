@@ -1970,25 +1970,33 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 typography = typographyWith(
                                     familyFor(fontChoice)
                                 ),
-                                colorScheme = if (dark) {
-                                    darkColorScheme(
-                                        primary = LocalAccent.current,
-                                        surface = Surface,
-                                        surfaceContainer = Surface,
-                                        onSurface = TextPrimary,
-                                        background = Bg,
-                                        onBackground = TextPrimary
-                                    )
-                                } else {
-                                    lightColorScheme(
-                                        primary = LocalAccent.current,
-                                        onPrimary = Color.White,
-                                        surface = Surface,
-                                        surfaceContainer = Surface,
-                                        onSurface = TextPrimary,
-                                        background = Bg,
-                                        onBackground = TextPrimary
-                                    )
+                                colorScheme = run {
+                                    // Material You：API 31+ 直接用系统从壁纸取的动态配色，
+                                    // 低版本回退到项目自己这套
+                                    val c = LocalContext.current
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        if (dark) androidx.compose.material3.dynamicDarkColorScheme(c)
+                                        else androidx.compose.material3.dynamicLightColorScheme(c)
+                                    } else if (dark) {
+                                        darkColorScheme(
+                                            primary = LocalAccent.current,
+                                            surface = Surface,
+                                            surfaceContainer = Surface,
+                                            onSurface = TextPrimary,
+                                            background = Bg,
+                                            onBackground = TextPrimary
+                                        )
+                                    } else {
+                                        lightColorScheme(
+                                            primary = LocalAccent.current,
+                                            onPrimary = Color.White,
+                                            surface = Surface,
+                                            surfaceContainer = Surface,
+                                            onSurface = TextPrimary,
+                                            background = Bg,
+                                            onBackground = TextPrimary
+                                        )
+                                    }
                                 }
                             ) {
                                 if (page == 0) {
