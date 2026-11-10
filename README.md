@@ -21,12 +21,12 @@ Windows 上的 adb / fastboot 图形化命令台。深色界面、、可换背�
 - **主题**：8 个预设背景色 + 自定义取色器，按背景亮度自动推导整套配色，浅色底不会出现浅色字
 - **字体**：内置 MiSans / MiSans Medium / JetBrains Mono，另可选择系统里的微软雅黑、等线、宋体、黑体、Consolas，字号 4 档
 - **编码处理**：设备返回的是 UTF-8，adb 自身的提示是 ANSI(GBK)，逐行判定解码，中文路径不乱码
-- **零依赖**：`csc.exe`（.NET Framework 4.x 自带）直接编译，无第三方库、无 NuGet、无运行时安装
+- **Windows 端零依赖**：`csc.exe`（.NET Framework 4.x 自带）直接编译，无第三方库、无 NuGet、无运行时安装（Android 端走 Gradle，依赖见 [THIRD-PARTY.md](THIRD-PARTY.md)）
 
 ## 快速开始
 
-1. 到 [Releases](../../releases) 下载 `Easy-platform-tools-GUI-v1.5.0.zip` 并解压
-2. 双击 `Easy-platform-tools-GUI.exe`
+1. 到 [Releases](../../releases/latest) 下载 `Easy-platform-tools-GUI-3.50.1.exe`（Windows 端）或 `EasyPT-3.50.1.apk`（Android 端）
+2. Windows 端双击 `Easy-platform-tools-GUI.exe`
 3. 首次启动会提示缺少 **Android platform-tools**，点「立即下载」即可，程序自动下载并解压到 `bin\`
 
 ![首次启动](docs/setup.png)
