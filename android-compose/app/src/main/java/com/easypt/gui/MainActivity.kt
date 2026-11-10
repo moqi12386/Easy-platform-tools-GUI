@@ -154,7 +154,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var pendingDevice: UsbDevice? = null
 
     // ---------- 业务状态 ----------
-    private val logs = mutableStateListOf<LogLine>()
+    // 日志放到进程级单例（见文件末尾 AppLog）：
+    // 这样 FlashService 也能写，Activity 重建也不丢
+    private val logs get() = AppLog.lines
     private var mode by mutableIntStateOf(0)
     private var connected by mutableStateOf(false)
     private var busy by mutableStateOf(false)
@@ -5786,4 +5788,9 @@ fun OnlineFontRow(
             }
         }
     )
+}
+
+/** 进程级日志缓冲：Activity 与 FlashService 共用 */
+object AppLog {
+    val lines = mutableStateListOf<LogLine>()
 }
