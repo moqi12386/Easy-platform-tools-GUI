@@ -1790,7 +1790,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         if (nm != null) {
             runCatching { nm.cancel(flashNotifyId) }
         }
-        if (success) toast(t("刷写完成", "Flashing finished"))
+        if (success) runCatching { ui.post { toast(t("刷写完成", "Flashing finished")) } }
     }
 
     /** 实况通知要显示的状态 */
