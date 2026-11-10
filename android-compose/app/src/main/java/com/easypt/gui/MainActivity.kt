@@ -1749,10 +1749,53 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             .putExtra(FlashService.EXTRA_STEP, island.step)
             .putExtra(FlashService.EXTRA_MAX, island.max)
             .putExtra(FlashService.EXTRA_COLOR, accent)
+        // 启动失败要说出来，并且退回普通通知：上一版静默失败，
+        // 用户只看到「通知没了」，日志里一个字都没有
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
             else startService(i)
+        }.onFailure { e ->
+            append(
+                t(
+                    "实况通知启动失败：${e.javaClass.simpleName} ${e.message}",
+                    "Live update failed: ${e.javaClass.simpleName} ${e.message}"
+                ),
+                ErrColor
+            )
+            runCatching { notifyPlainFlash(island, accent) }
         }
+    }
+
+    /** 前台服务不可用时的退路：普通常驻通知，至少能看见进度 */
+    private fun notifyPlainFlash(island: LiveUpdate, accent: Int) {
+        val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
+        ensureFlashChannel(nm)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        val b = if (Build.VERSION.SDK_INT >= 33) {
+            android.app.Notification.Builder(this, flashChannel)
+        } else {
+            @Suppress("DEPRECATION")
+            android.app.Notification.Builder(this)
+        }
+        b.setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(island.title)
+            .setContentText(island.text)
+            .setOngoing(!island.done)
+            .setOnlyAlertOnce(true)
+            .setColor(accent)
+        if (Build.VERSION.SDK_INT >= 36) {
+            val ps = android.app.Notification.ProgressStyle()
+                .setProgress(island.max.coerceAtLeast(1))
+                .setProgressIndeterminate(island.max <= 0)
+                .setProgress(island.step.coerceIn(0, island.max.coerceAtLeast(1)))
+            b.setStyle(ps)
+            runCatching { b.setShortCriticalText(island.text) }
+        }
+        runCatching { nm.notify(flashNotifyId, b.build()) }
     }
 
     fun finishFlashLive(success: Boolean) {
