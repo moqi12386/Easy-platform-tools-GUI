@@ -1936,7 +1936,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             val onBar = readableOn(barLum)
             // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
             val wallBackdrop = rememberLayerBackdrop()
-            Box(Modifier.fillMaxSize().background(Bg)) {
+            Box(Modifier.fillMaxSize().background(Bg).imePadding()) {
                 Box(
                     Modifier
                         .fillMaxSize()
