@@ -1736,57 +1736,31 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
      * 低版本退化成普通常驻通知，只更新文字。
      */
     fun updateFlashLive(island: LiveUpdate) {
+        // 交给前台服务发通知：只有前台服务发布的常驻通知才会被系统提升成
+        // 实况通知 / 超级岛，Activity 直接 notify 的不会
+        val accent = when {
+            island.failed -> ErrText
+            island.done -> OkText
+            else -> CmdColor
+        }.toArgb()
+        val i = android.content.Intent(this, FlashService::class.java)
+            .putExtra(FlashService.EXTRA_TITLE, island.title)
+            .putExtra(FlashService.EXTRA_TEXT, island.text)
+            .putExtra(FlashService.EXTRA_STEP, island.step)
+            .putExtra(FlashService.EXTRA_MAX, island.max)
+            .putExtra(FlashService.EXTRA_COLOR, accent)
         runCatching {
-            val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
-            ensureFlashChannel(nm)
-            val b = if (Build.VERSION.SDK_INT >= 33) {
-                android.app.Notification.Builder(this, flashChannel)
-            } else {
-                @Suppress("DEPRECATION")
-                android.app.Notification.Builder(this)
-            }
-            b.setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle(island.title)
-                .setContentText(island.text)
-                .setOngoing(!island.done)
-                .setOnlyAlertOnce(true)
-
-            if (Build.VERSION.SDK_INT >= 36) {
-                // 颜色跟日志一致：进行中=命令色，完成=成功色，失败=失败色
-                val seg = when {
-                    island.failed -> ErrText
-                    island.done -> OkText
-                    else -> CmdColor
-                }.toArgb()
-                // 不要用 setProgressSegments —— 那会把进度条画成一条细线，
-                // 普通进度用 setProgress 就够了
-                val ps = android.app.Notification.ProgressStyle()
-                    .setProgress(island.max.coerceAtLeast(1))
-                    .setProgressIndeterminate(island.max <= 0)
-                if (island.step in 0..island.max) ps.setProgress(island.step)
-                b.setStyle(ps)
-                b.setColor(seg)
-                // 关键两行：告诉系统「我要当实况通知」，否则只是普通通知，不会进超级岛
-                runCatching { b.setShortCriticalText(island.text) }
-                runCatching { b.setRequestPromotedOngoing(!island.done) }
-            }
-            if (island.done) b.setAutoCancel(true)
-
-            if (Build.VERSION.SDK_INT >= 33 &&
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    this, "android.permission.POST_NOTIFICATIONS"
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) return
-
-            nm.notify(flashNotifyId, b.build())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
+            else startService(i)
         }
     }
 
     fun finishFlashLive(success: Boolean) {
-        val nm = getSystemService(android.app.NotificationManager::class.java)
-        if (nm != null) {
-            runCatching { nm.cancel(flashNotifyId) }
-        }
+        val stop = android.content.Intent(this, FlashService::class.java)
+            .putExtra(FlashService.EXTRA_STOP, true)
+        runCatching { startService(stop) }
+        runCatching { stopService(android.content.Intent(this, FlashService::class.java)) }
+        // runRom 在后台线程跑，Toast 必须在主线程
         if (success) runCatching { ui.post { toast(t("刷写完成", "Flashing finished")) } }
     }
 
