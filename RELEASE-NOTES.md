@@ -1,4 +1,113 @@
-# Easy-platform-tools-GUI v3.48.0 — 新手向导 + 设置页收尾
+# Easy-platform-tools-GUI v3.50.0 — OTG 分块刷大分区（Android 端）
+
+上一版让 OTG 能认到 fastboot、能读分区表；这一版让 OTG **真的能把大分区刷进去**。
+用 MIX 2S（polaris）真机把 1410 MB 的 `system.img` 刷完并正常开机，才算过关。
+
+## 症状
+
+刷 `system` / `product` 这种大分区时，界面卡在 `第 1 包数据未被确认：null`，白等 30 秒超时。
+小分区（`logo` 20 MB、`misc` 8 KB）反而一次就过。
+
+## 根因一：镜像不是 raw，是 Android sparse
+
+`system.img` / `system_ext.img` / `product.img` / `vendor.img` 开头都是 `3aff26ed`
+（sparse magic `0xED26FF3A`）。之前按字节切片，把 12 字节的 chunk header 劈成两半发出去，
+设备收到的是废数据 —— 刷完起不来，只会显示 AOSP 的警告页。
+
+## 根因二：`download:` 声明的字节数算错（决定性 bug）
+
+`flushPiece()` 原来这样算包长：
+
+```java
+size = 28 + 12 * nChunks + body.size();   // 错
+```
+
+而 `body` 里**已经**包含了每块的 12 字节头，等于把块头算了两遍。
+`download:0012xxxx` 声明的字节数比实际发出的大 `12 × 块数`，
+设备发完数据后一直在等那些根本不存在的字节，30 秒后超时 → `第 1 包数据未被确认：null`。
+
+改成先把整包拼好，再用它的真实长度去声明：
+
+```java
+java.io.ByteArrayOutputStream out = new ByteArrayOutputStream(body.size() + 64);
+... 写头 + 前置 DONTCARE + body + 结尾 DONTCARE ...
+byte[] all = out.toByteArray();
+long size = all.length;                    // 对
+```
+
+## 做法：按块边界重打包，语义对齐 libsparse
+
+每个包都写成一张完整的 sparse 镜像：
+
+| 段 | 内容 |
+|---|---|
+| 头 | `magic/total_sz/chunk_hdr_sz/...`，`total_blks` 用**整个镜像**的块数 |
+| 可选 | 前置 `DONTCARE(pieceStart)`，补上本包之前跳过的块 |
+| 主体 | 若干个（必要时从原始 RAW 块里切开的）chunk |
+| 可选 | 结尾 `DONTCARE(totalBlocks - curBlock)`，补到整镜像末尾 |
+
+和 Android 官方 `libsparse` 的 `sparse_file_resparse()` 输出一致。
+在 WSL 里装 `android-libsparse-dev`，用真实的 `resparse` 逐包比对过，
+块数、chunk 数、`total_blks` 全部吻合。
+
+每包上限取 `min(设备 max-download-size, 12 MB)`。
+设备报的 768 MB 不是真能一次发完 —— **单次 `bulkTransfer` 超过 64 KB 会被直接拒（ret=-1）**，
+所以底层固定按 16 KB 切片，并在失败时 `CLEAR_FEATURE(ENDPOINT_HALT)` 后重试一次。
+
+## 顺带修掉
+
+- 传输中途掉线：`reopen()` 重新扫描设备再打开，`FAIL:write` / `FAIL:timeout` 自动重发一次
+- `flash:` / `erase:` / `format:` 的读超时单独放宽到 180 秒（普通 `getvar` 仍是 30 秒）
+- 线刷脚本里的 `getvar product` 预检行不再真的发给设备，改由 App 从脚本里正则出机型名自己校验
+- 脚本里的 `$*` / `$1` / `%*` 这类转发占位符不再被当成命令
+- `format <分区>` 按 `erase` 处理
+- 移除调试用的第 1 包转储
+
+## 真机验证
+
+| 步骤 | 结果 |
+|---|---|
+| `system.img` 1410 MB / 385070 块 | 拆成 **118 包**，全部 `download:` + `flash:` 成功 |
+| 刷完重启 | 正常进系统（OTG 侧厂商识别回 `Xiaomi`） |
+| 对比组：官方 `resparse` 出的 2 个分片 | 也刷成功并正常开机，证明传输层本身没问题 |
+
+---
+# Easy-platform-tools-GUI v3.49.0 — OTG 直连 fastboot 修好了（双端）
+
+「一台手机 OTG 连另一台 fastboot 手机，读不到东西」这个问题做完真机排查，是三个独立问题叠在一起。
+
+## 1. bootloader 不认 FASTBOOT 前缀（主因）
+
+实测 MIX 2S：标准帧 `FASTBOOTgetvar:product` 被回 `FAILunknown command`，
+去掉前缀的裸帧 `getvar:product` 才回 `OKAYpolaris`。它的回包还是 `OKAY<值>` 格式，
+不是标准的 `INFO...` + `OKAY`。
+
+- 新增自动探测：标准帧被回 unknown command 时，自动换裸帧重发一次，成功后记住这个模式
+- `command()` 兼容 `OKAY<值>`（把数据塞在 OKAY 后面）这种固件
+- `getvar` 以前返回状态字 `OKAY`，界面上显示成 `product: OKAY`；现在返回真实值
+
+## 2. 只认 0xFF/0x42/0x03 一种 descriptor
+
+- 改成三轮匹配：标准 fastboot 接口 → 任意厂商自定义接口 → 任意带 bulk 进/出端点的接口
+- 第三轮会跳过存储(0x08)/音频(0x01)/HID(0x03)/打印机(0x07)/集线器(0x09)/视频(0x0E)，插着 U 盘也不会误开
+- 日志写明是按哪一轮命中的
+
+## 3. 失败时没有任何可查信息
+
+- 新增「USB 诊断」：列出每个 USB 设备的 VID:PID、接口 class、端点、授权状态；一个都没认到时直接给 4 条物理层排查建议
+- 新增「协议自测」：一键试 4 种帧格式（标准 / 裸帧 / 512 补齐 / 大写），结果进日志
+- 增加 USB 插入/拔出广播，插拔实时可见
+- 只扫一次 → 扫 6 次（每次间隔 400ms），对方枚举慢一点也能认到
+
+## 真机排查结论
+
+- 两台手机 C-to-C 直连：`num_connects` 一次都不涨，`/sys/bus/usb/devices/` 始终只有根 hub。
+  两边 CC 都放 Rp，协商不出合同，物理上就不可能，不是 App 的问题
+- 换 OTG 转接头 + A-to-C 数据线：U 盘、MIX 2S 都能正常枚举
+- MIX 2S 的 bootloader USB 会卡死，插上完全没反应，**重新进一次 fastboot 才好**
+- OTG 下读分区表成功，得到 88 个分区；product/serialno/secure 与官方 fastboot 逐字一致
+
+---# Easy-platform-tools-GUI v3.48.0 — 新手向导 + 设置页收尾
 
 - **首次使用向导**：三页说明（三种使用模式 / 界面样式 / 遥控 PC 怎么连），液态玻璃面板，底部页码点
   - 看完写 `onboarded=true`，之后不再自动弹

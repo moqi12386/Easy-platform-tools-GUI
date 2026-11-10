@@ -40,6 +40,35 @@ public class RomFlasher {
         return p;
     }
 
+    /** 从 flash_all 脚本里取出它要求的机型（`getvar product ... grep "product: *polaris"`） */
+    public static String expectedProduct(String text) {
+        if (text == null) { return ""; }
+        for (String line : text.split("\n")) {
+            String low = line.toLowerCase(Locale.US);
+            if (!low.contains("getvar") || !low.contains("product")) { continue; }
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("product:\\s*\\*?([A-Za-z0-9_\\-]+)")
+                    .matcher(line);
+            if (m.find()) { return m.group(1); }
+        }
+        return "";
+    }
+
+    /** 从一行 token 里找出镜像文件名：像路径的、带后缀的那个（.sh 里是 `dirname $0`/images/xbl.img 这种） */
+    private static String findFile(String[] toks) {
+        for (int i = toks.length - 1; i >= 0; i--) {
+            String t = toks[i];
+            if (t == null) { continue; }
+            String b = base(t);
+            String l = b.toLowerCase(Locale.US);
+            if (l.endsWith(".img") || l.endsWith(".bin") || l.endsWith(".elf") || l.endsWith(".mbn")) {
+                return l;
+            }
+        }
+        // 兜底：最后一个参数
+        return toks.length > 0 ? base(toks[toks.length - 1]).toLowerCase(Locale.US) : "";
+    }
+
     public static List<Step> fromScript(String text) {
         List<Step> steps = new ArrayList<Step>();
         if (text == null) { return steps; }
@@ -66,7 +95,8 @@ public class RomFlasher {
                     i++;                          // 跳过参数值
                     continue;
                 }
-                if (tk.startsWith("-") || tk.startsWith("%")) { continue; }
+                // $* / $1 / %* 是各平台脚本里转发参数的占位符，不是命令
+                if (tk.startsWith("-") || tk.startsWith("%") || tk.startsWith("$")) { continue; }
                 tokens.add(tk);
             }
             if (wipe) {
@@ -78,13 +108,19 @@ public class RomFlasher {
             if (tokens.isEmpty()) { continue; }
 
             String cmd = tokens.get(0).toLowerCase(Locale.US);
+            // 预检行（getvar product / getvar anti）不执行，由 App 自己在连接时校验
+            if (cmd.equals("getvar") || cmd.equals("devices") || cmd.equals("version")) { continue; }
             Step st = new Step();
             st.raw = "fastboot " + rest;
-            if (cmd.equals("flash") && tokens.size() >= 3) {
+            if (cmd.equals("flash") && tokens.size() >= 2) {
                 st.kind = "flash";
                 st.part = tokens.get(1);
-                st.file = base(tokens.get(2)).toLowerCase(Locale.US);
+                st.file = findFile(rawTokens);
             } else if (cmd.equals("erase") && tokens.size() >= 2) {
+                st.kind = "erase";
+                st.part = tokens.get(1);
+            } else if (cmd.equals("format") && tokens.size() >= 2) {
+                // fastboot format userdata：本质就是清掉这个分区
                 st.kind = "erase";
                 st.part = tokens.get(1);
             } else if (cmd.equals("reboot")) {

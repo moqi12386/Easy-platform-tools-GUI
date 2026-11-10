@@ -159,6 +159,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     // ---------- 线刷 / 备份 ----------
     private var romSteps by mutableStateOf<List<RomFlasher.Step>>(emptyList())
     private var showRom by mutableStateOf(false)
+    private var romScripts by mutableStateOf<List<Pair<String, Uri>>>(emptyList())
+    private var showRomScript by mutableStateOf(false)
+    private var romProduct = ""
+    private var showBigLog by mutableStateOf(false)
+    private val logWriter = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var romFiles: Map<String, Uri> = emptyMap()
     private var pendingDest = ""
     private var eraseTarget by mutableStateOf<String?>(null)
@@ -374,7 +379,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         showOnboarding = !sp.getBoolean("onboarded", false)
 
         androidx.core.content.ContextCompat.registerReceiver(
-            this, usbReceiver, IntentFilter(ACTION_PERM),
+            this, usbReceiver,
+            IntentFilter(ACTION_PERM).apply {
+                addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+                addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+            },
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
         append("Easy-platform-tools-GUI · Compose", Accent)
@@ -691,8 +700,18 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             LogColor, TextSecondary -> LogText
             else -> color
         }
+        val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+        // 同时落盘：App 一重启内存日志就没了，刷机失败没法复盘。
+        // 用单线程写，保证顺序，也不卡 UI（getvar:all 一次有几百行）
+        logWriter.execute {
+            runCatching {
+                val f = File(filesDir, "logs/run.log")
+                if (f.length() > 2 * 1024 * 1024) { f.writeText("") }
+                f.parentFile?.mkdirs()
+                f.appendText("[$ts] $text\n")
+            }
+        }
         ui.post {
-            val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
             logs.add(LogLine("[$ts] $text", c))
             while (logs.size > 300) logs.removeAt(0)
         }
@@ -726,10 +745,21 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
+            if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+                val d = usbExtra(intent)
+                append(t("USB 插入：${d?.deviceName ?: "?"}", "USB attached: ${d?.deviceName ?: "?"}"), TextSecondary)
+                if (d != null) {
+                    append("  VID:PID ${Integer.toHexString(d.vendorId)}:${Integer.toHexString(d.productId)}", TextSecondary)
+                }
+                return
+            }
+            if (intent.action == UsbManager.ACTION_USB_DEVICE_DETACHED) {
+                connected = false
+                append(t("USB 已拔出（${usbExtra(intent)?.deviceName ?: "?"}）", "USB detached"), ErrColor)
+                return
+            }
             if (intent.action != ACTION_PERM) return
-            val d = if (Build.VERSION.SDK_INT >= 33)
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            else @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            val d = usbExtra(intent)
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
             if (granted && d != null) {
                 pendingDevice = d
@@ -737,6 +767,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     val ok = fb.open(this@MainActivity, d)
                     connected = ok
                     if (ok) append(t("已连接：${fb.deviceName()}", "Connected: ${fb.deviceName()}"), OkColor)
+                    else append(t("打开 USB 失败", "Failed to open USB"), ErrColor)
                 }
             } else {
                 append(t("USB 权限被拒绝", "USB permission denied"), ErrColor)
@@ -744,26 +775,48 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
     }
 
+    private fun usbExtra(intent: Intent): UsbDevice? =
+        if (Build.VERSION.SDK_INT >= 33)
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+
+    /** 「USB 诊断」：把系统里所有 USB 设备、接口、端点、权限全打进日志 */
+    fun usbDiag() {
+        val um = getSystemService(Context.USB_SERVICE) as UsbManager
+        FastbootUsb.dump(um, FastbootUsb.Logger { append(it, TextSecondary) })
+    }
+
     fun connectUsb() {
         val um = getSystemService(Context.USB_SERVICE) as UsbManager
-        val d = FastbootUsb.findFastbootDevice(um)
-        if (d == null) {
-            append(
-                t("没找到 fastboot 设备：检查 OTG 线和对方是否在 fastboot 界面",
-                    "No fastboot device: check the OTG cable and that the target is in fastboot"),
-                ErrColor
-            )
-            return
-        }
-        if (!um.hasPermission(d)) {
-            var flags = PendingIntent.FLAG_UPDATE_CURRENT
-            if (Build.VERSION.SDK_INT >= 23) flags = flags or PendingIntent.FLAG_IMMUTABLE
-            val pi = PendingIntent.getBroadcast(this, 0, Intent(ACTION_PERM), flags)
-            um.requestPermission(d, pi)
-            append(t("等待 USB 授权…", "Waiting for USB permission…"), TextSecondary)
-            return
-        }
         bg {
+            // 刚插上时枚举要一两秒，以前只查一次就判定「没找到」
+            var d: UsbDevice? = null
+            for (i in 0 until 6) {
+                d = FastbootUsb.findFastbootDevice(um, FastbootUsb.Logger { append(it, TextSecondary) })
+                if (d != null) break
+                if (i == 0) append(t("扫描 USB 设备…", "Scanning USB…"), TextSecondary)
+                try { Thread.sleep(400) } catch (_: InterruptedException) { }
+            }
+            if (d == null) {
+                append(
+                    t("没找到 fastboot 设备：检查 OTG 线和对方是否在 fastboot 界面",
+                        "No fastboot device: check the OTG cable and that the target is in fastboot"),
+                    ErrColor
+                )
+                usbDiag()
+                return@bg
+            }
+            if (!um.hasPermission(d)) {
+                val dev = d
+                append(t("等待 USB 授权…", "Waiting for USB permission…"), TextSecondary)
+                ui.post {
+                    var flags = PendingIntent.FLAG_UPDATE_CURRENT
+                    if (Build.VERSION.SDK_INT >= 23) flags = flags or PendingIntent.FLAG_IMMUTABLE
+                    val pi = PendingIntent.getBroadcast(this, 0, Intent(ACTION_PERM), flags)
+                    um.requestPermission(dev, pi)
+                }
+                return@bg
+            }
             val ok = fb.open(this, d)
             connected = ok
             if (ok) append(t("已连接：${fb.deviceName()}", "Connected: ${fb.deviceName()}"), OkColor)
@@ -773,10 +826,16 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     fun otgInfo() = bg {
         if (!fb.isOpen()) { append(t("请先连接设备", "Connect a device first"), ErrColor); return@bg }
-        append("product: ${fb.getvar("product")}")
-        append("version: ${fb.getvar("version")}")
-        append("serialno: ${fb.getvar("serialno")}")
-        append("secure: ${fb.getvar("secure")}")
+        for (k in listOf("product", "version", "serialno", "secure")) {
+            val v = fb.getvar(k)
+            // 有的 bootloader 本来就没有某个变量，别把 "FAIL:..." 原样甩给用户
+            if (v.startsWith("FAIL")) append("$k: ${t("（不支持）", "(unsupported)")}", TextSecondary)
+            else append("$k: $v")
+        }
+        val maxDl = fb.maxDownloadSize()
+        append(
+            "max-download-size: " + if (maxDl > 0) "${maxDl / 1048576} MB" else t("（未知）", "(unknown)")
+        )
     }
 
     fun otgParts() = bg {
@@ -787,6 +846,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         parts = list.map { it[0] to (if (it.size > 1) it[1] else "") }
         showParts = true
         append(t("共 ${list.size} 个分区", "${list.size} partitions"), OkColor)
+    }
+
+    fun otgProtoTest() = bg {
+        if (!fb.isOpen()) { append(t("请先连接设备", "Connect a device first"), ErrColor); return@bg }
+        for (line in fb.protoTest().split("\n")) if (line.isNotBlank()) append(line, TextSecondary)
     }
 
     fun otgReboot(target: String) = bg {
@@ -853,23 +917,72 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         files.forEach { f ->
             f.name?.lowercase(Locale.US)?.let { byName[it] = f.uri }
         }
-        val script = files.firstOrNull {
+        // MIUI 线刷包的镜像都在 images/ 子目录里，只扫顶层会全部报「缺文件」
+        var subCount = 0
+        doc.listFiles().filter { it.isDirectory }.forEach { dir ->
+            dir.listFiles().filter { it.isFile && it.name != null }.forEach { f ->
+                f.name?.lowercase(Locale.US)?.let {
+                    byName[it] = f.uri
+                    subCount++
+                }
+            }
+        }
+        if (subCount > 0) {
+            append(t("子目录里找到 $subCount 个镜像", "$subCount images found in subfolders"), TextSecondary)
+        }
+        // MIUI 线刷包一般同时带 flash_all.sh / flash_all.bat / flash_all_except_storage.sh，
+        // 后者是「保数据」。以前只取第一个命中的，可能正好是清数据那个。
+        val scripts = files.filter {
             it.name?.lowercase(Locale.US)?.startsWith("flash_all") == true
         }
-        val steps: List<RomFlasher.Step>
-        if (script != null) {
-            val txt = try {
-                contentResolver.openInputStream(script.uri)?.bufferedReader()?.use { it.readText() } ?: ""
-            } catch (e: Exception) { "" }
-            append(t("使用脚本 ${script.name}", "Using script ${script.name}"), Accent)
-            steps = RomFlasher.fromScript(txt)
-        } else {
-            append(t("没有 flash_all 脚本，按文件名自动生成", "No flash_all script, generating from file names"), TextSecondary)
-            steps = RomFlasher.fromImages(files.mapNotNull { it.name })
+        when {
+            scripts.isEmpty() -> {
+                append(t("没有 flash_all 脚本，按文件名自动生成", "No flash_all script, generating from file names"), TextSecondary)
+                finishRom(byName, RomFlasher.fromImages(files.mapNotNull { it.name }))
+            }
+            scripts.size == 1 -> loadRomScript(scripts[0].uri, scripts[0].name ?: "flash_all", byName)
+            else -> {
+                romFiles = byName
+                romScripts = scripts.map { (it.name ?: "flash_all") to it.uri }
+                showRomScript = true
+                append(
+                    t("发现 ${scripts.size} 个刷机脚本，请选择用哪个", "${scripts.size} flash scripts found, pick one"),
+                    TextSecondary
+                )
+            }
         }
+    }
+
+    /** 选定脚本后解析成步骤 */
+    private fun loadRomScript(uri: Uri, name: String, byName: HashMap<String, Uri>) = bg {
+        val txt = try {
+            contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+        } catch (e: Exception) { "" }
+        append(t("使用脚本 $name", "Using script $name"), Accent)
+        // 脚本里本来就有 "Missmatching image and device" 的机型校验，这里照着做一遍
+        val want = RomFlasher.expectedProduct(txt)
+        if (want.isNotEmpty()) {
+            romProduct = want
+            if (fb.isOpen()) {
+                val real = fb.getvar("product")
+                if (real.isNotEmpty() && !real.startsWith("FAIL") && real != want) {
+                    append(
+                        t("机型不匹配：这个包是 $want，当前设备是 $real，已中止",
+                            "Wrong package: ROM is $want but device is $real — aborted"),
+                        ErrColor
+                    )
+                    return@bg
+                }
+            }
+            append(t("机型校验通过：$want", "Product check passed: $want"), OkColor)
+        }
+        finishRom(byName, RomFlasher.fromScript(txt))
+    }
+
+    private fun finishRom(byName: HashMap<String, Uri>, steps: List<RomFlasher.Step>) {
         if (steps.isEmpty()) {
             append(t("没有可执行的步骤", "No executable steps found"), ErrColor)
-            return@bg
+            return
         }
         steps.forEach { s ->
             if (s.kind == "flash" && !byName.containsKey(s.file)) s.missing = true
@@ -878,11 +991,21 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         romSteps = steps
         showRom = true
         val miss = steps.count { it.missing }
+        val wipes = steps.count { it.kind == "wipe" || (it.kind == "erase" && it.part == "userdata") }
         append(
-            t("共 ${steps.size} 步${if (miss > 0) "，$miss 步缺文件" else ""}",
-                "${steps.size} steps${if (miss > 0) ", $miss missing" else ""}"),
+            t(
+                "共 ${steps.size} 步${if (miss > 0) "，$miss 步缺文件" else ""}${if (wipes > 0) "，会清空数据" else "，保数据"}",
+                "${steps.size} steps${if (miss > 0) ", $miss missing" else ""}"
+            ),
             if (miss > 0) ErrColor else OkColor
         )
+    }
+
+    private fun pickRomScript(i: Int) {
+        if (i !in romScripts.indices) return
+        val (name, uri) = romScripts[i]
+        showRomScript = false
+        loadRomScript(uri, name, HashMap(romFiles))
     }
 
     /** root 模式：拷到 cache 再用 su dd 写分区 */
@@ -970,33 +1093,47 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
         val byName = HashMap<String, Uri>()
         files.forEach { f -> byName[f.name.lowercase(Locale.US)] = Uri.fromFile(f) }
-        val script = files.firstOrNull { it.name.lowercase(Locale.US).startsWith("flash_all") }
-        val steps = if (script != null) {
-            append(t("使用脚本 ${script.name}", "Using script ${script.name}"), Accent)
-            RomFlasher.fromScript(script.readText())
-        } else {
-            append(t("没有 flash_all 脚本，按镜像名推断", "No flash_all script, inferring from names"), TextSecondary)
-            RomFlasher.fromImages(files.map { it.name })
+        val scripts = files.filter { it.name.lowercase(Locale.US).startsWith("flash_all") }
+        when {
+            scripts.isEmpty() -> {
+                append(t("没有 flash_all 脚本，按镜像名推断", "No flash_all script, inferring from names"), TextSecondary)
+                finishRom(byName, RomFlasher.fromImages(files.map { it.name }))
+            }
+            scripts.size == 1 -> {
+                append(t("使用脚本 ${scripts[0].name}", "Using script ${scripts[0].name}"), Accent)
+                finishRom(byName, RomFlasher.fromScript(scripts[0].readText()))
+            }
+            else -> {
+                romFiles = byName
+                romScripts = scripts.map { it.name to Uri.fromFile(it) }
+                showRomScript = true
+                append(
+                    t("发现 ${scripts.size} 个刷机脚本，请选择用哪个", "${scripts.size} flash scripts found, pick one"),
+                    TextSecondary
+                )
+            }
         }
-        if (steps.isEmpty()) {
-            append(t("没有可刷写的步骤", "Nothing to flash"), ErrColor)
-            return@bg
-        }
-        romFiles = byName
-        romSteps = steps
-        showRom = true
-        append(t("已解析 ${steps.size} 步", "Parsed ${steps.size} steps"), OkColor)
     }
 
     private fun runRom() = bg {
         if (!fb.isOpen()) { append(t("请先连接设备", "Connect a device first"), ErrColor); return@bg }
         showRom = false
+        // 最后一道保险：真开刷之前再核一次机型
+        if (romProduct.isNotEmpty()) {
+            val real = fb.getvar("product")
+            if (real.isNotEmpty() && !real.startsWith("FAIL") && real != romProduct) {
+                append(
+                    t("机型不匹配：包是 $romProduct，设备是 $real，已中止（什么都没刷）",
+                        "Wrong package: ROM is $romProduct, device is $real — aborted, nothing flashed"),
+                    ErrColor
+                )
+                return@bg
+            }
+        }
         val steps = romSteps
         var okCount = 0
         var failCount = 0
-        for ((i, s) in steps.withIndex()) {
-            append("[${i + 1}/${steps.size}] ${s.raw}", Accent)
-            val ok = when (s.kind) {
+        fun runStep(s: RomFlasher.Step): Boolean = when (s.kind) {
                 "flash" -> if (s.missing) {
                     append(t("  缺少文件：${s.file}", "  missing file: ${s.file}"), ErrColor)
                     false
@@ -1006,22 +1143,43 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         append(t("  找不到：${s.file}", "  not found: ${s.file}"), ErrColor)
                         false
                     } else {
-                        val f = File(cacheDir, "rom.img")
-                        try {
-                            contentResolver.openInputStream(uri)?.use { input ->
-                                f.outputStream().use { out -> input.copyTo(out) }
-                            }
-                        } catch (e: Exception) {
-                            append("  ${e.message}", ErrColor)
-                        }
-                        append("  ${s.file} · ${f.length() / 1048576.0} MB", TextSecondary)
-                        val r = fb.flashFile(s.part, f, FastbootUsb.Progress { done, total ->
+                        // 直接从 URI 流式上传，不再整份拷进 cache（system.img 有 1.3 GB）
+                        val len = try {
+                            contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+                        } catch (e: Exception) { -1L }
+                        val progress = FastbootUsb.Progress { done, total ->
                             if (total > 0 && done % (total / 10 + 1) < 65536) {
                                 append("  ${done * 100 / total}%", TextSecondary)
                             }
-                        })
-                        f.delete()
-                        r
+                        }
+                        if (len > 0) {
+                            append("  ${s.file} · ${String.format(Locale.US, "%.1f", len / 1048576.0)} MB", TextSecondary)
+                            val r = try {
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    fb.flashStream(s.part, input, len, progress)
+                                } ?: run {
+                                    append(t("  打不开文件：${s.file}", "  cannot open: ${s.file}"), ErrColor)
+                                    false
+                                }
+                            } catch (e: Exception) {
+                                append("  ${e.message}", ErrColor)
+                                false
+                            }
+                            r
+                        } else {
+                            val f = File(cacheDir, "rom.img")
+                            try {
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    f.outputStream().use { out -> input.copyTo(out) }
+                                }
+                            } catch (e: Exception) {
+                                append("  ${e.message}", ErrColor)
+                            }
+                            append("  ${s.file} · ${f.length() / 1048576.0} MB", TextSecondary)
+                            val r = fb.flashFile(s.part, f, progress)
+                            f.delete()
+                            r
+                        }
                     }
                 }
                 "erase" -> fb.erase(s.part)
@@ -1033,6 +1191,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 "oem" -> fb.oem(s.arg)
                 "wipe" -> fb.erase("userdata") and fb.erase("metadata")
                 else -> fb.command(s.raw.removePrefix("fastboot ")).startsWith("OKAY")
+        }
+        for ((i, s) in steps.withIndex()) {
+            append("[${i + 1}/${steps.size}] ${s.raw}", Accent)
+            var ok = runStep(s)
+            if (!ok && s.kind != "reboot") {
+                // 大镜像传完后设备端点经常卡死，重连一次能救回来
+                append(t("  失败，重连后重试一次", "  failed, reconnecting and retrying"), TextSecondary)
+                if (fb.reopen()) ok = runStep(s)
             }
             if (ok) {
                 okCount++
@@ -1696,6 +1862,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         crashBannerVisible = safeRender && !crashBannerClosed,
                                         onDismissCrashBanner = { crashBannerClosed = true },
                                         onConnect = { connectUsb() },
+                                        onUsbDiag = { usbDiag() },
+                                        onProtoTest = { otgProtoTest() },
+                                        onBigLog = { showBigLog = true },
                                         onInfo = { otgInfo() },
                                         onParts = { if (mode == 1) localParts() else otgParts() },
                                         onFlash = { pickImage.launch(arrayOf("*/*")) },
@@ -1974,8 +2143,32 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 toast(t("默认分区：$p", "Default partition: $p"))
                             }, onClose = { showParts = false })
                         }
+                        if (showRomScript) {
+                            LiquidChoiceDialog(
+                                backdrop = wallBackdrop,
+                                title = tr(lang, "选择刷机脚本", "Pick flash script"),
+                                options = romScripts.map { (n, _) ->
+                                    if (n.lowercase(Locale.US).contains("except_storage"))
+                                        tr(lang, "$n（保数据）", "$n (keep data)")
+                                    else if (n.lowercase(Locale.US).endsWith(".sh") || n.lowercase(Locale.US).endsWith(".bat"))
+                                        tr(lang, "$n（会清数据）", "$n (wipes data)")
+                                    else n
+                                },
+                                selected = -1,
+                                onPick = { i -> pickRomScript(i) },
+                                onDismiss = { showRomScript = false }
+                            )
+                        }
                         if (showRom) {
                             RomDialog(style, lang, romSteps, onStart = { runRom() }, onDismiss = { showRom = false })
+                        }
+                        if (showBigLog) {
+                            BigLogOverlay(
+                                logs = logs,
+                                lang = lang,
+                                onClose = { showBigLog = false },
+                                onClear = { clearLog() }
+                            )
                         }
                         if (showLogColors) {
                     LogColorDialog(
@@ -2563,6 +2756,79 @@ fun ConfirmDialog(
 }
 
 @Composable
+private fun BigLogOverlay(
+    logs: List<LogLine>,
+    lang: Lang,
+    onClose: () -> Unit,
+    onClear: () -> Unit
+) {
+    val text = LocalCardText.current
+    val style = LocalStyle.current
+    val shape = RoundedCornerShape(28.dp)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(logs.size) {
+        if (logs.isEmpty()) return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { listState.scrollToItem(logs.lastIndex) }
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.45f))
+            .clickable { onClose() }
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(12.dp)
+                .clip(shape)
+                .background(
+                    if (Palette.dark) Color(0xFF14161B).copy(alpha = 0.97f)
+                    else Color(0xFFFAFBFD).copy(alpha = 0.97f)
+                )
+                .clickable { }
+                .padding(14.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(tr(lang, "日志", "Log"), color = text, fontSize = 18.sp)
+                Spacer(Modifier.width(8.dp))
+                Text("(${logs.size})", color = text.copy(alpha = 0.45f), fontSize = 12.sp)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    tr(lang, "清空", "Clear"),
+                    color = LocalAccent.current, fontSize = 14.sp,
+                    modifier = Modifier.clickable { onClear() }
+                )
+                Spacer(Modifier.width(18.dp))
+                Text(
+                    tr(lang, "关闭", "Close"),
+                    color = LocalAccent.current, fontSize = 14.sp,
+                    modifier = Modifier.clickable { onClose() }
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            val inset = if (style == UiStyle.Glass) {
+                glassInsetSurface(RoundedCornerShape(16.dp))
+            } else {
+                Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().then(inset).padding(12.dp)
+            ) {
+                items(logs) { l ->
+                    Text(l.text, color = l.color, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun RomDialog(
     style: UiStyle,
     lang: Lang,
@@ -2661,6 +2927,9 @@ fun HomePage(
     crashBannerVisible: Boolean,
     onDismissCrashBanner: () -> Unit,
     onConnect: () -> Unit,
+    onUsbDiag: () -> Unit,
+    onProtoTest: () -> Unit,
+    onBigLog: () -> Unit,
     onInfo: () -> Unit,
     onParts: () -> Unit,
     onFlash: () -> Unit,
@@ -2802,6 +3071,8 @@ fun HomePage(
                 }
                 Spacer(Modifier.weight(1f))
                 val clearWall = LocalWallBackdrop.current
+                // 先「清空」，再隔开一段距离放「放大」：
+                // 两个按钮贴在一起时，想放大很容易点到清空（清空是不可撤销的）
                 if (useBackdrop && clearWall != null) {
                     // 玻璃风格下「清空」是个真的液态按钮，不是一行蓝字
                     LiquidButton(
@@ -2818,6 +3089,25 @@ fun HomePage(
                         tr(lang, "清空", "Clear"),
                         color = LocalAccent.current, fontSize = 13.sp,
                         modifier = Modifier.clickable { onClear() }
+                    )
+                }
+                Spacer(Modifier.width(22.dp))
+                // 「放大」：把日志铺满整屏，刷机时能一次看到更多行（放最右边，最常用）
+                if (useBackdrop && clearWall != null) {
+                    LiquidButton(
+                        onClick = onBigLog,
+                        backdrop = clearWall,
+                        modifier = Modifier.height(48.dp),
+                        surfaceColor = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                        else Color.White.copy(alpha = 0.35f)
+                    ) {
+                        Text(tr(lang, "放大", "Expand"), color = text, fontSize = 13.sp)
+                    }
+                } else {
+                    Text(
+                        tr(lang, "放大", "Expand"),
+                        color = LocalAccent.current, fontSize = 13.sp,
+                        modifier = Modifier.clickable { onBigLog() }
                     )
                 }
             }
@@ -2860,6 +3150,12 @@ fun HomePage(
             0 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
                 KRow(Icons.Filled.PlayArrow, tr(lang, "连接设备", "Connect device"),
                     tr(lang, "USB 授权后自动打开", "auto after USB grant"), onClick = onConnect)
+                KRow(Icons.Filled.Build, tr(lang, "USB 诊断", "USB diagnosis"),
+                    tr(lang, "列出系统认到的所有 USB 设备", "list every USB device the system sees"),
+                    onClick = onUsbDiag)
+                KRow(Icons.Filled.Refresh, tr(lang, "协议自测", "Protocol self-test"),
+                    tr(lang, "试几种 fastboot 帧格式", "try several fastboot framings"),
+                    onClick = onProtoTest)
                 KRow(Icons.Filled.Info, tr(lang, "设备信息", "Device info"),
                     "product / version / serialno", onClick = onInfo)
                 KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"),
