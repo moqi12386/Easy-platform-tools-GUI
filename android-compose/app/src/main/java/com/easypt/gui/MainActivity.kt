@@ -734,6 +734,19 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     fun clearLog() { logs.clear() }
 
+    /** 刷机前尽量进「电池优化白名单」，小米系最关键的一环 */
+    private fun ensureBatteryExempt() {
+        runCatching {
+            val pm = getSystemService(android.os.PowerManager::class.java)
+            if (pm?.isIgnoringBatteryOptimizations(packageName) == true) return
+            val i = android.content.Intent(
+                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                android.net.Uri.parse("package:$packageName")
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(i)
+        }
+    }
+
     private fun bg(block: () -> Unit) {
         busy = true
         Thread {
@@ -1207,7 +1220,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 "wipe" -> fb.erase("userdata") and fb.erase("metadata")
                 else -> fb.command(s.raw.removePrefix("fastboot ")).startsWith("OKAY")
         }
-        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
+        // 小米系会积极回收后台进程。刷机期间：保持屏幕常亮 + 尝试进电池白名单。
+        ui.post { runCatching { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
+        ensureBatteryExempt()        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
         updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
         for ((i, s) in steps.withIndex()) {
             updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), "${i + 1}/${steps.size} · ${s.part} · ${s.kind}", i + 1, steps.size))
@@ -1228,6 +1243,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             if (s.kind == "reboot" && ok) break
         }
         finishFlashLive(failCount == 0)
+        ui.post { runCatching { window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
         append(
             t("线刷结束：成功 $okCount · 失败 $failCount", "Flash finished: $okCount ok · $failCount failed"),
             if (failCount == 0) OkColor else ErrColor
