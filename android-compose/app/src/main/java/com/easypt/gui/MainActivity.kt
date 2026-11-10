@@ -1838,6 +1838,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ThemeMode.System -> systemDark
         }
         Palette.dark = dark
+        // Material 风格：整个 Palette 转发到 Material You 动态色（系统从壁纸取色）
+        Palette.m3 = if (style != UiStyle.Material) null
+        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
+            else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
+        } else null
         // 莫奈取色：直接分析当前壁纸位图（自定义壁纸也算），且只对 Material 风格生效
         var monetColor by remember { mutableStateOf<Color?>(null) }
         LaunchedEffect(monet, style, assets, customWallpaper) {
@@ -2441,19 +2447,26 @@ object Palette {
     // 赋值时没有任何订阅者会重组，于是底栏/按钮一直停在默认蓝，切了莫奈也不变
     var monetAccent: Color? by androidx.compose.runtime.mutableStateOf(null)
 
+    /**
+     * Material 风格专用的 Material You 配色。非 Material 时为 null。
+     * 之所以放在这里：Palette 被四种风格共用，不能只改 Material 分支，
+     * 只能让 Material 时这些 getter 转发到动态色。
+     */
+    var m3: androidx.compose.material3.ColorScheme? = null
+
     val bg: Color
-        get() = run {
+        get() = m3?.background ?: run {
             val base = if (dark) Color(0xFF101114) else Color(0xFFF2F3F5)
             monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.10f else 0.05f) } ?: base
         }
     val surface: Color
-        get() = run {
+        get() = m3?.surfaceContainer ?: run {
             val base = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
             monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.12f else 0.06f) } ?: base
         }
-    val text: Color get() = if (dark) Color(0xFFECEDEF) else Color(0xFF16181D)
-    val text2: Color get() = if (dark) Color(0xFF9A9DA5) else Color(0xFF8C9199)
-    val accent: Color get() = monetAccent ?: Color(0xFF3B82F6)
+    val text: Color get() = m3?.onSurface ?: if (dark) Color(0xFFECEDEF) else Color(0xFF16181D)
+    val text2: Color get() = m3?.onSurfaceVariant ?: if (dark) Color(0xFF9A9DA5) else Color(0xFF8C9199)
+    val accent: Color get() = m3?.primary ?: (monetAccent ?: Color(0xFF3B82F6))
     val chevron: Color get() = if (dark) Color(0xFF5C6068) else Color(0xFFC2C6CC)
     val inset: Color get() = if (dark) Color(0xFF121316) else Color(0xFFF5F6F8)
     val chip: Color get() = if (dark) Color(0xFF2A2B30) else Color(0xFFF2F3F5)
@@ -4175,6 +4188,10 @@ fun GlassDialogPanel(
                     .align(Alignment.Center)
                     .padding(40.dp)
                     .fillMaxWidth()
+                    // 内容长的时候要能滚：日志颜色那块色板以前没有滚动，
+                    // 液态玻璃下底部的取消/完成根本滑不到
+                    .heightIn(max = 640.dp)
+                    .verticalScroll(rememberScrollState())
                     .then(
                         if (useBackdrop && backdrop != null) {
                             Modifier.drawBackdrop(
@@ -4792,6 +4809,10 @@ fun LiquidChoiceDialog(
                     .align(Alignment.Center)
                     .padding(40.dp)
                     .fillMaxWidth()
+                    // 内容长的时候要能滚：日志颜色那块色板以前没有滚动，
+                    // 液态玻璃下底部的取消/完成根本滑不到
+                    .heightIn(max = 640.dp)
+                    .verticalScroll(rememberScrollState())
                     .then(
                         if (useBackdrop && backdrop != null) {
                             Modifier.drawBackdrop(
