@@ -401,6 +401,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
         mark("04-prefs")
         reloadWallpaper(sync = true)
+        android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
         mark("05-setContent")
         setContent { EasyApp() }
     }
@@ -1712,6 +1713,31 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
     // ---------------- 实况通知（Live Update，Android 16+） ----------------
+
+    /**
+     * 查这台机器认不认我们上岛。
+     * 小米的门是 content://miui.statusbar.notification.public 的 canShowFocus，
+     * 只有「uid 真正拥有该包」的调用者能问，所以必须由 App 自己来问。
+     */
+    fun focusProbe(): String {
+        return runCatching {
+            val b = android.os.Bundle().apply { putString("package", packageName) }
+            val r = contentResolver.call(
+                android.net.Uri.parse("content://miui.statusbar.notification.public"),
+                "canShowFocus", null, b
+            )
+            val can = r?.getBoolean("canShowFocus", false) ?: false
+            val proto = runCatching {
+                android.provider.Settings.System.getInt(contentResolver, "notification_focus_protocol", 0)
+            }.getOrDefault(0)
+            val island = runCatching {
+                val c = Class.forName("android.os.SystemProperties")
+                val m = c.getMethod("get", String::class.java)
+                m.invoke(null, "persist.sys.feature.island") as? String ?: "?"
+            }.getOrDefault("?")
+            "canShowFocus=$can protocol=$proto island=$island"
+        }.getOrElse { "canShowFocus 查询失败：${it.javaClass.simpleName} ${it.message}" }
+    }
 
     private val flashChannel = "easypt_flash"
     private val flashNotifyId = 4101
