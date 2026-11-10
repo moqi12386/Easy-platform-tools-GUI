@@ -1201,7 +1201,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 "wipe" -> fb.erase("userdata") and fb.erase("metadata")
                 else -> fb.command(s.raw.removePrefix("fastboot ")).startsWith("OKAY")
         }
+        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
+        updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
         for ((i, s) in steps.withIndex()) {
+            updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), "${i + 1}/${steps.size} · ${s.part} · ${s.kind}", i + 1, steps.size))
             append("[${i + 1}/${steps.size}] ${s.raw}", Accent)
             var ok = runStep(s)
             if (!ok && s.kind != "reboot") {
@@ -1218,6 +1221,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             }
             if (s.kind == "reboot" && ok) break
         }
+        finishFlashLive(failCount == 0)
         append(
             t("线刷结束：成功 $okCount · 失败 $failCount", "Flash finished: $okCount ok · $failCount failed"),
             if (failCount == 0) OkColor else ErrColor
@@ -1706,6 +1710,74 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
+    // ---------------- 实况通知（Live Update，Android 16+） ----------------
+
+    private val flashChannel = "easypt_flash"
+    private val flashNotifyId = 4101
+
+    /** 建通道 + 权限（失败就算了，不能因为通知崩掉刷机） */
+    private fun ensureFlashChannel(nm: android.app.NotificationManager) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        runCatching {
+            val ch = android.app.NotificationChannel(
+                flashChannel, t("线刷进度", "Flashing progress"),
+                android.app.NotificationManager.IMPORTANCE_LOW
+            )
+            ch.setShowBadge(false)
+            nm.createNotificationChannel(ch)
+        }
+    }
+
+    /**
+     * 线刷进度实况通知：
+     * Android 16（API 36）起用官方 Notification.ProgressStyle —— 系统会把它显示成
+     * 实况通知（HyperOS 3.0.300+ 直接进超级岛），不需要 root / Shizuku / 白名单。
+     * 低版本退化成普通常驻通知，只更新文字。
+     */
+    fun updateFlashLive(island: LiveUpdate) {
+        runCatching {
+            val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
+            ensureFlashChannel(nm)
+            val b = if (Build.VERSION.SDK_INT >= 33) {
+                android.app.Notification.Builder(this, flashChannel)
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(this)
+            }
+            b.setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(island.title)
+                .setContentText(island.text)
+                .setOngoing(!island.done)
+                .setOnlyAlertOnce(true)
+
+            if (Build.VERSION.SDK_INT >= 36) {
+                val ps = android.app.Notification.ProgressStyle()
+                    .setProgress(island.max.coerceAtLeast(1))
+                    .setProgressIndeterminate(island.max <= 0)
+                b.setStyle(ps)
+            }
+            if (island.done) b.setAutoCancel(true)
+
+            if (Build.VERSION.SDK_INT >= 33 &&
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    this, "android.permission.POST_NOTIFICATIONS"
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) return
+
+            nm.notify(flashNotifyId, b.build())
+        }
+    }
+
+    fun finishFlashLive(success: Boolean) {
+        val nm = getSystemService(android.app.NotificationManager::class.java)
+        if (nm != null) {
+            runCatching { nm.cancel(flashNotifyId) }
+        }
+        if (success) toast(t("刷写完成", "Flashing finished"))
+    }
+
+    /** 实况通知要显示的状态 */
+    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false)
     // ---------------- 检查更新 ----------------
 
     /** 本机版本名，比如 3.50.3 */
