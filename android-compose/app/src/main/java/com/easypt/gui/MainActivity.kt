@@ -4056,6 +4056,8 @@ fun SettingsPage(
                     // 这样 adb 能直接拉出来看（设置页拿不到主页日志面板）
         XmsfBypass.requestPermission()
                     XmsfBypass.dumpToFile()
+                    // 没授权实况通知就直接把用户带到通知设置页
+                    if (!XmsfBypass.canPromote(XmsfBypass.appCtx ?: return@AppRow)) XmsfBypass.openPromotedSettings()
                 }
             )
             AppSwitchRow(
