@@ -402,6 +402,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         mark("04-prefs")
         reloadWallpaper(sync = true)
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
+        updateFlashLive(LiveUpdate("线刷中", "诊断 1/1 · vendor", 1, 1))
         mark("05-setContent")
         setContent { EasyApp() }
     }
