@@ -1770,9 +1770,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             if (uri != null) backupBaseband(uri)
         }
 
-        // 主题切换时整棵树重建，避免读到半新半旧的配色
+            // 主题切换时整棵树重建，避免读到半新半旧的配色
         key(dark, monet) {
-            val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
+            // Material 风格不铺壁纸：M3 的观感是「纯色 surface + surfaceContainer 卡片」，
+            // 底下垫一张照片会把三种样式的区别抹平（这也是之前 Material 看着跟 MIUIX / 原生差不多主因）。
+            val plain = style == UiStyle.Material
+            val onWall = if (plain) Palette.text
+            else if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
             // 底栏在屏幕最下面，得用壁纸「底部」的亮度；以前用 topLum，壁纸上下亮度不一样就看不见字。
             // 再叠上底栏那层 40% 玻璃底料，算出真实底色亮度，然后按对比度挑黑字还是白字
             val veilLum = if (dark) 0.07f else 0.93f
@@ -1781,15 +1785,17 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
             val wallBackdrop = rememberLayerBackdrop()
             Box(Modifier.fillMaxSize().background(Bg)) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .then(if (useBackdrop) Modifier.layerBackdrop(wallBackdrop) else Modifier)
-                ) {
-                    WallpaperView(assets)
+                if (!plain) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .then(if (useBackdrop) Modifier.layerBackdrop(wallBackdrop) else Modifier)
+                    ) {
+                        WallpaperView(assets)
+                    }
                 }
-                if (true) {
-                    // 顶部渐变：和底栏同一套 Brush，标题仍然清晰
+                if (!plain) {
+                    // 顶部渐变：和底栏同一套 Brush，标题仍然清晰（纯色背景用不上）
                     Box(
                         Modifier
                             .fillMaxWidth()
@@ -2646,13 +2652,15 @@ fun KSwitchRow(
 
 @Composable
 fun PageTitle(text: String) {
-    // Material Design 3：标题用 M3 的 displaySmall 层级 + onSurface 色
+    // Material Design 3：标题用 M3 的 headlineMedium 层级 + onSurface 色
+    // （displaySmall 36sp 放不下 "Easy-platform-tools"，会从中间断成两行）
     if (LocalStyle.current == UiStyle.Material) {
         Text(
             text,
-            style = MaterialTheme.typography.displaySmall,
+            style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 14.dp)
+            maxLines = 1,
+            modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 14.dp)
         )
         return
     }
@@ -3191,7 +3199,16 @@ fun HomePage(
                 val clearWall = LocalWallBackdrop.current
                 // 先「清空」，再隔开一段距离放「放大」：
                 // 两个按钮贴在一起时，想放大很容易点到清空（清空是不可撤销的）
-                if (useBackdrop && clearWall != null) {
+                if (style == UiStyle.Material) {
+                    // Material 风格：直接用官方 TextButton（自带水波纹和 M3 内边距）
+                    TextButton(onClick = onClear) {
+                        Text(tr(lang, "清空", "Clear"), style = MaterialTheme.typography.labelLarge)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onBigLog) {
+                        Text(tr(lang, "放大", "Expand"), style = MaterialTheme.typography.labelLarge)
+                    }
+                } else if (useBackdrop && clearWall != null) {
                     // 玻璃风格下「清空」是个真的液态按钮，不是一行蓝字
                     LiquidButton(
                         onClick = onClear,
@@ -3209,29 +3226,36 @@ fun HomePage(
                         modifier = Modifier.clickable { onClear() }
                     )
                 }
-                Spacer(Modifier.width(22.dp))
-                // 「放大」：把日志铺满整屏，刷机时能一次看到更多行（放最右边，最常用）
-                if (useBackdrop && clearWall != null) {
-                    LiquidButton(
-                        onClick = onBigLog,
-                        backdrop = clearWall,
-                        modifier = Modifier.height(48.dp),
-                        surfaceColor = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
-                        else Color.White.copy(alpha = 0.35f)
-                    ) {
-                        Text(tr(lang, "放大", "Expand"), color = text, fontSize = 13.sp)
+                if (style != UiStyle.Material) {
+                    Spacer(Modifier.width(22.dp))
+                    // 「放大」：把日志铺满整屏，刷机时能一次看到更多行（放最右边，最常用）
+                    if (useBackdrop && clearWall != null) {
+                        LiquidButton(
+                            onClick = onBigLog,
+                            backdrop = clearWall,
+                            modifier = Modifier.height(48.dp),
+                            surfaceColor = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                            else Color.White.copy(alpha = 0.35f)
+                        ) {
+                            Text(tr(lang, "放大", "Expand"), color = text, fontSize = 13.sp)
+                        }
+                    } else {
+                        Text(
+                            tr(lang, "放大", "Expand"),
+                            color = LocalAccent.current, fontSize = 13.sp,
+                            modifier = Modifier.clickable { onBigLog() }
+                        )
                     }
-                } else {
-                    Text(
-                        tr(lang, "放大", "Expand"),
-                        color = LocalAccent.current, fontSize = 13.sp,
-                        modifier = Modifier.clickable { onBigLog() }
-                    )
                 }
             }
             // 日志输出框：和「fastboot 命令」输入框同一套底料
             val logShape = remember { RoundedCornerShape(16.dp) }
-            val logSurface = if (style == UiStyle.Glass) {
+            val logSurface = if (style == UiStyle.Material) {
+                // Material：日志区就是一块 M3 tonal surface，不用再自绘底板
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            } else if (style == UiStyle.Glass) {
                 glassInsetSurface(logShape)
             } else {
                 // 和输入框兜底底板完全一致：以前原生风格用「黑 45%」压深色卡片，
@@ -4599,6 +4623,23 @@ fun GlassField(
     numeric: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
+    // Material Design 3：直接用官方 OutlinedTextField（配色/圆角/内边距全走 M3 默认），
+    // 不再自绘那块玻璃底板
+    if (LocalStyle.current == UiStyle.Material) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            readOnly = readOnly,
+            singleLine = true,
+            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyLarge) },
+            textStyle = MaterialTheme.typography.bodyLarge,
+            shape = RoundedCornerShape(12.dp),
+            keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
+            else KeyboardOptions.Default,
+            modifier = modifier.fillMaxWidth()
+        )
+        return
+    }
     val wall = LocalWallBackdrop.current
     // 字色跟「底板」走：底板永远随主题（亮主题浅底 / 暗主题深底）。
     // 用 LocalCardText 的话，原生风格是深色卡片→恒为白字，压在浅色输入框上就看不见了。
