@@ -1760,8 +1760,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 when {
                     l == null -> {
                         // 自动检查时安静失败，免得每次启动都被网络问题刷屏
-                        if (manual) append(t("检查更新失败：${err ?: "没有拿到版本号"}",
-                            "Update check failed: ${err ?: "no version found"}"), ErrColor)
+                        if (manual) {
+                            val m = t("检查更新失败：${err ?: "没有拿到版本号"}",
+                                "Update check failed: ${err ?: "no version found"}")
+                            append(m, ErrColor)
+                            toast(m)
+                        }
                     }
                     compareVersion(l, cur) > 0 -> {
                         append(
@@ -1771,7 +1775,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         )
                         toast(t("发现新版本 $l", "New version $l"))
                     }
-                    else -> if (manual) append(t("已是最新版本 $cur", "Already up to date ($cur)"), OkColor)
+                    else -> if (manual) {
+                        val m = t("已是最新版本 $cur", "Already up to date ($cur)")
+                        append(m, OkColor)
+                        toast(m)
+                    }
                 }
             }
         }
@@ -2711,6 +2719,11 @@ fun KDialog(
     onDismiss: () -> Unit = {},
     body: @Composable ColumnScope.() -> Unit
 ) {
+    // Material：用官方 M3 对话框（BasicAlertDialog + Surface），不套自绘面板
+    if (style == UiStyle.Material) {
+        MaterialDialog(title = title, onDismiss = onDismiss, body = body)
+        return
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -4063,6 +4076,12 @@ fun GlassDialogPanel(
     val light = !Palette.dark
     val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+
+    // Material：用官方 M3 对话框
+    if (LocalStyle.current == UiStyle.Material) {
+        MaterialDialog(title = null, onDismiss = onDismiss, body = content)
+        return
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         // MIUIX：容器换成库里的 Card。只加这一个分支，所有基于 GlassDialogPanel 的弹窗
