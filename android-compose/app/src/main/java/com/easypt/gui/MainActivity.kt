@@ -3259,7 +3259,14 @@ fun HomePage(
                 Spacer(Modifier.width(8.dp))
                 // 「执行」用 demo 的液态按钮（有按下形变 + 高光 + 折射）
                 val runWall = LocalWallBackdrop.current
-                if (useBackdrop && runWall != null) {
+                if (style == UiStyle.Miuix) {
+                    // MIUIX：官方 Button（主色按钮，见 docs/components/button.md）
+                    top.yukonga.miuix.kmp.basic.Button(
+                        onClick = { onRun(cmd); cmd = "" },
+                        colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.height(52.dp)
+                    ) { Text(tr(lang, "执行", "Run")) }
+                } else if (useBackdrop && runWall != null) {
                     LiquidButton(
                         onClick = { onRun(cmd); cmd = "" },
                         backdrop = runWall,
@@ -3305,6 +3312,17 @@ fun HomePage(
                     TextButton(onClick = onBigLog) {
                         Text(tr(lang, "放大", "Expand"), style = MaterialTheme.typography.labelLarge)
                     }
+                } else if (style == UiStyle.Miuix) {
+                    // MIUIX：官方 TextButton（docs/components/button.md）
+                    top.yukonga.miuix.kmp.basic.TextButton(
+                        text = tr(lang, "清空", "Clear"),
+                        onClick = onClear
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    top.yukonga.miuix.kmp.basic.TextButton(
+                        text = tr(lang, "放大", "Expand"),
+                        onClick = onBigLog
+                    )
                 } else if (useBackdrop && clearWall != null) {
                     // 玻璃风格下「清空」是个真的液态按钮，不是一行蓝字
                     LiquidButton(
@@ -3323,7 +3341,7 @@ fun HomePage(
                         modifier = Modifier.clickable { onClear() }
                     )
                 }
-                if (style != UiStyle.Material) {
+                if (style != UiStyle.Material && style != UiStyle.Miuix) {
                     Spacer(Modifier.width(22.dp))
                     // 「放大」：把日志铺满整屏，刷机时能一次看到更多行（放最右边，最常用）
                     if (useBackdrop && clearWall != null) {
@@ -4539,6 +4557,79 @@ private fun SliderRow(
  * 选择弹窗：结构照抄 demo 的 DialogContent ——
  * 压暗 + 48dp 玻璃面板 + colorControls/blur/lens(depthEffect) + Highlight.Plain + 胶囊按钮
  */
+/** MIUIX 版选择弹窗：容器是库里的 Card，行是 BasicComponent，取消是官方 TextButton */
+@Composable
+fun MiuixChoiceDialog(
+    title: String,
+    options: List<String>,
+    selected: Int,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    deletable: Set<Int> = emptySet(),
+    onDelete: ((Int) -> Unit)? = null
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
+            Box(Modifier.fillMaxSize()) {
+                // 点空白处关闭
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onDismiss() }
+                )
+                Column(
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(40.dp)
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                        Column(Modifier.padding(vertical = 8.dp)) {
+                            Text(
+                                title,
+                                color = MiuixTheme.colorScheme.onBackground,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)
+                            )
+                            options.forEachIndexed { i, name ->
+                                BasicComponent(
+                                    title = name,
+                                    onClick = { onPick(i) },
+                                    endActions = if (i == selected) {
+                                        {
+                                            Icon(
+                                                Icons.Filled.Check, contentDescription = null,
+                                                tint = MiuixTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    } else null
+                                )
+                            }
+                            top.yukonga.miuix.kmp.basic.TextButton(
+                                text = "取消",
+                                onClick = onDismiss,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun LiquidChoiceDialog(
     backdrop: Backdrop?,
@@ -4555,6 +4646,15 @@ fun LiquidChoiceDialog(
     val contentColor = if (light) Color.Black else Color.White
     val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+
+    // MIUIX：容器用库里的 Card，行用 BasicComponent，取消用官方 TextButton。
+    // 窗口仍用 Compose 的 Dialog —— miuix 的 WindowDialog 需要
+    // LocalNavigationEventDispatcherOwner（本工程没提供，会崩），
+    // OverlayDialog 又必须放在根级 Box 才能盖满屏，嵌在页面里画不出来。
+    if (LocalStyle.current == UiStyle.Miuix) {
+        MiuixChoiceDialog(title, options, selected, onPick, onDismiss, deletable, onDelete)
+        return
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
