@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.Shadow
@@ -1751,10 +1752,26 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 .setOnlyAlertOnce(true)
 
             if (Build.VERSION.SDK_INT >= 36) {
+                // 跟「日志文字颜色」同步：进度条用命令色，完成/失败用成功/失败色
+                val seg = when {
+                    island.failed -> ErrText
+                    island.done -> OkText
+                    else -> CmdColor
+                }.toArgb()
                 val ps = android.app.Notification.ProgressStyle()
                     .setProgress(island.max.coerceAtLeast(1))
                     .setProgressIndeterminate(island.max <= 0)
+                runCatching {
+                    ps.setProgressSegments(
+                        listOf(
+                            android.app.Notification.ProgressStyle
+                                .Segment(island.step.coerceIn(1, island.max.coerceAtLeast(1)))
+                                .setColor(seg)
+                        )
+                    )
+                }
                 b.setStyle(ps)
+                b.setColor(seg)
             }
             if (island.done) b.setAutoCancel(true)
 
@@ -1777,7 +1794,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     /** 实况通知要显示的状态 */
-    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false)
+    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false, val failed: Boolean = false)
     // ---------------- 检查更新 ----------------
 
     /** 本机版本名，比如 3.50.3 */
