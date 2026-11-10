@@ -4333,7 +4333,23 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
         ) {
             val bd = LocalWallBackdrop.current
             val last = page == pages.lastIndex
-            if (useBackdrop && bd != null) {
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "先不看", "Later"),
+                    onClick = { onDone() },
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = { if (last) onDone() else page++ },
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        if (last) tr(lang, "开始使用", "Get started") else tr(lang, "下一步", "Next"),
+                        color = Color.White
+                    )
+                }
+            } else if (useBackdrop && bd != null) {
                 LiquidButton(
                     onClick = { if (last) onDone() else onDone() },
                     backdrop = bd,
@@ -4409,7 +4425,18 @@ fun GlassConfirmDialog(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val bd = LocalWallBackdrop.current
-            if (useBackdrop && bd != null) {
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onConfirm,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(confirmText, color = Color.White) }
+            } else if (useBackdrop && bd != null) {
                 LiquidButton(
                     onClick = onDismiss,
                     backdrop = bd,
@@ -4495,7 +4522,18 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (useBackdrop && backdrop != null) {
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "关闭", "Close"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onDismiss,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "好", "OK"), color = Color.White) }
+            } else if (useBackdrop && backdrop != null) {
                 // demo 的 LiquidButton
                 LiquidButton(
                     onClick = onDismiss,
@@ -5336,7 +5374,18 @@ fun LogColorDialog(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val wall = LocalWallBackdrop.current
-            if (useBackdrop && wall != null) {
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = { onSave(colors) },
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "完成", "Done"), color = Color.White) }
+            } else if (useBackdrop && wall != null) {
                 // 按钮抄 demo 的 LiquidButton
                 LiquidButton(
                     onClick = onDismiss,
