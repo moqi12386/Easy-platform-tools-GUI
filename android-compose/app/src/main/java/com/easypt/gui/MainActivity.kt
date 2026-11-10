@@ -2077,26 +2077,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
-                        // MIUIX：直接用库里的 NavigationBar / NavigationBarItem（自带分割线和 inset 处理）
-                        // 这段在页面 MiuixTheme 外面，必须自己套一层，否则深色模式下底栏还是白的
-                        MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
-                            MiuixNavigationBar(
-                                modifier = Modifier.align(Alignment.BottomCenter)
-                            ) {
-                                MiuixNavigationBarItem(
-                                    selected = page == 0,
-                                    onClick = { page = 0 },
-                                    icon = Icons.Filled.Home,
-                                    label = t("主页", "Home")
-                                )
-                                MiuixNavigationBarItem(
-                                    selected = page == 1,
-                                    onClick = { page = 1 },
-                                    icon = Icons.Filled.Settings,
-                                    label = t("设置", "Settings")
-                                )
-                            }
-                        }
+                        // MIUIX 底栏已搬到 MiuixSlots.kt（MiuixBottomBar）
+                        MiuixBottomBar(
+                            page = page,
+                            onPage = { page = it },
+                            homeLabel = t("主页", "Home"),
+                            settingsLabel = t("设置", "Settings"),
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
                     } else if (useBackdrop) {
                         // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
                         // 底栏上方的渐变淡出：内容照样能滑到底栏下面，只是越靠下越淡
