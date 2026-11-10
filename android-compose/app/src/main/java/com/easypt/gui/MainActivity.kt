@@ -1752,26 +1752,23 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 .setOnlyAlertOnce(true)
 
             if (Build.VERSION.SDK_INT >= 36) {
-                // 跟「日志文字颜色」同步：进度条用命令色，完成/失败用成功/失败色
+                // 颜色跟日志一致：进行中=命令色，完成=成功色，失败=失败色
                 val seg = when {
                     island.failed -> ErrText
                     island.done -> OkText
                     else -> CmdColor
                 }.toArgb()
+                // 不要用 setProgressSegments —— 那会把进度条画成一条细线，
+                // 普通进度用 setProgress 就够了
                 val ps = android.app.Notification.ProgressStyle()
                     .setProgress(island.max.coerceAtLeast(1))
                     .setProgressIndeterminate(island.max <= 0)
-                runCatching {
-                    ps.setProgressSegments(
-                        listOf(
-                            android.app.Notification.ProgressStyle
-                                .Segment(island.step.coerceIn(1, island.max.coerceAtLeast(1)))
-                                .setColor(seg)
-                        )
-                    )
-                }
+                if (island.step in 0..island.max) ps.setProgress(island.step)
                 b.setStyle(ps)
                 b.setColor(seg)
+                // 关键两行：告诉系统「我要当实况通知」，否则只是普通通知，不会进超级岛
+                runCatching { b.setShortCriticalText(island.text) }
+                runCatching { b.setRequestPromotedOngoing(!island.done) }
             }
             if (island.done) b.setAutoCancel(true)
 
