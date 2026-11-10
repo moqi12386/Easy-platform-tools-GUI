@@ -1448,6 +1448,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             f.isOnline -> chooseOnlineFont(f)
             else -> {
                 fontChoice = f
+                // 切到内置字体时要把「自定义字体」这个状态清掉。
+                // 否则设置页那行的显示值会走 `customFontName != null -> customFontName` 这条分支，
+                // 一直显示之前导入的那个字体名 —— 字体已经换了、名字却不动，就是这个原因。
+                customFontPath = null
+                customFont = null
                 getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
             }
         }
@@ -1570,6 +1575,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         if (total > 0) {
                             val pc = ((done * 100) / total).toInt().coerceIn(0, 100)
                             if (pc != fontProgress) ui.post { fontProgress = pc }
+                        } else {
+                            // 服务器没给 Content-Length 时 total = -1，之前这里什么都不做，
+                            // 界面上就永远停在「下载中 0%」，看着像卡死（其实在正常下）
+                            val pc = (done / 262144L).toInt().coerceIn(0, 99)
+                            if (pc != fontProgress) ui.post { fontProgress = pc }
                         }
                     }
                 }
@@ -1649,6 +1659,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             runOnUiThread {
                 onlineFamilies[def.app.name] = fam
                 fontChoice = def.app
+                // 下载成功后同样要清掉自定义字体状态，否则显示值仍然停在旧字体名上
+                customFontPath = null
+                customFont = null
                 fontProgress = -1
                 fontTargetKey = ""
                 getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", fontChoice.ordinal).apply()
@@ -1674,6 +1687,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         val fam = onlineFamilies[f.name]
         if (fam != null) {
             fontChoice = f
+            // 同上：不清理的话设置页那行会一直显示旧的字体名
+            customFontPath = null
+            customFont = null
             getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("font", f.ordinal).apply()
             append(t("已切换字体：${def.label}", "Font switched: ${def.label}"), OkColor)
         } else {
