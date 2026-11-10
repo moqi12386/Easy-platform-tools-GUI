@@ -1,3 +1,9 @@
+# Easy-platform-tools-GUI v3.50.3 (Android)
+
+- **Material 风格底栏在深色模式下是浅色的** —— 那段底栏写在页面 `MaterialTheme` 外面，拿到的是 M3 默认浅色主题。现在给它单独套一层，`surfaceContainer` 跟卡片同色，选中药丸和图标跟着主色走
+- 重出 `docs/styles.png`（原来 Material 那一格是修复前的浅色底栏）
+
+---
 # Easy-platform-tools-GUI v3.50.1
 
 - 线刷「开始刷写」、日志放大「清空 / 关闭」、读分区表「关闭」、擦除确认、崩溃日志「关闭」——都换成液态玻璃按钮（非玻璃样式仍用原来的 Material 按钮）

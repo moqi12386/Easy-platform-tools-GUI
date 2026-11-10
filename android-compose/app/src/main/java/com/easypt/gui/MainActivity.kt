@@ -1826,6 +1826,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     darkColorScheme(
                                         primary = LocalAccent.current,
                                         surface = Surface,
+                                        surfaceContainer = Surface,
                                         onSurface = TextPrimary,
                                         background = Bg,
                                         onBackground = TextPrimary
@@ -1835,6 +1836,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         primary = LocalAccent.current,
                                         onPrimary = Color.White,
                                         surface = Surface,
+                                        surfaceContainer = Surface,
                                         onSurface = TextPrimary,
                                         background = Bg,
                                         onBackground = TextPrimary
@@ -1992,25 +1994,61 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     // Material Design 3：底部导航直接用 M3 的 NavigationBar + NavigationBarItem
                     if (style == UiStyle.Material) {
-                        NavigationBar(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .navigationBarsPadding(),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            tonalElevation = 3.dp
+                        // 这段在页面的 MaterialTheme 外面，不自己套一层的话拿到的是 M3 默认【浅色】主题
+                        // —— 深色模式下整屏都黑了，只有底栏还是浅紫色的，就是这里的原因。
+                        MaterialTheme(
+                            typography = typographyWith(familyFor(fontChoice)),
+                            colorScheme = if (dark) {
+                                darkColorScheme(
+                                    primary = LocalAccent.current,
+                                    surface = Surface,
+                                    // 底栏底色跟卡片用同一个色，M3 默认的 #211F26 偏紫、比卡片亮一档，
+                                    // 摆在一起像两个东西
+                                    surfaceContainer = Surface,
+                                    // NavigationBarItem 的选中药丸取 secondaryContainer、图标取 onSecondaryContainer，
+                                    // 不覆盖的话是 M3 基线那套紫色，跟本项目的蓝色主色对不上
+                                    secondaryContainer = LocalAccent.current.copy(alpha = 0.24f),
+                                    onSecondaryContainer = LocalAccent.current,
+                                    onSurface = TextPrimary,
+                                    onSurfaceVariant = Palette.text2,
+                                    background = Bg,
+                                    onBackground = TextPrimary
+                                )
+                            } else {
+                                lightColorScheme(
+                                    primary = LocalAccent.current,
+                                    onPrimary = Color.White,
+                                    surface = Surface,
+                                    surfaceContainer = Surface,
+                                    secondaryContainer = LocalAccent.current.copy(alpha = 0.14f),
+                                    onSecondaryContainer = LocalAccent.current,
+                                    onSurface = TextPrimary,
+                                    onSurfaceVariant = Palette.text2,
+                                    background = Bg,
+                                    onBackground = TextPrimary
+                                )
+                            }
                         ) {
-                            NavigationBarItem(
-                                selected = page == 0,
-                                onClick = { page = 0 },
-                                icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                                label = { Text(t("主页", "Home")) }
-                            )
-                            NavigationBarItem(
-                                selected = page == 1,
-                                onClick = { page = 1 },
-                                icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                                label = { Text(t("设置", "Settings")) }
-                            )
+                            // containerColor / tonalElevation 都不写，直接用 NavigationBar 的官方默认
+                            // （surfaceContainer + 0dp），跟其它 M3 组件一致
+                            NavigationBar(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .navigationBarsPadding()
+                            ) {
+                                NavigationBarItem(
+                                    selected = page == 0,
+                                    onClick = { page = 0 },
+                                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                                    label = { Text(t("主页", "Home")) }
+                                )
+                                NavigationBarItem(
+                                    selected = page == 1,
+                                    onClick = { page = 1 },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                                    label = { Text(t("设置", "Settings")) }
+                                )
+                            }
                         }
                     } else if (useBackdrop) {
                         // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
