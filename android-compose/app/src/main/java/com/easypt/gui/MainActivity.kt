@@ -405,7 +405,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         reloadWallpaper(sync = true)
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
         XmsfBypass.appCtx = applicationContext
+        checkInterruptedFlash()
         XmsfBypass.appCtx = applicationContext
+        checkInterruptedFlash()
         XmsfBypass.requestPermission()
         android.util.Log.i("EasyPT", "xmsfSelfTest: " + XmsfBypass.selfTest(this))
         mark("05-setContent")
@@ -739,7 +741,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 lastNotifyPush = now
                 runCatching {
                     updateFlashLive(
-                        LiveUpdate(t("线刷中", "Flashing"), text.take(80), flashStep, flashMax)
+                        LiveUpdate(
+                            t("线刷中", "Flashing"),
+                            (if (flashPart.isEmpty()) "" else "$flashPart · ") + text.trim().take(70),
+                            flashStep, flashMax
+                        )
                     )
                 }
             }
@@ -747,6 +753,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private var lastNotifyPush = 0L
+    private var flashPart = ""
     private var flashStep = 0
     private var flashMax = 0
     fun clearLog() { logs.clear() }
@@ -761,6 +768,24 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 android.net.Uri.parse("package:$packageName")
             ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(i)
+        }
+    }
+
+    /** 上次刷机是否没跑完：开刷时留标记，正常结束删掉 */
+    private fun flashMarker() = File(filesDir, "flash_inprogress")
+
+    private fun checkInterruptedFlash() {
+        runCatching {
+            val m = flashMarker()
+            if (!m.exists()) return
+            val who = m.readText().trim().ifEmpty { "?" }
+            append(
+                t(
+                    "⚠ 上次刷机未完成（$who）。设备可能停在半刷状态，别直接开机，建议重新完整刷一遍",
+                    "⚠ Last flash did not finish ($who). Do not boot into it — flash again"
+                ),
+                ErrColor
+            )
         }
     }
 
@@ -1240,8 +1265,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 小米系会积极回收后台进程。刷机期间：保持屏幕常亮 + 尝试进电池白名单。
         ui.post { runCatching { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
         ensureBatteryExempt()        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
+        runCatching { flashMarker().writeText("${romProduct.ifEmpty { "未知机型" }} · ${steps.size} 步") }
         updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
         for ((i, s) in steps.withIndex()) {
+            flashPart = s.part
             flashStep = i + 1; flashMax = steps.size
             updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), "${i + 1}/${steps.size} · ${s.part} · ${s.kind}", i + 1, steps.size))
             append("[${i + 1}/${steps.size}] ${s.raw}", Accent)
@@ -1260,6 +1287,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             }
             if (s.kind == "reboot" && ok) break
         }
+        runCatching { flashMarker().delete() }
         finishFlashLive(failCount == 0)
         ui.post { runCatching { window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
         append(
