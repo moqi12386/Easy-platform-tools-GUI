@@ -1749,7 +1749,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
 
         LaunchedEffect(useBackdrop, style, safeRender) {
-            append("玻璃诊断：useBackdrop=$useBackdrop · style=${style.name} · safe=$safeRender · API=${Build.VERSION.SDK_INT}", TextSecondary)
+            // 这行以前会往日志框里写，每次切样式都多一行，很碍事；
+            // 诊断信息只留 logcat（adb logcat -s EasyPT）
+            android.util.Log.d(
+                "EasyPT",
+                "玻璃诊断：useBackdrop=$useBackdrop · style=${style.name} · safe=$safeRender · API=${Build.VERSION.SDK_INT}"
+            )
         }
         // 字体诊断：每次字体变化打一条，便于确认「已应用但没效果」到底卡在哪
         LaunchedEffect(fontChoice, onlineFamilies.size) {
@@ -2471,11 +2476,17 @@ fun KRow(
         // 官方签名：startAction 是 @Composable () -> Unit，endActions 是 @Composable RowScope.() -> Unit
         val lead: (@Composable () -> Unit)? = icon?.let { ic ->
             {
-                Icon(
-                    ic, contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(24.dp)
-                )
+                // 保留原来的彩色图标块：MIUI 设置列表里左边都是带底色的小方块
+                Box(
+                    Modifier
+                        .padding(end = 12.dp)
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(tint ?: miuixIconColor(ic)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(ic, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                }
             }
         }
         val tail: (@Composable RowScope.() -> Unit)? = when {
@@ -2633,8 +2644,17 @@ fun KSwitchRow(
             title = title,
             summary = subtitle,
             startAction = {
-                Icon(icon, contentDescription = null, tint = MiuixTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(24.dp))
+                // 彩色图标块，和普通行保持一致
+                Box(
+                    Modifier
+                        .padding(end = 12.dp)
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (enabled) miuixIconColor(icon) else miuixIconColor(icon).copy(alpha = 0.4f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                }
             },
             endActions = {
                 MiuixSwitch(
@@ -2726,17 +2746,18 @@ fun KSwitchRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PageTitle(text: String) {
-    // Material Design 3：标题用 M3 的 headlineMedium 层级 + onSurface 色
-    // （displaySmall 36sp 放不下 "Easy-platform-tools"，会从中间断成两行）
+    // Material Design 3：标题交给官方的 LargeTopAppBar（大标题顶栏），
+    // 不再自己拿 Text 拼一个 36sp 的大字
     if (LocalStyle.current == UiStyle.Material) {
-        Text(
-            text,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 14.dp)
+        LargeTopAppBar(
+            title = { Text(text, maxLines = 1) },
+            colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent),
+            // 页面自己已经有 statusBarsPadding，这里不再叠加系统栏 inset
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.padding(horizontal = 0.dp)
         )
         return
     }
