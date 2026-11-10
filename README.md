@@ -19,7 +19,7 @@ Windows 上的 adb / fastboot 图形化命令台，外加一个能**自己插 OT
 |---|---|
 | ![放大日志](docs/android-log.png) | ![分区表](docs/android-parts.png) |
 
-## 特性
+## 特性（Windows 端）
 
 - **左侧快捷命令**：检测设备、版本信息、设备属性、重启到 Bootloader / Recovery / EDL、重启系统、fastboot 设备、fastboot 重启
 - **读分区表**：`fastboot getvar all` 列出真实分区名与大小，一键带入刷写对话框
