@@ -402,10 +402,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         mark("04-prefs")
         reloadWallpaper(sync = true)
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
+        XmsfBypass.appCtx = applicationContext
+        XmsfBypass.appCtx = applicationContext
         XmsfBypass.requestPermission()
         android.util.Log.i("EasyPT", "xmsfSelfTest: " + XmsfBypass.selfTest(this))
         android.util.Log.i("EasyPT", "xmsfMethods: " + XmsfBypass.listMethods())
-        updateFlashLive(LiveUpdate("线刷中", "诊断 1/1 · vendor", 1, 1))
         mark("05-setContent")
         setContent { EasyApp() }
     }
@@ -4051,7 +4052,12 @@ fun SettingsPage(
                         "Not granted · tap to request"
                     )
                 },
-                onClick = { XmsfBypass.requestPermission() }
+                onClick = {
+                    // 点一下：重新申请授权，并把自检结果写进 App 私有目录的 xmsf.txt，
+                    // 这样 adb 能直接拉出来看（设置页拿不到主页日志面板）
+        XmsfBypass.requestPermission()
+                    XmsfBypass.dumpToFile()
+                }
             )
             AppSwitchRow(
                 icon = Icons.Filled.Refresh,
