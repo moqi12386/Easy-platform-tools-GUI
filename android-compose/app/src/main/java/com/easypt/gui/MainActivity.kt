@@ -4220,6 +4220,9 @@ fun GlassDialogPanel(
 @Composable
 fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
     var page by remember { mutableIntStateOf(0) }
+    // Material 的官方弹窗已经自带 24dp 内边距，这里再叠 28dp 会挤成一条窄缝，
+    // 所以 Material 下把外层留白收掉
+    val isM3 = LocalStyle.current == UiStyle.Material
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
     val pages = listOf(
@@ -4247,7 +4250,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
     )
     // 点了外面 / 返回键都不关，只有「先不看」「开始使用」能关掉（之前被广告跳过软件自动点掉了）
     AppGlassPanel(LocalWallBackdrop.current, onDismiss = { }) {
-        Column(Modifier.padding(28.dp, 26.dp, 26.dp, 0.dp)) {
+        Column(Modifier.padding(if (isM3) 0.dp else 28.dp, if (isM3) 0.dp else 26.dp, if (isM3) 0.dp else 26.dp, 0.dp)) {
             Text(
                 pages[page].first, color = contentColor, fontSize = 22.sp,
                 fontWeight = FontWeight.Medium
@@ -4733,6 +4736,26 @@ fun LiquidChoiceDialog(
     val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
+    // Material：官方 M3 对话框；选项用 M3 ListItem，取消用 TextButton
+    if (LocalStyle.current == UiStyle.Material) {
+        MaterialDialog(title = title, onDismiss = onDismiss) {
+            options.forEachIndexed { i, name ->
+                ListItem(
+                    modifier = Modifier.clickable { onPick(i) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text(name, style = MaterialTheme.typography.bodyLarge) },
+                    trailingContent = if (i == selected) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                    } else null
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        }
+        return
+    }
+
     // MIUIX：容器用库里的 Card，行用 BasicComponent，取消用官方 TextButton。
     // 窗口仍用 Compose 的 Dialog —— miuix 的 WindowDialog 需要
     // LocalNavigationEventDispatcherOwner（本工程没提供，会崩），
@@ -5205,7 +5228,7 @@ fun LogColorDialog(
         0xFF4C1D95, 0xFF7C3AED, 0xFF8B5CF6, 0xFFA78BFA, 0xFFC4B5FD, 0xFF5E5CE6, 0xFFB794F6, 0xFFDDD6FE,
         0xFF831843, 0xFFDB2777, 0xFFEC4899, 0xFFF472B6, 0xFFF9A8D4, 0xFFBE185D, 0xFFFF4D6D, 0xFFFBB6CE
     )
-    val grid = palette.chunked(8)
+    val grid = palette.chunked(6)
 
     AppGlassPanel(LocalWallBackdrop.current, onDismiss) {
         Text(
