@@ -188,6 +188,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
     private var fontChoice by mutableStateOf(AppFont.System)
+    /** 启动时自动检查更新（默认开启，可在设置里关掉） */
+    private var autoUpdate by mutableStateOf(true)
     private var customFont by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
     /** 在线字体已加载的家族，key = AppFont.name */
     private val onlineFamilies =
@@ -1704,6 +1706,78 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
+    // ---------------- 检查更新 ----------------
+
+    /** 本机版本名，比如 3.50.3 */
+    private fun currentVersionName(): String = runCatching {
+        packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+    }.getOrDefault("0")
+
+    /** 比较 "3.51.0" 和 "3.50.3"：前者大返回 1 */
+    private fun compareVersion(a: String, b: String): Int {
+        val x = a.split('.').map { it.toIntOrNull() ?: 0 }
+        val y = b.split('.').map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val vx = x.getOrElse(i) { 0 }
+            val vy = y.getOrElse(i) { 0 }
+            if (vx != vy) return if (vx > vy) 1 else -1
+        }
+        return 0
+    }
+
+    /**
+     * 查 GitHub 上最新 release 的 tag，和本机版本比。
+     * [manual] = 用户手动点的：无论有没有新版本都写一条日志；自动检查只在有新版本时提示。
+     */
+    fun checkUpdate(manual: Boolean = false) {
+        if (manual) append(t("正在检查更新…", "Checking for updates…"), TextSecondary)
+        bg {
+            val cur = currentVersionName()
+            var latest: String? = null
+            var err: String? = null
+            runCatching {
+                val conn = (java.net.URL(
+                    "https://api.github.com/repos/moqi12386/Easy-platform-tools-GUI/releases/latest"
+                ).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 10000
+                    readTimeout = 15000
+                    instanceFollowRedirects = true
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("User-Agent", "EasyPT")
+                }
+                try {
+                    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val m = Regex("\"tag_name\"\\s*:\\s*\"v?([0-9][0-9.]*)\"").find(body)
+                    latest = m?.groupValues?.get(1)
+                } finally {
+                    conn.disconnect()
+                }
+            }.onFailure { err = it.message ?: it.javaClass.simpleName }
+
+            ui.post {
+                val l = latest
+                when {
+                    l == null -> {
+                        // 自动检查时安静失败，免得每次启动都被网络问题刷屏
+                        if (manual) append(t("检查更新失败：${err ?: "没有拿到版本号"}",
+                            "Update check failed: ${err ?: "no version found"}"), ErrColor)
+                    }
+                    compareVersion(l, cur) > 0 -> {
+                        append(
+                            t("发现新版本 $l（当前 $cur）→ https://github.com/moqi12386/Easy-platform-tools-GUI/releases/latest",
+                                "New version $l (current $cur) → https://github.com/moqi12386/Easy-platform-tools-GUI/releases/latest"),
+                            OkColor
+                        )
+                        toast(t("发现新版本 $l", "New version $l"))
+                    }
+                    else -> if (manual) append(t("已是最新版本 $cur", "Already up to date ($cur)"), OkColor)
+                }
+            }
+        }
+    }
+
+
     // ---------------- Compose ----------------
 
     @Composable
@@ -1764,13 +1838,17 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             } catch (_: Throwable) { }
         }
 
-        LaunchedEffect(useBackdrop, style, safeRender) {
-            // 这行以前会往日志框里写，每次切样式都多一行，很碍事；
+        LaunchedEffect(useBackdrop, style, safeRender) {            // 这行以前会往日志框里写，每次切样式都多一行，很碍事；
             // 诊断信息只留 logcat（adb logcat -s EasyPT）
             android.util.Log.d(
                 "EasyPT",
                 "玻璃诊断：useBackdrop=$useBackdrop · style=${style.name} · safe=$safeRender · API=${Build.VERSION.SDK_INT}"
             )
+        }
+        // 启动时按设置决定要不要检查更新（默认开启，设置里可关）
+        LaunchedEffect(Unit) {
+            autoUpdate = getSharedPreferences(PREF, MODE_PRIVATE).getBoolean("autoupdate", true)
+            if (autoUpdate) checkUpdate()
         }
         // 字体诊断：每次字体变化打一条，便于确认「已应用但没效果」到底卡在哪
         LaunchedEffect(fontChoice, onlineFamilies.size) {
@@ -1981,6 +2059,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         },
                                         fontProgress = fontProgress,
                                         onLogColors = { showLogColors = true },
+                                        autoUpdate = autoUpdate,
+                                        onAutoUpdate = { v ->
+                                            autoUpdate = v
+                                            getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("autoupdate", v).apply()
+                                        },
+                                        onCheckUpdate = { checkUpdate(true) },
                                         downloadedFonts = onlineFamilies.keys.mapNotNull { k ->
                                             AppFont.entries.firstOrNull { it.name == k }
                                         }.toSet(),
@@ -3458,6 +3542,9 @@ fun SettingsPage(
     onResetGlass: () -> Unit,
     fontProgress: Int,
     onLogColors: () -> Unit,
+    autoUpdate: Boolean,
+    onAutoUpdate: (Boolean) -> Unit,
+    onCheckUpdate: () -> Unit,
     downloadedFonts: Set<AppFont>,
     fontTargetKey: String,
     onOnlineFont: (AppFont) -> Unit,
@@ -3808,6 +3895,24 @@ fun SettingsPage(
                     onClick = { showCrash = true }
                 )
             }
+            // 检查更新：默认开启、可关掉；下面另给一个手动检查入口
+            AppSwitchRow(
+                icon = Icons.Filled.Refresh,
+                title = tr(lang, "自动检查更新", "Check for updates"),
+                subtitle = tr(
+                    lang,
+                    "启动时查一次 GitHub 上的最新版本，有新版本会写进日志",
+                    "Look up the latest GitHub release on launch and log it"
+                ),
+                checked = autoUpdate,
+                onCheckedChange = { onAutoUpdate(it) }
+            )
+            AppRow(
+                icon = Icons.Filled.Info,
+                title = tr(lang, "立即检查更新", "Check now"),
+                subtitle = tr(lang, "手动查一次最新版本", "look up the latest release now"),
+                onClick = { onCheckUpdate() }
+            )
             AppSwitchRow(
                 icon = Icons.Filled.Refresh,
                 title = tr(lang, "安全模式", "Safe mode"),
