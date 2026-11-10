@@ -2846,6 +2846,28 @@ fun KDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        // MIUIX：容器换成库里的 Card。只加这一个分支，
+        // 所有基于 KDialog 的弹窗（线刷步骤 / 分区表 / 擦除确认 / 崩溃日志）一起变成 MIUIX 皮，
+        // 液态玻璃和其它样式的代码一行没动
+        if (style == UiStyle.Miuix) {
+            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
+                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                        Column(Modifier.padding(20.dp)) {
+                            Text(
+                                title,
+                                color = MiuixTheme.colorScheme.onBackground,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            body()
+                        }
+                    }
+                }
+            }
+            return@Dialog
+        }
         val shape = remember { RoundedCornerShape(26.dp) }
         val wall = LocalWallBackdrop.current
         Box(Modifier.fillMaxSize().padding(26.dp), contentAlignment = Alignment.Center) {
@@ -2896,7 +2918,20 @@ fun ConfirmDialog(
         Text(message, color = Palette.text2, fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
         val eraseBd = LocalWallBackdrop.current
-        if (useBackdrop && eraseBd != null) {
+        if (LocalStyle.current == UiStyle.Miuix) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onConfirm,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White) }
+            }
+        } else if (useBackdrop && eraseBd != null) {
             // 玻璃风格：跟「线刷步骤」「选择脚本」那几个框一样，用 demo 的 LiquidButton
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 LiquidButton(
@@ -3049,7 +3084,20 @@ private fun RomDialog(
         }
         Spacer(Modifier.height(16.dp))
         val romBd = LocalWallBackdrop.current
-        if (useBackdrop && romBd != null) {
+        if (LocalStyle.current == UiStyle.Miuix) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onStart,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White) }
+            }
+        } else if (useBackdrop && romBd != null) {
             // 「开始刷写」也要是液态按钮，之前这里还是 Material 的实心蓝按钮
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 LiquidButton(
@@ -3109,7 +3157,15 @@ private fun PartsDialog(
         }
         Spacer(Modifier.height(8.dp))
         val partsBd = LocalWallBackdrop.current
-        if (useBackdrop && partsBd != null) {
+        if (LocalStyle.current == UiStyle.Miuix) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "关闭", "Close"),
+                    onClick = onClose,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        } else if (useBackdrop && partsBd != null) {
             // 「关闭」也换成液态按钮，读分区表这一屏之前只有一行蓝字
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 LiquidButton(
@@ -3876,7 +3932,15 @@ fun SettingsPage(
                     }
                     Spacer(Modifier.height(10.dp))
                     val crashBd = LocalWallBackdrop.current
-                    if (useBackdrop && crashBd != null) {
+                    if (LocalStyle.current == UiStyle.Miuix) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            top.yukonga.miuix.kmp.basic.TextButton(
+                                text = tr(lang, "关闭", "Close"),
+                                onClick = { showCrash = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else if (useBackdrop && crashBd != null) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             LiquidButton(
                                 onClick = { showCrash = false },
