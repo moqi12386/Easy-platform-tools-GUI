@@ -2610,7 +2610,7 @@ fun KSelectRow(
     var open by remember { mutableStateOf(false) }
     val text = LocalCardText.current
     Box {
-        KRow(
+        AppRow(
             icon = icon,
             title = title,
             subtitle = subtitle,
@@ -2930,7 +2930,7 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    KDialog(style, title, onDismiss) {
+    AppDialog(style, title, onDismiss) {
         Text(message, color = Palette.text2, fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
         val eraseBd = LocalWallBackdrop.current
@@ -3078,7 +3078,7 @@ private fun RomDialog(
     onStart: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    KDialog(style, tr(lang, "线刷步骤（${steps.size}）", "Flash steps (${steps.size})"), onDismiss) {
+    AppDialog(style, tr(lang, "线刷步骤（${steps.size}）", "Flash steps (${steps.size})"), onDismiss) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -3151,7 +3151,7 @@ private fun PartsDialog(
     onPick: (String) -> Unit,
     onClose: () -> Unit
 ) {
-    KDialog(style, tr(lang, "分区表（${list.size}）", "Partitions (${list.size})"), onClose) {
+    AppDialog(style, tr(lang, "分区表（${list.size}）", "Partitions (${list.size})"), onClose) {
         if (list.isEmpty()) {
             Text(tr(lang, "没有分区信息", "No partitions"), color = Palette.text2, fontSize = 14.sp)
         } else {
@@ -3286,7 +3286,7 @@ fun HomePage(
             }
             Spacer(Modifier.height(12.dp))
         }
-        PageTitle("Easy-platform-tools")
+        AppTitle("Easy-platform-tools")
         Text(
             when (mode) {
                 0 -> tr(lang, "OTG 主机 · ${if (connected) "已连接" else "未连接"}",
@@ -3299,8 +3299,8 @@ fun HomePage(
             modifier = Modifier.padding(start = 4.dp, bottom = 16.dp)
         )
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
-            KSelectRow(
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+            AppSelectRow(
                 icon = Icons.Filled.Build,
                 title = tr(lang, "使用模式", "Mode"),
                 subtitle = null,
@@ -3316,12 +3316,12 @@ fun HomePage(
         }
 
         Spacer(Modifier.height(12.dp))
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                GlassField(
+                AppField(
                     value = cmd,
                     onValueChange = { cmd = it },
                     placeholder = if (mode == 1) tr(lang, "shell 命令", "shell command")
@@ -3358,7 +3358,7 @@ fun HomePage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             val text = LocalCardText.current
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
@@ -3476,51 +3476,51 @@ fun HomePage(
         Spacer(Modifier.height(12.dp))
 
         when (mode) {
-            0 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(Icons.Filled.PlayArrow, tr(lang, "连接设备", "Connect device"),
+            0 -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+                AppRow(Icons.Filled.PlayArrow, tr(lang, "连接设备", "Connect device"),
                     tr(lang, "USB 授权后自动打开", "auto after USB grant"), onClick = onConnect)
-                KRow(Icons.Filled.Build, tr(lang, "USB 诊断", "USB diagnosis"),
+                AppRow(Icons.Filled.Build, tr(lang, "USB 诊断", "USB diagnosis"),
                     tr(lang, "列出系统认到的所有 USB 设备", "list every USB device the system sees"),
                     onClick = onUsbDiag)
-                KRow(Icons.Filled.Refresh, tr(lang, "协议自测", "Protocol self-test"),
+                AppRow(Icons.Filled.Refresh, tr(lang, "协议自测", "Protocol self-test"),
                     tr(lang, "试几种 fastboot 帧格式", "try several fastboot framings"),
                     onClick = onProtoTest)
-                KRow(Icons.Filled.Info, tr(lang, "设备信息", "Device info"),
+                AppRow(Icons.Filled.Info, tr(lang, "设备信息", "Device info"),
                     "product / version / serialno", onClick = onInfo)
-                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"),
+                AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"),
                     "fastboot getvar all", onClick = onParts)
-                KRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
+                AppRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
-                KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
+                AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
                     tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Color(0xFF5E5CE6), onClick = onRom)
-                KRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
-                KRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
+                AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
+                AppRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
                     tint = Color(0xFF0A84FF), onClick = { onReboot("bootloader") })
-                KRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Color(0xFFFF3B30))
+                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Color(0xFFFF3B30))
             }
-            1 -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
-                KRow(Icons.Filled.Build, tr(lang, "快捷刷入镜像", "Quick flash image"), tr(lang, "选镜像，直接 dd 到 $part", "pick an image, dd to $part"), onClick = onLocalFlash)
-                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
-                KRow(Icons.Filled.Star, tr(lang, "备份分区", "Back up partition"),
+            1 -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+                AppRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
+                AppRow(Icons.Filled.Build, tr(lang, "快捷刷入镜像", "Quick flash image"), tr(lang, "选镜像，直接 dd 到 $part", "pick an image, dd to $part"), onClick = onLocalFlash)
+                AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
+                AppRow(Icons.Filled.Star, tr(lang, "备份分区", "Back up partition"),
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
-                KRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
+                AppRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
                     tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Color(0xFFFF3B30))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Color(0xFFFF3B30))
             }
-            else -> KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
-                KRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                KRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
-                KRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
+            else -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+                AppRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
+                AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
                     tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
             }
         }
@@ -3603,10 +3603,10 @@ fun SettingsPage(
             else parts
         }
 
-        PageTitle(tr(lang, "设置", "Settings"))
+        AppTitle(tr(lang, "设置", "Settings"))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
-            KSelectRow(
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+            AppSelectRow(
                 icon = Icons.Filled.Edit,
                 title = tr(lang, "界面样式", "Style"),
                 subtitle = tr(lang, "选择应用的界面风格", "Choose the app style"),
@@ -3615,7 +3615,7 @@ fun SettingsPage(
                 selected = styleOrder.indexOf(style),
                 onPick = { onStyle(styleOrder[it]) }
             )
-            KSelectRow(
+            AppSelectRow(
                 icon = Icons.Filled.Public,
                 title = tr(lang, "语言", "Language"),
                 subtitle = null,
@@ -3624,7 +3624,7 @@ fun SettingsPage(
                 selected = lang.ordinal,
                 onPick = { onLang(Lang.entries[it]) }
             )
-            KSelectRow(
+            AppSelectRow(
                 icon = Icons.Filled.Build,
                 title = tr(lang, "字体", "Font"),
                 subtitle = null,
@@ -3685,8 +3685,8 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
-            KSelectRow(
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+            AppSelectRow(
                 icon = Icons.Filled.Star,
                 title = tr(lang, "夜间模式", "Dark mode"),
                 subtitle = tr(lang, "日间 / 夜间 / 跟随系统", "Light / Dark / Follow system"),
@@ -3696,7 +3696,7 @@ fun SettingsPage(
                 onPick = { onTheme(ThemeMode.entries[it]) }
             )
             if (style == UiStyle.Material) {
-                KSwitchRow(
+                AppSwitchRow(
                     icon = Icons.Filled.Edit,
                     title = tr(lang, "莫奈取色", "Monet colors"),
                     subtitle = if (canMonet) tr(lang, "从壁纸提取主题色（Material 风格）", "Extract theme color from wallpaper (Material)")
@@ -3710,7 +3710,7 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
                 Text(tr(lang, "壁纸", "Wallpaper"), color = LocalCardText.current, fontSize = 16.sp)
                 Text(
@@ -3764,8 +3764,8 @@ fun SettingsPage(
 
         if (style == UiStyle.Glass) {
             var slidersOpen by remember { mutableStateOf(false) }
-            KCard(style, assets, backdrop, screen, blur, density, alpha) {
-                KRow(
+            AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+                AppRow(
                     Icons.Filled.Build,
                     tr(lang, "玻璃参数", "Glass parameters"),
                     if (slidersOpen) tr(lang, "点收起", "tap to collapse") else tr(lang, "点展开", "tap to expand"),
@@ -3825,14 +3825,14 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
                 Text(tr(lang, "刷写", "Flashing"), color = LocalCardText.current, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 var p by remember { mutableStateOf(part) }
                 LaunchedEffect(part) { p = part }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    GlassField(
+                    AppField(
                         value = p,
                         onValueChange = { p = it; onPart(it) },
                         placeholder = tr(lang, "目标分区，例如 boot", "partition, e.g. boot"),
@@ -3866,18 +3866,18 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
                 Text(tr(lang, "遥控 PC", "Remote PC"), color = LocalCardText.current, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
-                GlassField(
+                AppField(
                     value = host,
                     onValueChange = onHost,
                     placeholder = tr(lang, "电脑地址，例如 192.168.1.10:8765", "PC address"),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                GlassField(
+                AppField(
                     value = token,
                     onValueChange = onToken,
                     placeholder = tr(lang, "配对码", "Pairing code"),
@@ -3889,26 +3889,26 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             val ctx = LocalContext.current
             var showCrash by remember { mutableStateOf(false) }
             val crashFile = remember { File(ctx.filesDir, "last-crash.txt") }
             val actionFile = remember { File(ctx.filesDir, "last-action.txt") }
-            KRow(
+            AppRow(
                 Icons.Filled.Share,
                 tr(lang, "导出/分享日志", "Export / share log"),
                 tr(lang, "把日志发给开发者", "Send the log to the developer"),
                 onClick = { onShareLog() }
             )
             // 日志输出框里的文字颜色：命令 / 成功 / 失败 / 普通，可自己改
-            KRow(
+            AppRow(
                 Icons.Filled.Create,
                 tr(lang, "日志文字颜色", "Log text colors"),
                 tr(lang, "自定义命令 / 成功 / 失败 / 普通颜色", "Customize command / ok / error / normal"),
                 onClick = { onLogColors() }
             )
             if (crashFile.exists() || actionFile.exists()) {
-                KRow(
+                AppRow(
                     Icons.Filled.Warning,
                     tr(lang, "查看崩溃日志", "View crash log"),
                     if (actionFile.exists()) tr(lang, "上次崩在：切换样式", "Crashed after: style switch")
@@ -3916,7 +3916,7 @@ fun SettingsPage(
                     onClick = { showCrash = true }
                 )
             }
-            KSwitchRow(
+            AppSwitchRow(
                 icon = Icons.Filled.Refresh,
                 title = tr(lang, "安全模式", "Safe mode"),
                 subtitle = tr(
@@ -3937,7 +3937,7 @@ fun SettingsPage(
                         }
                     }
                 }
-                KDialog(style, tr(lang, "崩溃日志", "Crash log"), onDismiss = { showCrash = false }) {
+                AppDialog(style, tr(lang, "崩溃日志", "Crash log"), onDismiss = { showCrash = false }) {
                     Column(
                         Modifier
                             .fillMaxWidth()
@@ -3978,20 +3978,20 @@ fun SettingsPage(
 
         Spacer(Modifier.height(12.dp))
 
-        KCard(style, assets, backdrop, screen, blur, density, alpha) {
-            KRow(
+        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
+            AppRow(
                 Icons.Filled.Info,
                 tr(lang, "关于", "About"),
                 tr(lang, "版本信息与许可", "Version and license"),
                 onClick = { onAbout() }
             )
-            KRow(
+            AppRow(
                 Icons.Filled.Info,
                 tr(lang, "使用向导", "Guide"),
                 tr(lang, "再看一遍新手引导", "Show the intro again"),
                 onClick = { onShowGuide() }
             )
-            KRow(
+            AppRow(
                 Icons.Filled.Share,
                 tr(lang, "开源地址", "Source code"),
                 "github.com/moqi12386/Easy-platform-tools-GUI",
@@ -3999,7 +3999,7 @@ fun SettingsPage(
             )
             // Glass Playground 暂时隐藏（保留代码，需要时把上面这行注释去掉）
             if (false && style == UiStyle.Glass) {
-                KRow(
+                AppRow(
                     Icons.Filled.Build,
                     tr(lang, "Glass Playground", "Glass Playground"),
                     tr(lang, "实时调玻璃参数", "Tune glass parameters live"),
@@ -4317,7 +4317,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
         )
     )
     // 点了外面 / 返回键都不关，只有「先不看」「开始使用」能关掉（之前被广告跳过软件自动点掉了）
-    GlassDialogPanel(LocalWallBackdrop.current, onDismiss = { }) {
+    AppGlassPanel(LocalWallBackdrop.current, onDismiss = { }) {
         Column(Modifier.padding(28.dp, 26.dp, 26.dp, 0.dp)) {
             Text(
                 pages[page].first, color = contentColor, fontSize = 22.sp,
@@ -4427,7 +4427,7 @@ fun GlassConfirmDialog(
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
     val destructive = LocalStyle.current != UiStyle.Native
-    GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
+    AppGlassPanel(LocalWallBackdrop.current, onDismiss) {
         Text(
             title, color = contentColor, fontSize = 22.sp, fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(28.dp, 26.dp, 28.dp, 8.dp)
@@ -4501,7 +4501,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
     }
 
-    GlassDialogPanel(backdrop, onDismiss) {
+    AppGlassPanel(backdrop, onDismiss) {
         Text(
             tr(lang, "关于", "About"),
             color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
@@ -5095,7 +5095,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
         loading = false
     }
 
-    GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
+    AppGlassPanel(LocalWallBackdrop.current, onDismiss) {
         Row(
             Modifier.fillMaxWidth().padding(28.dp, 24.dp, 20.dp, 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -5306,7 +5306,7 @@ fun LogColorDialog(
     )
     val grid = palette.chunked(8)
 
-    GlassDialogPanel(LocalWallBackdrop.current, onDismiss) {
+    AppGlassPanel(LocalWallBackdrop.current, onDismiss) {
         Text(
             tr(lang, "日志颜色", "Log colors"),
             color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
@@ -5573,7 +5573,7 @@ fun OnlineFontRow(
     onStart: () -> Unit
 ) {
     val wall = LocalWallBackdrop.current
-    KRow(
+    AppRow(
         null,
         title,
         if (ready) tr(lang, "已下载", "downloaded") else sizeText,
