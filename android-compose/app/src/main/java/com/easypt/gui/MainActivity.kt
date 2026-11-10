@@ -4188,10 +4188,6 @@ fun GlassDialogPanel(
                     .align(Alignment.Center)
                     .padding(40.dp)
                     .fillMaxWidth()
-                    // 内容长的时候要能滚：日志颜色那块色板以前没有滚动，
-                    // 液态玻璃下底部的取消/完成根本滑不到
-                    .heightIn(max = 640.dp)
-                    .verticalScroll(rememberScrollState())
                     .then(
                         if (useBackdrop && backdrop != null) {
                             Modifier.drawBackdrop(
@@ -4809,10 +4805,6 @@ fun LiquidChoiceDialog(
                     .align(Alignment.Center)
                     .padding(40.dp)
                     .fillMaxWidth()
-                    // 内容长的时候要能滚：日志颜色那块色板以前没有滚动，
-                    // 液态玻璃下底部的取消/完成根本滑不到
-                    .heightIn(max = 640.dp)
-                    .verticalScroll(rememberScrollState())
                     .then(
                         if (useBackdrop && backdrop != null) {
                             Modifier.drawBackdrop(
@@ -5312,9 +5304,13 @@ fun LogColorDialog(
             }
         }
         Spacer(Modifier.height(10.dp))
-        // 调色盘
+        // 调色盘：只有这块滑动，标题/预览/分类/按钮都固定
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .heightIn(max = 150.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             grid.forEach { row ->
