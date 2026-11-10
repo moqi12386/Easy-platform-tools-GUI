@@ -404,6 +404,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
         XmsfBypass.requestPermission()
         android.util.Log.i("EasyPT", "xmsfSelfTest: " + XmsfBypass.selfTest(this))
+        android.util.Log.i("EasyPT", "xmsfMethods: " + XmsfBypass.listMethods())
         updateFlashLive(LiveUpdate("线刷中", "诊断 1/1 · vendor", 1, 1))
         mark("05-setContent")
         setContent { EasyApp() }
