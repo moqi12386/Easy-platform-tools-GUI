@@ -28,7 +28,7 @@ namespace EasyPlatformTools
 
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        private const string AppVersion = "3.50.1";
+        private const string AppVersion = "3.50.2";
         private const string AppRepo = "https://github.com/moqi12386/Easy-platform-tools-GUI";
 
         // 首次运行时自动下载的镜像源：按顺序尝试，全部为官方或与官方逐字节一致的镜像
@@ -378,7 +378,7 @@ namespace EasyPlatformTools
         {
             FontFamily f = ResolveFamily(fontName);
             if (f != null) { return f.Name; }
-            return FallbackFamily().Name + "（回退）";
+            return FallbackFamily().Name + (Lang.IsEn ? " (fallback)" : "（回退）");
         }
 
         private static void BuildFonts()

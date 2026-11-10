@@ -1,4 +1,4 @@
-﻿// Easy-platform-tools-GUI — 语言表
+// Easy-platform-tools-GUI — 语言表
 // 中文是源码里的原始文案，英文在这里按「精确匹配」和「正则模板」两种方式映射。
 
 using System;
@@ -36,6 +36,8 @@ namespace EasyPlatformTools
             { "刷入镜像…", "Flash image…" },
             { "线刷 ROM…", "Flash ROM…" },
             { "备份基带…", "Backup modem…" },
+            { "手机遥控", "Remote" },
+            { "遥控服务…", "Remote service…" },
             { "⚙  设置", "⚙  Settings" },
 
             // 主界面
@@ -196,6 +198,10 @@ namespace EasyPlatformTools
             R(@"^字体：(.*)$", "Font: $1"),
             R(@"^字体：(\S+) (\S+)　·　主题：(\S+)$", "Font: $1 $2  ·  theme: $3"),
             R(@"^Easy-platform-tools-GUI v(\S+)　·　adb / fastboot 命令控制台$", "Easy-platform-tools-GUI v$1  ·  adb / fastboot console"),
+            R(@"^遥控服务已启动：(\S+)　配对码 (\S+)$", "Remote service started: $1  pairing code $2"),
+            R(@"^遥控服务已启动：(\S+)　（未设配对码）$", "Remote service started: $1  (no pairing code)"),
+            R(@"^遥控服务启动失败：(.*)$", "Remote service failed to start: $1"),
+            R(@"^拖入文件：(.*)$", "Dropped file: $1"),
             R(@"^> (.*)$", "> $1"),
             R(@"^已保存：(.*)$", "Saved: $1"),
             R(@"^已导出：(.*)$", "Exported: $1"),
