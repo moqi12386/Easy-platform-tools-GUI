@@ -5251,7 +5251,24 @@ fun LogColorDialog(
     )
     val grid = palette.chunked(6)
 
-    AppGlassPanel(LocalWallBackdrop.current, onDismiss) {
+    // 整页显示（不再用受高度限制的弹窗）：色块区吃掉剩余高度自己滚，
+    // 底部取消/完成永远钉在屏幕底部
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .clickable { onDismiss() }
+        )
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(12.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(if (Palette.dark) Color(0xFF17181C) else Color(0xFFF7F8FA))
+        ) {
         Text(
             tr(lang, "日志颜色", "Log colors"),
             color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
@@ -5309,7 +5326,7 @@ fun LogColorDialog(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .heightIn(max = 150.dp)
+                .weight(1f)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -5395,6 +5412,7 @@ fun LogColorDialog(
                 ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
             }
         }
+    }
     }
 }
 
