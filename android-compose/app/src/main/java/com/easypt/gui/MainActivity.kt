@@ -2463,70 +2463,6 @@ fun KRow(
     onClick: (() -> Unit)? = null
 ) {
     val text = LocalCardText.current
-    // MIUIX：直接用库里的 BasicComponent（标题 / 摘要 / 起始图标 / 结束动作都是它的官方参数）
-    if (LocalStyle.current == UiStyle.Miuix) {
-        // 官方签名：startAction 是 @Composable () -> Unit，endActions 是 @Composable RowScope.() -> Unit
-        val lead: (@Composable () -> Unit)? = icon?.let { ic ->
-            {
-                // 保留原来的彩色图标块：MIUI 设置列表里左边都是带底色的小方块
-                Box(
-                    Modifier
-                        .padding(end = 12.dp)
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(tint ?: miuixIconColor(ic)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(ic, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-                }
-            }
-        }
-        val tail: (@Composable RowScope.() -> Unit)? = when {
-            trailing != null -> { { trailing() } }
-            chevron && onClick != null -> {
-                {
-                    Icon(
-                        Icons.Filled.KeyboardArrowRight, contentDescription = null,
-                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            else -> null
-        }
-        BasicComponent(
-            title = title,
-            summary = subtitle,
-            startAction = lead,
-            endActions = tail,
-            onClick = onClick
-        )
-        return
-    }
-    // Material Design 3：一行就是 M3 的 ListItem（leading / headline / supporting / trailing）
-    if (LocalStyle.current == UiStyle.Material) {
-        val lead: (@Composable () -> Unit)? = icon?.let { ic ->
-            { Icon(ic, contentDescription = null, tint = text, modifier = Modifier.size(24.dp)) }
-        }
-        val sub: (@Composable () -> Unit)? = subtitle?.let { s ->
-            { Text(s, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        }
-        val tail: (@Composable () -> Unit)? = if (trailing != null) {
-            { Row(verticalAlignment = Alignment.CenterVertically) { trailing() } }
-        } else if (chevron && onClick != null) {
-            { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp)) }
-        } else null
-        ListItem(
-            modifier = Modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            leadingContent = lead,
-            headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
-            supportingContent = sub,
-            trailingContent = tail
-        )
-        return
-    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -2630,53 +2566,6 @@ fun KSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val text = LocalCardText.current
-    // MIUIX：BasicComponent + 库里的 Switch（官方推荐写法）
-    if (LocalStyle.current == UiStyle.Miuix) {
-        BasicComponent(
-            title = title,
-            summary = subtitle,
-            startAction = {
-                // 彩色图标块，和普通行保持一致
-                Box(
-                    Modifier
-                        .padding(end = 12.dp)
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(if (enabled) miuixIconColor(icon) else miuixIconColor(icon).copy(alpha = 0.4f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-                }
-            },
-            endActions = {
-                MiuixSwitch(
-                    checked = checked,
-                    onCheckedChange = { onCheckedChange(it) },
-                    enabled = enabled
-                )
-            },
-            onClick = if (enabled) ({ onCheckedChange(!checked) }) else null
-        )
-        return
-    }
-    // Material Design 3：ListItem + M3 Switch
-    if (LocalStyle.current == UiStyle.Material) {
-        ListItem(
-            modifier = Modifier.clickable(enabled = enabled) { onCheckedChange(!checked) },
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            leadingContent = {
-                Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(24.dp))
-            },
-            headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
-            supportingContent = subtitle?.let { s ->
-                { Text(s, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-            },
-            trailingContent = {
-                Switch(checked = checked, onCheckedChange = { onCheckedChange(it) }, enabled = enabled)
-            }
-        )
-        return
-    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -2741,18 +2630,6 @@ fun KSwitchRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PageTitle(text: String) {
-    // Material Design 3：标题交给官方的 LargeTopAppBar（大标题顶栏），
-    // 不再自己拿 Text 拼一个 36sp 的大字
-    if (LocalStyle.current == UiStyle.Material) {
-        LargeTopAppBar(
-            title = { Text(text, maxLines = 1) },
-            colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent),
-            // 页面自己已经有 statusBarsPadding，这里不再叠加系统栏 inset
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            modifier = Modifier.padding(horizontal = 0.dp)
-        )
-        return
-    }
     val color = LocalTitleColor.current
     val shadow = if (color.luminance() > 0.5f) {
         Shadow(Color.White.copy(alpha = 0.55f), Offset(0f, 1f), 6f)
@@ -4974,34 +4851,6 @@ fun GlassField(
     numeric: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
-    // Material Design 3：直接用官方 OutlinedTextField（配色/圆角/内边距全走 M3 默认），
-    // 不再自绘那块玻璃底板
-    if (LocalStyle.current == UiStyle.Material) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            readOnly = readOnly,
-            singleLine = true,
-            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyLarge) },
-            textStyle = MaterialTheme.typography.bodyLarge,
-            shape = RoundedCornerShape(12.dp),
-            keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
-            else KeyboardOptions.Default,
-            modifier = modifier.fillMaxWidth()
-        )
-        return
-    }
-    // MIUIX：用库里的 TextField，label 直接当占位符（官方的 useLabelAsPlaceholder）
-    if (LocalStyle.current == UiStyle.Miuix) {
-        MiuixTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = placeholder,
-            useLabelAsPlaceholder = true,
-            modifier = modifier.fillMaxWidth()
-        )
-        return
-    }
     val wall = LocalWallBackdrop.current
     // 字色跟「底板」走：底板永远随主题（亮主题浅底 / 暗主题深底）。
     // 用 LocalCardText 的话，原生风格是深色卡片→恒为白字，压在浅色输入框上就看不见了。
