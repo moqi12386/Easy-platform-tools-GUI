@@ -4737,15 +4737,23 @@ fun MiuixChoiceDialog(
                                 BasicComponent(
                                     title = name,
                                     onClick = { onPick(i) },
-                                    endActions = if (i == selected) {
-                                        {
+                                    endActions = {
+                                        // 自己导入的字体多一个删除按钮（之前这分支被我漏掉了，
+                                        // 结果 MIUIX 下自定义字体删不掉）
+                                        if (onDelete != null && deletable.contains(i)) {
+                                            top.yukonga.miuix.kmp.basic.TextButton(
+                                                text = "删除",
+                                                onClick = { onDelete.invoke(i) }
+                                            )
+                                        }
+                                        if (i == selected) {
                                             Icon(
                                                 Icons.Filled.Check, contentDescription = null,
                                                 tint = MiuixTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
-                                    } else null
+                                    }
                                 )
                             }
                             top.yukonga.miuix.kmp.basic.TextButton(
