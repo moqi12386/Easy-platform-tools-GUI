@@ -1,4 +1,4 @@
-﻿# 截图助手：启动 exe → 可选取色/输入命令/打开设置 → PrintWindow 渲染 → 关闭
+# 截图助手：启动 exe → 可选取色/输入命令/打开设置 → PrintWindow 渲染 → 关闭
 param(
     [string]$Out = 'C:\Users\35923\Desktop\截图\androidtool.png',
     [string[]]$Commands = @(),
@@ -68,7 +68,7 @@ function Save-Window([IntPtr]$h, [string]$path){
 }
 
 $root = Split-Path $PSScriptRoot -Parent
-$exe = Join-Path $root 'AndroidTool.exe'
+$exe = Join-Path $root 'Easy-platform-tools-GUI.exe'
 $cfg = Join-Path $root 'config.ini'
 if (Test-Path $cfg) {
     $kv = @{}
@@ -110,4 +110,4 @@ else {
 
 Start-Sleep -Milliseconds 300
 [void]$p.CloseMainWindow(); Start-Sleep -Milliseconds 800
-Get-Process AndroidTool -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process Easy-platform-tools-GUI -ErrorAction SilentlyContinue | Stop-Process -Force

@@ -1,11 +1,23 @@
 # Easy-platform-tools-GUI
 
-Windows 上的 adb / fastboot 图形化命令台。深色界面、、可换背景配色，
-编译出来就是一个 98 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
+Windows 上的 adb / fastboot 图形化命令台，外加一个能**自己插 OTG 给别人刷机**的 Android 版。
+深色界面、可换背景配色，Windows 端编译出来就是一个 123 KB 的单文件 exe，不需要装 PowerShell 模块、不需要运行库。
 
-![主界面](docs/main.png)
+![Windows 主界面](docs/main.png)
 
-> **Android 版**（`android-compose/`，v3.2.0）：Compose 重写，KernelSU 风格卡片界面 + 悬浮玻璃底栏（实时模糊界面内容）+ 夜间模式 + 四种界面样式（原生 / Material 莫奈取色 / MIUIX / 液态玻璃）。支持 OTG 主机直连 fastboot、本机 root 备份刷写、遥控 PC、线刷 ROM。详见 [RELEASE-NOTES](RELEASE-NOTES.md)。
+> **Android 版**（`android-compose/`，当前 **v3.50.1**）：Compose 重写，四种界面样式（原生 / Material 莫奈取色 / MIUIX / 液态玻璃）。
+>
+> - **OTG 直连**：手机插 OTG 就能对另一台停在 fastboot 的设备执行 `getvar` / `flash` / `erase`，**不用电脑、不用 root**
+> - **大分区分块刷**：`system` / `product` 这类 Android sparse 镜像按块边界重打包，4 GB+ 的分区也能一路刷进去（真机验证过 1410 MB / 118 包、4502 MB / 376 包）
+> - 本机 root 备份刷写、遥控 PC、解析 `flash_all` 脚本线刷
+>
+> 详见 [RELEASE-NOTES](RELEASE-NOTES.md)。
+
+### Android 版长什么样
+
+| 日志放大（液态玻璃） | 分区表（88 个分区，可直接点选带入） |
+|---|---|
+| ![放大日志](docs/android-log.png) | ![分区表](docs/android-parts.png) |
 
 ## 特性
 
@@ -164,6 +176,9 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 
 ## 自定义壁纸与透明度
 
+> 以下「壁纸 / 按键边框 / 弹窗」几节写的是**旧版 Android 实现**（`android/`，Java + View，v2.x）的细节，
+> 留着当设计说明看。当前发布的是 `android-compose/` 的 Compose 版，界面见上面的截图。
+
 两端都支持把任意图片设成界面背景，并且按键底板透明度可调。
 
 **桌面版**：设置 → 背景图 → 选择图片…；图片**等比铺满后居中裁切**（不再拉伸变形），
@@ -195,17 +210,17 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 
 ![按键边框](docs/border.png)
 
-## 界面样式与底栏（Android 2.7.0）
+## 界面样式与底栏
 
-界面分两页：**主页**（日志 / 快捷按钮 / 命令输入）和**设置**（上面所有开关），用底栏切换。
-设置不再是弹窗，不再盖住主界面；底栏常驻，命令输入框就贴在底栏上方。
+界面是 Compose 写的（`android-compose/`）：主页（日志 / 快捷按钮 / 命令输入）和设置页用底栏切换，
+底栏常驻，命令输入框贴在底栏上方。
 
 | 样式 | 长什么样 | 实现 |
 |---|---|---|
-| **原生** | 10 dp 圆角、半透明底、你选的边框 | `PillDrawable` |
-| **Material** | 24 dp 药丸、底色往主色带、2 dp 投影、按下有水波纹 | `RippleDrawable` + `setElevation` |
-| **MIUIX** | 单列列表：左边标题、右边 `›`、52 dp 行高，设置页也分成卡片 | 自绘 `ChevronDrawable` |
-| **液态玻璃** | 卡片、按钮、底栏都是玻璃：预模糊壁纸 + 透镜边 + 高光 | `GlassDrawable` |
+| **原生** | 深色半透明卡片 + 1 dp 描边，最省 | `Palette.surface` + `clip` |
+| **Material** | 24 dp 药丸、主色，可从壁纸取莫奈色 | M3 `Button` / `Card` + `androidx.palette` |
+| **MIUIX** | 单列列表：左图标、标题、右侧 `›`，设置页也分成卡片 | `miuix-ui-android` |
+| **液态玻璃** | 卡片、按钮、底栏都是玻璃：实时模糊 + 透镜折射 + 高光 | `io.github.kyant0:backdrop`（见 [借鉴声明](THIRD-PARTY.md)） |
 
 ![四种样式](docs/styles.png)
 
