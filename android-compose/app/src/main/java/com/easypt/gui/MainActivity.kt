@@ -732,8 +732,23 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             logs.add(LogLine("[$ts] $text", c))
             while (logs.size > 300) logs.removeAt(0)
         }
+        // 刷机期间：实况通知的文字跟着日志最新一行走（节流 300ms，避免刷爆通知）
+        if (busy) {
+            val now = System.currentTimeMillis()
+            if (now - lastNotifyPush > 300L) {
+                lastNotifyPush = now
+                runCatching {
+                    updateFlashLive(
+                        LiveUpdate(t("线刷中", "Flashing"), text.take(80), flashStep, flashMax)
+                    )
+                }
+            }
+        }
     }
 
+    private var lastNotifyPush = 0L
+    private var flashStep = 0
+    private var flashMax = 0
     fun clearLog() { logs.clear() }
 
     /** 刷机前尽量进「电池优化白名单」，小米系最关键的一环 */
@@ -1227,6 +1242,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         ensureBatteryExempt()        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
         updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
         for ((i, s) in steps.withIndex()) {
+            flashStep = i + 1; flashMax = steps.size
             updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), "${i + 1}/${steps.size} · ${s.part} · ${s.kind}", i + 1, steps.size))
             append("[${i + 1}/${steps.size}] ${s.raw}", Accent)
             var ok = runStep(s)
