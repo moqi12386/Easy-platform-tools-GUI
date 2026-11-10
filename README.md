@@ -274,15 +274,31 @@ powershell -ExecutionPolicy Bypass -File android\build-apk.ps1
 
 ### 借鉴的开源项目
 
-样式是按各家设计语言自己重画的，**没有拷贝代码**：
+**液态玻璃部分是直接抄的代码，不是自己重画的。** 分两类写清楚：
+
+#### 一、直接拷贝了源码
+
+| 项目 | 许可 | 拷了什么 |
+|---|---|---|
+| [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) | Apache-2.0 | 玻璃组件整套：`LiquidButton.kt`（胶囊形变 + 高光 + 折射）几乎原样搬过来；`glassSurface` / `GlassDialogPanel` / `glassInsetSurface` 的模糊、折射、高光参数和写法照抄 demo；壁纸取样提饱和度也是照 demo 的做法 |
+
+Android 端还直接依赖了同一位作者的库（见 [THIRD-PARTY.md](THIRD-PARTY.md)）：
+
+```kotlin
+implementation("io.github.kyant0:backdrop:2.0.1")   // drawBackdrop / blur / lens / vibrancy
+implementation("io.github.kyant0:shapes:1.2.1")     // Capsule 等形状
+```
+
+#### 二、只参考了设计，没有拷贝代码
 
 | 项目 | 借了什么 |
 |---|---|
-| [compose-miuix-ui/miuix](https://github.com/compose-miuix-ui/miuix) | MIUIX 列表行规范（行高、左右留白、箭头位置） |
-| [Glasmio](https://github.com/NEORUAA/Glasmio) | 液态玻璃的层次：底色 / 模糊 / 雾 / 高光 / 描边 |
+| [compose-miuix-ui/miuix](https://github.com/compose-miuix-ui/miuix) | MIUIX 列表行规范（行高、左右留白、箭头位置）；Android 端也直接依赖了 `miuix-ui-android` |
+| [Glasmio](https://github.com/NEORUAA/Glasmio) | 液态玻璃的层次划分：底色 / 模糊 / 雾 / 高光 / 描边 |
 | [liquid-glass-compose](https://github.com/muhammadalkady/liquid-glass-compose) | AGSL 折射的思路（本项目只用简化版，没上 shader） |
 
-这几个都是 Compose 库，本项目不走 Gradle、不引依赖，所以只参考观感。
+Windows 端（WinForms）不引任何第三方依赖，那部分的样式是按各家设计语言自己重画的；
+Android 端（Compose）走 Gradle，依赖清单和许可都在 [THIRD-PARTY.md](THIRD-PARTY.md)。
 
 ## 字体
 

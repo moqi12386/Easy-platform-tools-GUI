@@ -3,11 +3,34 @@
 本仓库**不包含**任何第三方二进制文件。下表列出本项目在运行、构建、发布过程中使用到的
 开源 / 免费组件，以及各自的许可与获取方式。
 
+除「运行时」和「可选」两类外，仓库里还有一部分**直接拷贝进来的第三方源码**（液态玻璃组件），
+见文末 [拷贝的第三方源码](#拷贝的第三方源码)。
+
 ## 运行时
 
 | 组件 | 用途 | 许可 | 是否随仓库分发 |
 |---|---|---|---|
-| [.NET Framework 4.x](https://dotnet.microsoft.com/download/dotnet-framework)（WinForms / System.Drawing） | 界面与进程控制 | Microsoft .NET Framework 许可（随 Windows 提供） | 否，系统自带 |
+| [.NET Framework 4.x](https://dotnet.microsoft.com/download/dotnet-framework)（WinForms / System.Drawing） | Windows 端界面与进程控制 | Microsoft .NET Framework 许可（随 Windows 提供） | 否，系统自带 |
+| [AndroidX / Jetpack Compose](https://developer.android.com/jetpack/androidx) | Android 端界面 | Apache-2.0 | 否，Gradle 从 Maven 拉取 |
+
+## Android 端依赖（Gradle）
+
+`android-compose/app/build.gradle.kts` 里声明的依赖，全部从 Maven 中央 / Google Maven 拉取，仓库不存二进制：
+
+| 组件 | 用途 | 许可 |
+|---|---|---|
+| androidx.core:core-ktx | 基础扩展 | Apache-2.0 |
+| androidx.activity:activity-compose | Compose 入口 | Apache-2.0 |
+| androidx.compose.ui / foundation | Compose 基础 | Apache-2.0 |
+| androidx.compose.material3 | Material 3 组件 | Apache-2.0 |
+| androidx.compose.material:material-icons-core / -extended | 图标 | Apache-2.0 |
+| androidx.documentfile | SAF 目录读取（线刷选目录） | Apache-2.0 |
+| androidx.palette:palette-ktx | 从壁纸取莫奈配色 | Apache-2.0 |
+| [io.github.kyant0:backdrop](https://github.com/Kyant0/AndroidLiquidGlass) | 液态玻璃的实时模糊 / 折射 / 高光 | Apache-2.0 |
+| [io.github.kyant0:shapes](https://github.com/Kyant0/AndroidLiquidGlass) | Capsule 等形状 | Apache-2.0 |
+| [top.yukonga.miuix.kmp:miuix-ui-android](https://github.com/compose-miuix-ui/miuix) | MIUIX 风格组件 | Apache-2.0 |
+| [io.coil-kt:coil-compose](https://github.com/coil-kt/coil) | 图片加载 | Apache-2.0 |
+
 
 ## 可选：与设备通信
 
@@ -36,6 +59,18 @@
 | [csc.exe](https://learn.microsoft.com/dotnet/framework/)（.NET Framework 编译器） | 编译 C# 源码 | 随 .NET Framework 提供 | 否，系统自带 |
 | [Git for Windows](https://gitforwindows.org/) | 版本管理 | GPL-2.0 | 否 |
 | [GitHub CLI](https://cli.github.com/) | 创建仓库与发布 Release | MIT | 否 |
+
+## 拷贝的第三方源码
+
+**液态玻璃相关的代码是从 demo 直接拷过来的，不是自己重写的。**
+
+| 来源 | 许可 | 拷进本仓库的位置 |
+|---|---|---|
+| [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) | Apache-2.0 | `android-compose/app/src/main/java/com/easypt/gui/glass/LiquidButton.kt`（几乎原样）、`Glass.kt` 的 `glassSurface` / `glassOrSolid`、`MainActivity.kt` 的 `GlassDialogPanel` / `glassInsetSurface`、`Wallpaper.kt` 的提饱和度取样 |
+
+按 Apache-2.0 第 4 条，这里保留出处声明：原项目 Copyright Kyant0，完整许可文本见
+<https://github.com/Kyant0/AndroidLiquidGlass/blob/main/LICENSE>。
+如需替换成自己的实现，删掉 `glass/` 目录并把 `glassSurface` 换成纯色兜底即可，功能不受影响。
 
 ## 本项目
 
