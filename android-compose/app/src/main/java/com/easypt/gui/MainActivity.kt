@@ -406,7 +406,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         XmsfBypass.appCtx = applicationContext
         XmsfBypass.requestPermission()
         android.util.Log.i("EasyPT", "xmsfSelfTest: " + XmsfBypass.selfTest(this))
-        android.util.Log.i("EasyPT", "xmsfMethods: " + XmsfBypass.listMethods())
         mark("05-setContent")
         setContent { EasyApp() }
     }
