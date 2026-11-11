@@ -2975,6 +2975,7 @@ fun KDialog(
     ) {
         val shape = remember { RoundedCornerShape(26.dp) }
         val wall = LocalWallBackdrop.current
+        CompositionLocalProvider(LocalWallBackdrop provides wall) {
         Box(Modifier.fillMaxSize().padding(26.dp), contentAlignment = Alignment.Center) {
             Column(
                 Modifier
@@ -3013,6 +3014,7 @@ fun KDialog(
                 }
                 body()
             }
+        }
         }
     }
 }
@@ -4558,7 +4560,9 @@ fun LiquidChoiceDialog(
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
-        LocalAccent provides Palette.accent
+        LocalAccent provides Palette.accent,
+        // 弹窗里也要能取到 backdrop，否则 UiButton/UiSlider/UiSwitch 在玻璃风格下会退化成实心控件
+        LocalWallBackdrop provides backdrop
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
