@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
     /** 实验：状态栏真模糊（内容录两遍，只露顶部模糊条） */
-    private var expBlur by mutableStateOf(false)
+    private var expBlur by mutableStateOf(true)
     /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
     private var screenCorner by mutableStateOf(20f)
     private var fontChoice by mutableStateOf(AppFont.System)
@@ -334,7 +334,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
-        expBlur = false   // 实验开关暂时强制关闭：模糊层会糊出一大块白
+        expBlur = sp.getBoolean("expblur", true)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         val dk = sp.getBoolean("dark", false)
         logCmdColor = readLogColor(sp, "lc2Cmd")
@@ -2273,7 +2273,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         contentLayer.record { this@drawWithContent.drawContent() }
                         blurLayer.record { this@drawWithContent.drawContent() }
                         // 半径用 dp 转 px：之前写死 80f 是按像素算的，糊成一片白
-                        val r = 22.dp.toPx()
+                        val r = 8.dp.toPx()   // 模糊很轻，只做质感
                         blurLayer.renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r)
                         drawLayer(contentLayer)
                         // 只露顶部这一条，外面一律裁剪掉
@@ -2497,7 +2497,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(110.dp)
+                            .height(90.dp)
                             .background(
                                 Brush.verticalGradient(
                                     0f to Bg.copy(alpha = 0.99f),
@@ -5057,7 +5057,7 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
+                    .height(90.dp)
                     .then(
                         if (useBackdrop) {
                             Modifier.drawBackdrop(
