@@ -4398,7 +4398,10 @@ fun GlassConfirmDialog(
 @Composable
 fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -> Unit) {
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    // 文字颜色跟「壁纸」走而不是跟主题走：深色壁纸上一律白字，浅色壁纸才用黑字，
+    // 否则浅色主题 + 深壁纸时选项文字会糊在背景里看不清。
+    val lightWall = isLightWallpaper(LocalGlassAssets.current)
+    val contentColor = if (lightWall) Color.Black else Color.White
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val ctx = LocalContext.current
     val ver = remember {
@@ -4667,7 +4670,10 @@ fun LiquidChoiceDialog(
     onDelete: ((Int) -> Unit)? = null
 ) {
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    // 文字颜色跟「壁纸」走而不是跟主题走：深色壁纸上一律白字，浅色壁纸才用黑字，
+    // 否则浅色主题 + 深壁纸时选项文字会糊在背景里看不清。
+    val lightWall = isLightWallpaper(LocalGlassAssets.current)
+    val contentColor = if (lightWall) Color.Black else Color.White
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val dimColor = Palette.dim
 
