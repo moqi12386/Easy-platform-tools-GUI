@@ -3036,7 +3036,8 @@ fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
         UiStyle.Material -> 60.dp   // 自绘底栏内容高度
         UiStyle.Miuix -> 60.dp      // 自绘底栏内容高度
-        else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
+        // 玻璃/原生：底栏悬浮在内容之上，内容从下面穿过，所以不留空
+        else -> 0.dp
     }
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     return barHeight + nav
