@@ -3172,29 +3172,14 @@ private fun PartsDialog(
             }
         }
         Spacer(Modifier.height(8.dp))
-        val partsBd = LocalWallBackdrop.current
-        if (LocalStyle.current == UiStyle.Miuix) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "关闭", "Close"),
-                    onClick = onClose,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        } else if (useBackdrop && partsBd != null) {
-            // 「关闭」也换成液态按钮，读分区表这一屏之前只有一行蓝字
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiquidButton(
-                    onClick = onClose,
-                    backdrop = partsBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onClose) { Text(tr(lang, "关闭", "Close"), color = Palette.text2) }
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            GlassButton(
+                text = tr(lang, "关闭", "Close"),
+                onClick = onClose,
+                modifier = Modifier.fillMaxWidth(),
+                textColor = Palette.text,
+                surface = Color.White.copy(alpha = 0.3f)
+            )
         }
     }
 }
