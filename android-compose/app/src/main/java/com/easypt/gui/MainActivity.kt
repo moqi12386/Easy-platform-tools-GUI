@@ -2869,60 +2869,6 @@ fun KSelectRow(
     }
 }
 
-@Composable
-fun KSwitchRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String?,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val text = LocalCardText.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) { onCheckedChange(!checked) }
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val uiStyleS = LocalStyle.current
-        if (uiStyleS == UiStyle.Miuix) {
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(if (enabled) miuixIconColor(icon) else miuixIconColor(icon).copy(alpha = 0.4f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-            }
-        } else {
-            Icon(
-                icon, contentDescription = null,
-                tint = if (enabled) text else text.copy(alpha = 0.35f),
-                modifier = Modifier.size(23.dp)
-            )
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                color = if (enabled) text else text.copy(alpha = 0.4f),
-                fontSize = 16.sp
-            )
-            if (subtitle != null) {
-                Text(subtitle, color = text.copy(alpha = 0.55f), fontSize = 12.sp, lineHeight = 16.sp)
-            }
-        }
-        // 统一：四种风格都走 UiSwitch，颜色只来自 Palette，不再按风格分叉
-        UiSwitch(
-            checked = checked,
-            onCheckedChange = { onCheckedChange(it) },
-            enabled = enabled
-        )
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
