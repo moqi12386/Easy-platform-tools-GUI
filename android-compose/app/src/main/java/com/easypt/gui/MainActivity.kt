@@ -3695,42 +3695,25 @@ fun SettingsPage(
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val wall = LocalWallBackdrop.current
-                    if (useBackdrop && wall != null) {
-                        // 照抄 demo：一个 tint 的、一个 surfaceColor 的
-                        LiquidButton(
-                            onClick = onPickWallpaper,
-                            backdrop = wall,
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            tint = LocalAccent.current
-                        ) {
-                            Text(tr(lang, "选择图片", "Choose"), color = Color.White, fontSize = 14.sp)
-                        }
-                        LiquidButton(
-                            onClick = onResetWallpaper,
-                            backdrop = wall,
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            surfaceColor = Color.White.copy(alpha = 0.3f)
-                        ) {
-                            Text(tr(lang, "恢复默认", "Reset"), color = LocalCardText.current, fontSize = 14.sp)
-                        }
-                    } else {
-                        Button(
-                            onClick = onPickWallpaper,
-                            modifier = Modifier.weight(1f),
-                            colors = primaryButtonColors(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text(tr(lang, "选择图片", "Choose"), fontSize = 13.sp) }
-                        Button(
-                            onClick = onResetWallpaper,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = LocalCardText.current.copy(alpha = 0.10f),
-                                contentColor = LocalCardText.current
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text(tr(lang, "恢复默认", "Reset"), fontSize = 13.sp) }
-                    }
+                    GlassButton(
+                        text = tr(lang, "选择图片", "Choose"),
+                        onClick = onPickWallpaper,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 14.sp,
+                        height = 44.dp,
+                        primary = true,
+                        tint = LocalAccent.current
+                    )
+                    GlassButton(
+                        text = tr(lang, "恢复默认", "Reset"),
+                        onClick = onResetWallpaper,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 14.sp,
+                        height = 44.dp,
+                        textColor = LocalCardText.current,
+                        surface = Color.White.copy(alpha = 0.3f),
+                        plainBackground = LocalCardText.current.copy(alpha = 0.10f)
+                    )
                 }
             }
         }
