@@ -737,14 +737,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             while (logs.size > 300) logs.removeAt(0)
         }
         // 刷机期间：实况通知的文字跟着日志最新一行走（节流 300ms，避免刷爆通知）
-        if (busy) {
+        if (busy || liveBusy) {
             val now = System.currentTimeMillis()
             if (now - lastNotifyPush > 300L) {
                 lastNotifyPush = now
                 runCatching {
                     updateFlashLive(
                         LiveUpdate(
-                            t("线刷中", "Flashing"),
+                            if (busy) t("线刷中", "Flashing") else t("执行中", "Running"),
                             (if (flashPart.isEmpty()) "" else "$flashPart · ") + text.trim().take(70),
                             flashStep, flashMax
                         )
@@ -755,6 +755,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private var lastNotifyPush = 0L
+    /** 非刷机场景（执行命令 / 日志运行）也在推实况通知 */
+    private var liveBusy = false
     private var flashPart = ""
     private var flashStep = 0
     private var flashMax = 0
@@ -1438,6 +1440,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     fun runTyped(cmd: String) {
         if (cmd.isBlank()) return
         append("> $cmd", Accent)
+        // 执行命令也走实况通知：进度条不定长，文字跟着命令/输出走
+        liveBusy = true
+        runCatching { updateFlashLive(LiveUpdate(t("执行中", "Running"), cmd.trim().take(60), 0, 0)) }
         bg {
             when (mode) {
                 1 -> {
@@ -1450,6 +1455,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     append(r, if (r.startsWith("OKAY")) OkColor else ErrColor)
                 }
             }
+            liveBusy = false
+            runCatching {
+                updateFlashLive(
+                    LiveUpdate(t("命令结束", "Done"), cmd.trim().take(60), 1, 1, done = true)
+                )
+            }
+            finishFlashLive(true)
         }
     }
 
