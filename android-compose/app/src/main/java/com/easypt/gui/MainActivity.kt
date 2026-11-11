@@ -2710,24 +2710,6 @@ val LocalBarColor = androidx.compose.runtime.staticCompositionLocalOf { Color.Wh
 
 data class BarItem(val icon: ImageVector, val label: String)
 
-/** MIUIX 风格下的彩色图标底色 */
-fun miuixIconColor(icon: ImageVector): Color = when (icon) {
-    Icons.Filled.PlayArrow -> Color(0xFF4C8DFF)
-    Icons.Filled.Info -> Color(0xFF9AA0A6)
-    Icons.Filled.List -> Color(0xFF5B8DEF)
-    Icons.Filled.Build -> Color(0xFFFF9F0A)
-    Icons.Filled.Refresh -> Color(0xFF34C759)
-    Icons.Filled.Delete -> Color(0xFFFF3B30)
-    Icons.Filled.Share -> Color(0xFF0A84FF)
-    Icons.Filled.Lock -> Color(0xFF636366)
-    Icons.Filled.Warning -> Color(0xFFFF9500)
-    Icons.Filled.Star -> Color(0xFFFFCC00)
-    Icons.Filled.Public -> Color(0xFF007AFF)
-    Icons.Filled.Home -> Color(0xFF4C8DFF)
-    Icons.Filled.Settings -> Color(0xFF8E8E93)
-    Icons.Filled.Search -> Color(0xFF8E8E93)
-    else -> Color(0xFF5B8DEF)
-}
 
 // ======================= 通用组件 =======================
 
@@ -2754,15 +2736,7 @@ fun KRow(
         val uiStyle = LocalStyle.current
         if (icon != null) {
             if (uiStyle == UiStyle.Miuix) {
-                Box(
-                    Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(tint ?: miuixIconColor(icon)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-                }
+                IconTile(icon, tint)
             } else {
                 Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
             }
@@ -2856,15 +2830,7 @@ fun KSwitchRow(
     ) {
         val uiStyleS = LocalStyle.current
         if (uiStyleS == UiStyle.Miuix) {
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(if (enabled) miuixIconColor(icon) else miuixIconColor(icon).copy(alpha = 0.4f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-            }
+            IconTile(icon, enabled = enabled)
         } else {
             Icon(
                 icon, contentDescription = null,
