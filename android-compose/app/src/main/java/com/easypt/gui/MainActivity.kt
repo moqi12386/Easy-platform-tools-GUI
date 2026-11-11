@@ -5945,7 +5945,38 @@ fun LogColorDialog(
     }
 }
 
-/** 主按钮配色：原生风格不要彩色，用中性白底 */
+
+/** 主按钮配色：原生风格不要彩色，用中性白底（@Composable 见下） */
+/**
+ * 全 App 唯一的 Material 配色：所有 token 都从 Palette 来，
+ * 弹窗 / 开关 / 滑条 / 按钮 / 卡片因此必然同色，不会再各取各的。
+ * Palette.m3 非空时（系统动态色可用）直接用它。
+ */
+fun appScheme(dark: Boolean): androidx.compose.material3.ColorScheme {
+    Palette.m3?.let { return it }
+    val base = if (dark) androidx.compose.material3.darkColorScheme()
+               else androidx.compose.material3.lightColorScheme()
+    return base.copy(
+        primary = Palette.accent,
+        onPrimary = Color.White,
+        primaryContainer = Palette.accent.copy(alpha = 0.16f),
+        onPrimaryContainer = Palette.accent,
+        secondaryContainer = Palette.accent.copy(alpha = 0.24f),
+        onSecondaryContainer = Palette.accent,
+        surface = Palette.surface,
+        surfaceContainer = Palette.surface,
+        surfaceContainerLow = Palette.surface,
+        surfaceContainerHigh = Palette.surface,
+        surfaceContainerHighest = Palette.surface,
+        background = Palette.bg,
+        onBackground = Palette.text,
+        onSurface = Palette.text,
+        onSurfaceVariant = Palette.text2,
+        outline = Palette.text2.copy(alpha = 0.45f),
+        outlineVariant = Palette.text2.copy(alpha = 0.22f)
+    )
+}
+
 @Composable
 fun primaryButtonColors(): ButtonColors =
     if (LocalStyle.current == UiStyle.Native)
