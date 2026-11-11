@@ -5278,18 +5278,6 @@ fun LogColorDialog(
     }
     }
 }
-
-/** 主按钮配色：原生风格不要彩色，用中性白底 */
-@Composable
-fun primaryButtonColors(): ButtonColors =
-    if (LocalStyle.current == UiStyle.Native)
-        ButtonDefaults.buttonColors(
-            containerColor = Color.White.copy(alpha = 0.16f),
-            contentColor = Color.White
-        )
-    else
-        ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White)
-
 /** sRGB 亮度(0..1) -> WCAG 相对亮度 */
 fun relLuminance(v: Float): Float {
     val x = v.coerceIn(0f, 1f)
