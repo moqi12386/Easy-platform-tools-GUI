@@ -3659,11 +3659,11 @@ fun HomePage(
                         tint = Palette.accent
                     ) { Text(tr(lang, "执行", "Run"), color = Color.White, fontSize = 15.sp) }
                 } else {
-                    Button(
+                    UiButton(
+                        text = tr(lang, "执行", "Run"),
                         onClick = { onRun(cmd); cmd = "" },
-                        colors = primaryButtonColors(),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text(tr(lang, "执行", "Run")) }
+                    )
                 }
             }
         }
@@ -4081,12 +4081,11 @@ fun SettingsPage(
                             Text(tr(lang, "恢复默认", "Reset"), color = LocalCardText.current, fontSize = 14.sp)
                         }
                     } else {
-                        Button(
+                        UiButton(
+                            text = tr(lang, "选择图片", "Choose"),
                             onClick = onPickWallpaper,
-                            modifier = Modifier.weight(1f),
-                            colors = primaryButtonColors(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text(tr(lang, "选择图片", "Choose"), fontSize = 13.sp) }
+                            modifier = Modifier.weight(1f)
+                        )
                         Button(
                             onClick = onResetWallpaper,
                             modifier = Modifier.weight(1f),
@@ -5076,11 +5075,11 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
                         Text(tr(lang, "关闭", "Close"), color = Color.White, fontSize = 15.sp)
                     }
                 } else {
-                    Button(
+                    UiButton(
+                        text = tr(lang, "关闭", "Close"),
                         onClick = onClose,
-                        colors = primaryButtonColors(),
                         shape = RoundedCornerShape(50)
-                    ) { Text(tr(lang, "关闭", "Close")) }
+                    )
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -5910,16 +5909,6 @@ fun appScheme(dark: Boolean): androidx.compose.material3.ColorScheme {
         outlineVariant = Palette.text2.copy(alpha = 0.22f)
     )
 }
-
-@Composable
-fun primaryButtonColors(): ButtonColors =
-    if (LocalStyle.current == UiStyle.Native)
-        ButtonDefaults.buttonColors(
-            containerColor = Color.White.copy(alpha = 0.16f),
-            contentColor = Color.White
-        )
-    else
-        ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White)
 
 /** sRGB 亮度(0..1) -> WCAG 相对亮度 */
 fun relLuminance(v: Float): Float {
