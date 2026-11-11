@@ -2625,12 +2625,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         }
                                     }
                                 }
-                                // 导航条区域：同色铺满，小白条就画在这上面（按小米文档）
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .windowInsetsBottomHeight(WindowInsets.navigationBars)
-                                )
+                                // 不做导航条占位：两种风格统一成 70dp 高度
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
