@@ -3603,7 +3603,6 @@ fun HomePage(
             // 不在这里垫状态栏：内容要能滚到状态栏下面（沉浸），
             // 初始留白放到滚动内容里的第一个 Spacer
             .padding(horizontal = 20.dp)
-            .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
     ) {
         androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
@@ -3884,6 +3883,7 @@ fun HomePage(
 
         Spacer(Modifier.height(12.dp))
 
+        androidx.compose.foundation.layout.Spacer(Modifier.height(bottomSpacer()))
         }
 }
 
@@ -3958,7 +3958,6 @@ fun SettingsPage(
             // 不在这里垫状态栏：内容要能滚到状态栏下面（沉浸），
             // 初始留白放到滚动内容里的第一个 Spacer
             .padding(horizontal = 20.dp)
-            .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
     ) {
         val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
@@ -4440,6 +4439,7 @@ fun SettingsPage(
             }
         }
         Spacer(Modifier.height(16.dp))
+        androidx.compose.foundation.layout.Spacer(Modifier.height(bottomSpacer()))
     }
 }
 
