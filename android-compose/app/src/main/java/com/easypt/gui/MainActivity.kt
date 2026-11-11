@@ -2715,6 +2715,9 @@ object Palette {
 
     /** 玻璃 / 原生 在不支持取样的机器上的纯色兜底 */
     val glassSolid: Color get() = if (dark) Color(0xFF1F2026) else Color(0xFFFFFFFF)
+
+    /** 弹窗背后的遮罩：浅色用偏蓝的深色，深色直接压黑 */
+    val dim: Color get() = if (dark) Color(0xFF121212).copy(alpha = 0.56f) else Color(0xFF29293A).copy(alpha = 0.23f)
 }
 
 /** 卡片里的文字颜色：玻璃/深色卡片用白字，其余跟随主题 */
@@ -4189,7 +4192,7 @@ fun GlassDialogPanel(
 ) {
     val light = !Palette.dark
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
-    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+    val dimColor = Palette.dim
 
     // Material：用官方 M3 对话框
     if (LocalStyle.current == UiStyle.Material) {
@@ -4808,7 +4811,7 @@ fun LiquidChoiceDialog(
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
-    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+    val dimColor = Palette.dim
 
     // Material：官方 M3 对话框，皮肤在 MaterialSlots.MaterialChoiceDialog
     if (LocalStyle.current == UiStyle.Material) {
