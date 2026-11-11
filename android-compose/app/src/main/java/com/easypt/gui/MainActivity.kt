@@ -193,6 +193,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var fontChoice by mutableStateOf(AppFont.System)
     /** 启动时自动检查更新（默认开启，可在设置里关掉） */
     private var autoUpdate by mutableStateOf(true)
+    /** 仅供测试：控制设置里是否显示模拟刷机等调试入口 */
+    private var testTools by mutableStateOf(false)
     private var customFont by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
     /** 在线字体已加载的家族，key = AppFont.name */
     private val onlineFamilies =
@@ -789,6 +791,36 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ),
                 ErrColor
             )
+        }
+    }
+
+    /**
+     * 模拟刷机：不碰 USB，只跑「日志 + 实况通知 + 胶囊」这条链路。
+     * 用来测通知效果，不必真的反复刷机。
+     */
+    fun simulateFlash() {
+        if (flashing) return
+        bg {
+            flashing = true
+            flashMax = 24
+            flashStep = 0
+            flashPart = ""
+            append(t("=== 模拟刷机开始（不连接任何设备）===", "=== simulated flash (no device) ==="), Accent)
+            updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, 24))
+            val parts = listOf("vendor", "system", "product")
+            for (i in 1..24) {
+                flashPart = parts[(i - 1) / 8]
+                flashStep = i
+                append("[${i}/24] 写入 ${flashPart}.img", Accent)
+                for (p in listOf(10, 40, 70, 100)) {
+                    append("  $p%", TextSecondary)
+                    Thread.sleep(120)
+                }
+                append("  OK", OkColor)
+            }
+            append(t("模拟刷机结束：成功 24 · 失败 0", "simulated flash done: 24 ok"), OkColor)
+            flashing = false
+            finishFlashLive(true)
         }
     }
 
@@ -2099,6 +2131,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 启动时按设置决定要不要检查更新（默认开启，设置里可关）
         LaunchedEffect(Unit) {
             autoUpdate = getSharedPreferences(PREF, MODE_PRIVATE).getBoolean("autoupdate", true)
+        testTools = getSharedPreferences(PREF, MODE_PRIVATE).getBoolean("testtools", false)
             if (autoUpdate) checkUpdate()
         }
         // 字体诊断：每次字体变化打一条，便于确认「已应用但没效果」到底卡在哪
@@ -2343,6 +2376,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("autoupdate", v).apply()
                                         },
                                         onCheckUpdate = { checkUpdate(true) },
+                            onSimulateFlash = { simulateFlash() },
+                            showTestTools = testTools,
+                            onTestTools = { v ->
+                                testTools = v
+                                getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("testtools", v).apply()
+                            },
                                         downloadedFonts = onlineFamilies.keys.mapNotNull { k ->
                                             AppFont.entries.firstOrNull { it.name == k }
                                         }.toSet(),
@@ -3731,6 +3770,9 @@ fun SettingsPage(
     onLogColors: () -> Unit,
     autoUpdate: Boolean,
     onAutoUpdate: (Boolean) -> Unit,
+    onSimulateFlash: () -> Unit,
+    showTestTools: Boolean,
+    onTestTools: (Boolean) -> Unit,
     onCheckUpdate: () -> Unit,
     downloadedFonts: Set<AppFont>,
     fontTargetKey: String,
@@ -4102,6 +4144,25 @@ fun SettingsPage(
             )
             // Shizuku 授权：绕过小米超级岛白名单需要它去掐 XMSF 网络。
             // 状态实时反映，点一下就去 Shizuku 拉授权。
+            // 调试开关：默认关，打开后才出现模拟刷机等入口
+            AppSwitchRow(
+                icon = Icons.Filled.Warning,
+                title = tr(lang, "仅供测试", "Test only"),
+                subtitle = tr(
+                    lang, "打开后显示模拟刷机等调试入口，普通使用请保持关闭",
+                    "Shows debug entries such as simulated flashing; keep it off normally"
+                ),
+                checked = showTestTools,
+                onCheckedChange = { onTestTools(it) }
+            )
+            if (showTestTools) {
+                AppRow(
+                    icon = Icons.Filled.Refresh,
+                    title = tr(lang, "模拟刷机（测试实况通知）", "Simulate a flash"),
+                    subtitle = tr(lang, "不连接设备，只跑进度通知和胶囊", "no device, only the notification path"),
+                    onClick = { onSimulateFlash() }
+                )
+            }
             AppRow(
                 icon = Icons.Filled.Lock,
                 title = tr(lang, "Shizuku 授权", "Shizuku permission"),
