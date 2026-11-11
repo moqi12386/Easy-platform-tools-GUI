@@ -2564,8 +2564,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(screenCorner.dp))
-                                    .background(MaterialTheme.colorScheme.surface)
+                                    // 用带形状的 background 直接填充，不用 clip：
+                                    // clip + background 会在边缘留 1px 抗锯齿缝，透出后面的深色
+                                    .background(
+                                        MaterialTheme.colorScheme.surface,
+                                        RoundedCornerShape(screenCorner.dp)
+                                    )
                             ) {
                                 Row(
                                     Modifier.fillMaxWidth().height(60.dp),
