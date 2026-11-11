@@ -3344,70 +3344,28 @@ fun HomePage(
                     Text(tr(lang, "· 执行中", "· running"), color = LocalAccent.current, fontSize = 12.sp)
                 }
                 Spacer(Modifier.weight(1f))
-                val clearWall = LocalWallBackdrop.current
-                // 先「清空」，再隔开一段距离放「放大」：
-                // 两个按钮贴在一起时，想放大很容易点到清空（清空是不可撤销的）
-                if (style == UiStyle.Material) {
-                    // Material 风格：直接用官方 TextButton（自带水波纹和 M3 内边距）
-                    TextButton(onClick = onClear) {
-                        Text(tr(lang, "清空", "Clear"), style = MaterialTheme.typography.labelLarge)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onBigLog) {
-                        Text(tr(lang, "放大", "Expand"), style = MaterialTheme.typography.labelLarge)
-                    }
-                } else if (style == UiStyle.Miuix) {
-                    // MIUIX：官方 TextButton（docs/components/button.md）
-                    top.yukonga.miuix.kmp.basic.TextButton(
-                        text = tr(lang, "清空", "Clear"),
-                        onClick = onClear
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    top.yukonga.miuix.kmp.basic.TextButton(
-                        text = tr(lang, "放大", "Expand"),
-                        onClick = onBigLog
-                    )
-                } else if (useBackdrop && clearWall != null) {
-                    // 玻璃风格下「清空」是个真的液态按钮，不是一行蓝字
-                    LiquidButton(
-                        onClick = onClear,
-                        backdrop = clearWall,
-                        modifier = Modifier.height(48.dp),
-                        surfaceColor = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
-                        else Color.White.copy(alpha = 0.35f)
-                    ) {
-                        Text(tr(lang, "清空", "Clear"), color = text, fontSize = 13.sp)
-                    }
-                } else {
-                    Text(
-                        tr(lang, "清空", "Clear"),
-                        color = LocalAccent.current, fontSize = 13.sp,
-                        modifier = Modifier.clickable { onClear() }
-                    )
-                }
-                if (style != UiStyle.Material && style != UiStyle.Miuix) {
-                    Spacer(Modifier.width(22.dp))
-                    // 「放大」：把日志铺满整屏，刷机时能一次看到更多行（放最右边，最常用）
-                    if (useBackdrop && clearWall != null) {
-                        LiquidButton(
-                            onClick = onBigLog,
-                            backdrop = clearWall,
-                            modifier = Modifier.height(48.dp),
-                            surfaceColor = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
-                            else Color.White.copy(alpha = 0.35f)
-                        ) {
-                            Text(tr(lang, "放大", "Expand"), color = text, fontSize = 13.sp)
-                        }
-                    } else {
-                        Text(
-                            tr(lang, "放大", "Expand"),
-                            color = LocalAccent.current, fontSize = 13.sp,
-                            modifier = Modifier.clickable { onBigLog() }
-                        )
-                    }
-                }
+                // 「清空」和「放大」都走 GlassButton：MIUIX 自动用 miuix 文字按钮、
+                // 玻璃用液态按钮、其它风格退化成透明胶囊文字（原来这里是四段分支）。
+                GlassButton(
+                    text = tr(lang, "清空", "Clear"),
+                    onClick = onClear,
+                    fontSize = 13.sp,
+                    textColor = text,
+                    surface = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                    else Color.White.copy(alpha = 0.35f),
+                    plainBackground = Color.Transparent
+                )
+                Spacer(Modifier.width(22.dp))
+                GlassButton(
+                    text = tr(lang, "放大", "Expand"),
+                    onClick = onBigLog,
+                    fontSize = 13.sp,
+                    textColor = text,
+                    surface = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                    else Color.White.copy(alpha = 0.35f),
+                    plainBackground = Color.Transparent
+                )
             }
-            // 日志输出框：和「fastboot 命令」输入框同一套底料
             val logShape = remember { RoundedCornerShape(16.dp) }
             val logSurface = if (style == UiStyle.Material) {
                 // Material：日志区就是一块 M3 tonal surface，不用再自绘底板
