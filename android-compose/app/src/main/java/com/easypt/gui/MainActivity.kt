@@ -3093,22 +3093,12 @@ fun KSwitchRow(
                 Text(subtitle, color = text.copy(alpha = 0.55f), fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
-        val wall = LocalWallBackdrop.current
-        if (useBackdrop && wall != null) {
-            // 照 demo 原样：LiquidToggle 自带 64x28 胶囊尺寸，不要套盒子改尺寸
-            LiquidToggle(
-                selected = { checked },
-                onSelect = { onCheckedChange(it) },
-                backdrop = wall
-            )
-        } else {
-            // 统一组件：颜色全部走 Ui（= Palette），不再写 MaterialTheme/硬编码
-            UiSwitch(
-                checked = checked,
-                onCheckedChange = { onCheckedChange(it) },
-                enabled = enabled
-            )
-        }
+        // 统一：四种风格都走 UiSwitch，颜色只来自 Palette，不再按风格分叉
+        UiSwitch(
+            checked = checked,
+            onCheckedChange = { onCheckedChange(it) },
+            enabled = enabled
+        )
     }
 }
 
@@ -3176,6 +3166,7 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
             Text("${value.toInt()}%", color = LocalCardText.current.copy(alpha = 0.55f), fontSize = 14.sp)
         }
         val wall = LocalWallBackdrop.current
+        android.util.Log.i("EasyPT", "switchProbe style=" + LocalStyle.current + " useBackdrop=" + useBackdrop + " wall=" + (wall != null) + " dark=" + Palette.dark)
         if (useBackdrop && wall != null) {
             // demo 的 LiquidSlider 原样使用（手势已经在 DragGestureInspector 里改成 Initial 阶段抢占）
             LiquidSlider(
