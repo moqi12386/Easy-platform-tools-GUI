@@ -3253,47 +3253,14 @@ fun ConfirmDialog(
     AppDialog(style, title, onDismiss) {
         Text(message, color = Palette.text2, fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
-        val eraseBd = LocalWallBackdrop.current
-        if (LocalStyle.current == UiStyle.Miuix) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = onConfirm,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White) }
-            }
-        } else if (useBackdrop && eraseBd != null) {
-            // 玻璃风格：跟「线刷步骤」「选择脚本」那几个框一样，用 demo 的 LiquidButton
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = eraseBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
-                LiquidButton(
-                    onClick = onConfirm,
-                    backdrop = eraseBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Danger
-                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White, fontSize = 15.sp) }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
-                Spacer(Modifier.width(6.dp))
-                Button(
-                    onClick = onConfirm,
-                    colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text(tr(lang, "擦除", "Erase")) }
-            }
-        }
+        // 统一动作行（危险操作传 confirmColor）
+        UiDialogActions(
+            confirmText = tr(lang, "擦除", "Erase"),
+            onConfirm = onConfirm,
+            dismissText = tr(lang, "取消", "Cancel"),
+            onDismiss = onDismiss,
+            confirmColor = Danger
+        )
     }
 }
 
@@ -3458,30 +3425,11 @@ private fun PartsDialog(
             }
         }
         Spacer(Modifier.height(8.dp))
-        val partsBd = LocalWallBackdrop.current
-        if (LocalStyle.current == UiStyle.Miuix) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "关闭", "Close"),
-                    onClick = onClose,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        } else if (useBackdrop && partsBd != null) {
-            // 「关闭」也换成液态按钮，读分区表这一屏之前只有一行蓝字
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiquidButton(
-                    onClick = onClose,
-                    backdrop = partsBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onClose) { Text(tr(lang, "关闭", "Close"), color = Palette.text2) }
-            }
-        }
+        // unified action row
+        UiDialogActions(
+            confirmText = tr(lang, "关闭", "Close"),
+            onConfirm = onClose
+        )
     }
 }
 
@@ -4326,31 +4274,11 @@ fun SettingsPage(
                         Text(crashText, color = Palette.text2, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                     }
                     Spacer(Modifier.height(10.dp))
-                    val crashBd = LocalWallBackdrop.current
-                    if (LocalStyle.current == UiStyle.Miuix) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            top.yukonga.miuix.kmp.basic.TextButton(
-                                text = tr(lang, "关闭", "Close"),
-                                onClick = { showCrash = false },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    } else if (useBackdrop && crashBd != null) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LiquidButton(
-                                onClick = { showCrash = false },
-                                backdrop = crashBd,
-                                modifier = Modifier.weight(1f).height(48.dp),
-                                surfaceColor = Color.White.copy(alpha = 0.3f)
-                            ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
-                        }
-                    } else {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { showCrash = false }) {
-                                Text(tr(lang, "关闭", "Close"), color = Palette.text2)
-                            }
-                        }
-                    }
+                    // unified action row
+                    UiDialogActions(
+                        confirmText = tr(lang, "关闭", "Close"),
+                        onConfirm = { showCrash = false }
+                    )
                 }
             }
         }
@@ -4736,69 +4664,14 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
             Modifier.padding(24.dp, 0.dp, 24.dp, 24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val bd = LocalWallBackdrop.current
             val last = page == pages.lastIndex
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "先不看", "Later"),
-                    onClick = { onDone() },
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = { if (last) onDone() else page++ },
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        if (last) tr(lang, "开始使用", "Get started") else tr(lang, "下一步", "Next"),
-                        color = Color.White
-                    )
-                }
-            } else if (useBackdrop && bd != null) {
-                LiquidButton(
-                    onClick = { if (last) onDone() else onDone() },
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
-                LiquidButton(
-                    onClick = { if (last) onDone() else page++ },
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
-                ) {
-                    Text(
-                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
-                        color = Color.White, fontSize = 15.sp
-                    )
-                }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(contentColor.copy(alpha = 0.10f))
-                        .clickable { onDone() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Palette.accent)
-                        .clickable { if (last) onDone() else page++ }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
-                        color = Color.White, fontSize = 15.sp
-                    )
-                }
-            }
+            // unified action row
+            UiDialogActions(
+                confirmText = if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
+                onConfirm = { if (last) onDone() else page++ },
+                dismissText = tr(lang, "先不看", "Later"),
+                onDismiss = { onDone() }
+            )
         }
     }
 }
