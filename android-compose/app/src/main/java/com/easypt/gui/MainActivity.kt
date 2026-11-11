@@ -338,6 +338,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
         expBlur = sp.getBoolean("expblur", false)
+        Palette.cardTint = sp.getFloat("cardtint", 0.06f)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         val dk = sp.getBoolean("dark", false)
         logCmdColor = readLogColor(sp, "lc2Cmd")
@@ -2467,6 +2468,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             onSimulateFlash = { simulateFlash() },
                             showTestTools = testTools,
                             expBlur = expBlur,
+                            onCardTint = { v ->
+                                Palette.cardTint = v
+                                getSharedPreferences(PREF, MODE_PRIVATE).edit().putFloat("cardtint", v).apply()
+                            },
                             onExpBlur = { v ->
                                 expBlur = v
                                 getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("expblur", v).apply()
@@ -2885,6 +2890,9 @@ object Palette {
      */
     var m3: androidx.compose.material3.ColorScheme? = null
 
+    /** 卡片掺色强度（0 ~ 0.3），设置里可调；越大卡片越明显带壁纸色 */
+    var cardTint: Float by androidx.compose.runtime.mutableStateOf(0.06f)
+
     val bg: Color
         get() = m3?.background ?: run {
             val base = if (dark) Color(0xFF101114) else Color(0xFFF2F3F5)
@@ -2899,7 +2907,7 @@ object Palette {
             )
         } ?: run {
             val base = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
-            monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.12f else 0.06f) } ?: base
+            monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, cardTint) } ?: base
         }
     val text: Color get() = m3?.onSurface ?: if (dark) Color(0xFFECEDEF) else Color(0xFF16181D)
     val text2: Color get() = m3?.onSurfaceVariant ?: if (dark) Color(0xFF9A9DA5) else Color(0xFF8C9199)
@@ -3956,6 +3964,7 @@ fun SettingsPage(
     onTestTools: (Boolean) -> Unit,
     expBlur: Boolean,
     onExpBlur: (Boolean) -> Unit,
+    onCardTint: (Float) -> Unit,
     onCheckUpdate: () -> Unit,
     downloadedFonts: Set<AppFont>,
     fontTargetKey: String,
@@ -4097,6 +4106,23 @@ fun SettingsPage(
                     enabled = canMonet,
                     onCheckedChange = onMonet
                 )
+                // 卡片掺色强度：调大后卡片更明显地带壁纸色
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        tr(lang, "卡片色深  ${(Palette.cardTint * 100).toInt()}%",
+                            "Card tint  ${(Palette.cardTint * 100).toInt()}%"),
+                        color = Palette.text, fontSize = 14.sp
+                    )
+                    androidx.compose.material3.Slider(
+                        value = Palette.cardTint,
+                        onValueChange = { onCardTint(it) },
+                        valueRange = 0f..0.30f
+                    )
+                }
             }
         }
 
