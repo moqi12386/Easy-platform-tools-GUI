@@ -3199,37 +3199,11 @@ fun KDialog(
     onDismiss: () -> Unit = {},
     body: @Composable ColumnScope.() -> Unit
 ) {
-    // Material：用官方 M3 对话框（BasicAlertDialog + Surface），不套自绘面板
-    if (style == UiStyle.Material) {
-        MaterialDialog(title = title, onDismiss = onDismiss, body = body)
-        return
-    }
+    // one dialog implementation for every style: colour from Ui, glass adds a backdrop
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        // MIUIX：容器换成库里的 Card。只加这一个分支，
-        // 所有基于 KDialog 的弹窗（线刷步骤 / 分区表 / 擦除确认 / 崩溃日志）一起变成 MIUIX 皮，
-        // 液态玻璃和其它样式的代码一行没动
-        if (style == UiStyle.Miuix) {
-            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-                        Column(Modifier.padding(20.dp)) {
-                            Text(
-                                title,
-                                color = MiuixTheme.colorScheme.onBackground,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            body()
-                        }
-                    }
-                }
-            }
-            return@Dialog
-        }
         val shape = remember { RoundedCornerShape(26.dp) }
         val wall = LocalWallBackdrop.current
         Box(Modifier.fillMaxSize().padding(26.dp), contentAlignment = Alignment.Center) {
