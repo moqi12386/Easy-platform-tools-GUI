@@ -2932,22 +2932,6 @@ fun PageTitle(text: String) {
 }
 
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Palette.text,
-    unfocusedTextColor = Palette.text,
-    disabledTextColor = Palette.text2,
-    focusedContainerColor = Palette.inset,
-    unfocusedContainerColor = Palette.inset,
-    cursorColor = LocalAccent.current,
-    focusedBorderColor = LocalAccent.current.copy(alpha = 0.6f),
-    unfocusedBorderColor = Palette.outline,
-    focusedLabelColor = LocalAccent.current,
-    unfocusedLabelColor = Palette.text2,
-    focusedPlaceholderColor = Palette.text2,
-    unfocusedPlaceholderColor = Palette.text2
-)
-
-@Composable
 fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -5773,50 +5757,6 @@ fun ensureContrast(c: Color, bg: Color): Color {
         guard++
     }
     return out
-}
-
-/** 在线字体行：右侧显示体积 + 下载按钮 / 进度 */
-@Composable
-fun OnlineFontRow(
-    lang: Lang,
-    title: String,
-    sizeText: String,
-    ready: Boolean,
-    downloading: Boolean,
-    progress: Int,
-    onStart: () -> Unit
-) {
-    val wall = LocalWallBackdrop.current
-    AppRow(
-        null,
-        title,
-        if (ready) tr(lang, "已下载", "downloaded") else sizeText,
-        trailing = {
-            if (downloading) {
-                Text("$progress%", color = LocalAccent.current, fontSize = 13.sp)
-            } else {
-                if (useBackdrop && wall != null) {
-                    LiquidButton(
-                        onClick = onStart,
-                        backdrop = wall,
-                        modifier = Modifier.height(36.dp),
-                        tint = if (ready) LocalAccent.current else Color.Unspecified
-                    ) {
-                        Text(
-                            if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
-                            color = if (ready) Color.White else Palette.text, fontSize = 13.sp
-                        )
-                    }
-                } else {
-                    Text(
-                        if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
-                        color = LocalAccent.current, fontSize = 13.sp,
-                        modifier = Modifier.clickable { onStart() }
-                    )
-                }
-            }
-        }
-    )
 }
 
 /** 进程级日志缓冲：Activity 与 FlashService 共用 */
