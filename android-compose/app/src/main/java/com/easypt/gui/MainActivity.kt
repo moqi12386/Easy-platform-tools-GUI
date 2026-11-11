@@ -3132,47 +3132,14 @@ private fun RomDialog(
             }
         }
         Spacer(Modifier.height(16.dp))
-        val romBd = LocalWallBackdrop.current
-        if (LocalStyle.current == UiStyle.Miuix) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = onStart,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White) }
-            }
-        } else if (useBackdrop && romBd != null) {
-            // 「开始刷写」也要是液态按钮，之前这里还是 Material 的实心蓝按钮
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = romBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
-                LiquidButton(
-                    onClick = onStart,
-                    backdrop = romBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
-                ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White, fontSize = 15.sp) }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
-                Spacer(Modifier.width(6.dp))
-                Button(
-                    onClick = onStart,
-                    colors = primaryButtonColors(),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text(tr(lang, "开始刷写", "Start")) }
-            }
-        }
+        Spacer(Modifier.height(16.dp))
+        DialogActions(
+            dismissText = tr(lang, "取消", "Cancel"),
+            onDismiss = onDismiss,
+            confirmText = tr(lang, "开始刷写", "Start"),
+            onConfirm = onStart,
+            confirmColor = LocalAccent.current
+        )
     }
 }
 
