@@ -5153,7 +5153,15 @@ private fun SliderRow(
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            Slider(value = value, onValueChange = onChange, valueRange = min..max)
+            androidx.compose.material3.Slider(
+                value = value, onValueChange = onChange, valueRange = min..max,
+                // 滑条也要跟着壁纸取色，不用 M3 默认的紫色主色
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = Palette.accent,
+                    activeTrackColor = Palette.accent,
+                    inactiveTrackColor = Palette.accent.copy(alpha = 0.24f)
+                )
+            )
         }
     }
 }
