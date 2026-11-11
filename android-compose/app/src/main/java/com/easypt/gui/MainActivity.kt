@@ -2621,7 +2621,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                                     .height(28.dp)
                                                     .clip(RoundedCornerShape(50))
                                                     .background(
-                                                        if (sel) LocalAccent.current.copy(alpha = 0.14f)
+                                                        if (sel) Palette.accent.copy(alpha = 0.14f)
                                                         else Color.Transparent
                                                     ),
                                                 contentAlignment = Alignment.Center
@@ -3119,7 +3119,7 @@ fun KSwitchRow(
                 enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = LocalAccent.current,
+                    checkedTrackColor = Palette.accent,   // 实时读，跟卡片同源
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
                     uncheckedBorderColor = Color.Transparent
@@ -4188,7 +4188,7 @@ fun SettingsPage(
                             .fillMaxWidth()
                             .padding(horizontal = 18.dp, vertical = 6.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(LocalAccent.current.copy(alpha = 0.14f))
+                            .background(Palette.accent.copy(alpha = 0.14f))
                             .clickable { onResetGlass() }
                             .padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.Center
