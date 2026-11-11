@@ -3034,8 +3034,8 @@ fun KDialog(
                                 },
                                 onDrawSurface = {
                                     drawRect(
-                                        if (Palette.dark) Color(0xFF121212).copy(alpha = 0.6f)
-                                        else Color(0xFFFAFAFA).copy(alpha = 0.6f)
+                                        Palette.glassTint.copy(alpha = 0.6f)
+                                        
                                     )
                                 }
                             )
@@ -4268,8 +4268,8 @@ fun LiquidBottomBar(
                     }
             ) {
                 // —— 以下参数照抄 AndroidLiquidGlass 的 LiquidBottomTabs ——
-                val containerColor = if (dark) Color(0xFF121212).copy(alpha = 0.4f)
-                else Color(0xFFFAFAFA).copy(alpha = 0.4f)
+                val containerColor = Palette.glassTint.copy(alpha = 0.4f)
+                
                 val surfaceMod = when {
                     // 原生风格：和上面卡片完全同一个色板，风格统一
                     mono -> Modifier
@@ -4368,7 +4368,7 @@ fun GlassDialogPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val light = !Palette.dark
-    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
     // Material：用官方 M3 对话框
@@ -4453,13 +4453,13 @@ fun GlassDialogPanel(
                                     blurLevel = 0.25f,
                                     density = 0.6f,
                                     light = light,
-                                    tint = if (light) Color.White else Color(0xFF121212),
+                                    tint = Palette.glassTint,
                                     tintAlpha = if (light) 0.55f else 0.5f
                                 )
                             } else {
                                 Modifier
                                     .clip(RoundedCornerShape(48.dp))
-                                    .background(if (light) Color(0xFFFAFAFA) else Color(0xFF1B1C20))
+                                    .background(if (light) Palette.glassTint else Color(0xFF1B1C20))
                             }
                         }
                     )
@@ -4685,7 +4685,7 @@ fun GlassConfirmDialog(
 fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -> Unit) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
-    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val ctx = LocalContext.current
     val ver = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
@@ -4991,7 +4991,7 @@ fun LiquidChoiceDialog(
 ) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
-    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
     // Material：官方 M3 对话框；选项用 M3 ListItem，取消用 TextButton
@@ -5165,8 +5165,8 @@ fun glassInsetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
             },
             onDrawSurface = {
                 drawRect(
-                    if (Palette.dark) Color(0xFF121212).copy(alpha = 0.45f)
-                    else Color(0xFFFAFAFA).copy(alpha = 0.55f)
+                    Palette.glassTint.copy(alpha = if (Palette.dark) 0.45f else 0.55f)
+                    
                 )
             }
         )
@@ -5465,7 +5465,7 @@ fun LogColorDialog(
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
     // 和日志输出框同一套底料（glassInsetSurface），预览和对比度保护才准
-    val bgSample = if (light) Color(0xFFFAFAFA) else Color(0xFF121212)
+    val bgSample = Palette.glassTint
     var colors by remember { mutableStateOf(initial) }
     var active by remember { mutableIntStateOf(0) }
     val names = listOf(
