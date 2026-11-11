@@ -2798,21 +2798,21 @@ data class BarItem(val icon: ImageVector, val label: String)
 
 /** MIUIX 风格下的彩色图标底色 */
 fun miuixIconColor(icon: ImageVector): Color = when (icon) {
-    Icons.Filled.PlayArrow -> Color(0xFF4C8DFF)
-    Icons.Filled.Info -> Color(0xFF9AA0A6)
-    Icons.Filled.List -> Color(0xFF5B8DEF)
+    Icons.Filled.PlayArrow -> Tints.blue
+    Icons.Filled.Info -> Tints.gray
+    Icons.Filled.List -> Tints.blue
     Icons.Filled.Build -> Tints.orange
     Icons.Filled.Refresh -> Tints.green
     Icons.Filled.Delete -> Tints.red
     Icons.Filled.Share -> Tints.blue
-    Icons.Filled.Lock -> Color(0xFF636366)
-    Icons.Filled.Warning -> Color(0xFFFF9500)
-    Icons.Filled.Star -> Color(0xFFFFCC00)
-    Icons.Filled.Public -> Color(0xFF007AFF)
-    Icons.Filled.Home -> Color(0xFF4C8DFF)
-    Icons.Filled.Settings -> Color(0xFF8E8E93)
-    Icons.Filled.Search -> Color(0xFF8E8E93)
-    else -> Color(0xFF5B8DEF)
+    Icons.Filled.Lock -> Tints.gray
+    Icons.Filled.Warning -> Tints.orange
+    Icons.Filled.Star -> Tints.orange
+    Icons.Filled.Public -> Tints.blue
+    Icons.Filled.Home -> Tints.blue
+    Icons.Filled.Settings -> Tints.gray
+    Icons.Filled.Search -> Tints.gray
+    else -> Tints.blue
 }
 
 // ======================= 通用组件 =======================
@@ -2973,7 +2973,7 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = Palette.inset,
     cursorColor = Palette.accent,
     focusedBorderColor = Palette.accent.copy(alpha = 0.6f),
-    unfocusedBorderColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9),
+    unfocusedBorderColor = Palette.text2.copy(alpha = 0.45f),
     focusedLabelColor = Palette.accent,
     unfocusedLabelColor = Palette.text2,
     focusedPlaceholderColor = Palette.text2,
@@ -5025,7 +5025,7 @@ fun LogColorDialog(
                 .navigationBarsPadding()
                 .padding(12.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(if (Palette.dark) Color(0xFF17181C) else Color(0xFFF7F8FA))
+                .background(Palette.bg)
         ) {
         Text(
             tr(lang, "日志颜色", "Log colors"),
