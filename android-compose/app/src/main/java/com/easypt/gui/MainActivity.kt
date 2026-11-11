@@ -739,15 +739,24 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 只有「线刷」才推实况通知：检查更新/读分区表这类后台活不碰它，
         // 否则前台服务会被任何动作拉起来常驻，保活过强
         if (flashing) {
+            // 节流 900ms：之前 300ms 太快，胶囊闪得看不清
             val now = System.currentTimeMillis()
-            if (now - lastNotifyPush > 300L) {
+            val pct = run {
+                val m = Regex("(\\d{1,3})\\s*%").find(text)
+                m?.groupValues?.get(1)
+                    ?: if (flashMax > 0) (flashStep * 100 / flashMax).toString() else "0"
+            }
+            val cap = if (flashPart.isEmpty()) "$pct%" else "$flashPart · $pct%"
+            if (cap != lastCapText && now - lastNotifyPush > 900L) {
+                lastCapText = cap
                 lastNotifyPush = now
                 runCatching {
                     updateFlashLive(
                         LiveUpdate(
                             t("线刷中", "Flashing"),
                             text.trim().take(70),
-                            flashStep, flashMax
+                            flashStep, flashMax,
+                            short = cap
                         )
                     )
                 }
@@ -757,6 +766,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     private var lastNotifyPush = 0L
     private var flashPart = ""
+    private var lastCapText = ""
     /** 只有线刷过程为 true —— 实况通知只在这段时间存在 */
     private var flashing = false
     private var flashStep = 0
