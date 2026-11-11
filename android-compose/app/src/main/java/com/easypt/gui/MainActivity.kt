@@ -3784,8 +3784,6 @@ fun SettingsPage(
                 if (slidersOpen) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 SliderRow(style, tr(lang, "面板不透明度", "Panel opacity"), opacity, onOpacity)
-                SliderRow(style, tr(lang, "玻璃模糊", "Glass blur"), glassBlur, onGlassBlur)
-                SliderRow(style, tr(lang, "玻璃浓度", "Glass density"), glassDensity, onGlassDensity)
                 Spacer(Modifier.height(2.dp))
                 // 统一次级按钮（玻璃风格会自动换成 LiquidButton）
                 UiSecondaryButton(
@@ -4749,7 +4747,16 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 modifier = Modifier.weight(1f)
             )
             val refreshBd = LocalWallBackdrop.current
-            // unified: one accent chip for every style             Text(                 tr(lang, "刷新", "Refresh"),                 color = Palette.accent, fontSize = 14.sp,                 modifier = Modifier                     .clip(RoundedCornerShape(50))                     .background(Palette.accent.copy(alpha = 0.12f))                     .clickable { reload++ }                     .padding(horizontal = 14.dp, vertical = 6.dp)             )
+            // unified accent chip
+            Text(
+                tr(lang, "刷新", "Refresh"),
+                color = Palette.accent, fontSize = 14.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Palette.accent.copy(alpha = 0.12f))
+                    .clickable { reload++ }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            )
         }
         when {
             loading -> Text(
