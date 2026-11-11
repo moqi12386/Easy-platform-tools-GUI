@@ -4771,7 +4771,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             )
             else -> LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier.heightIn(max = 420.dp).padding(horizontal = 18.dp),
+                modifier = Modifier.heightIn(max = 320.dp).padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -4833,30 +4833,12 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             // 这里已经下好了，把本地文件路径交出去；以前传的是 url，上层又下一遍（3.7 MB 白下两次）
             if (file != null) onPick(file.absolutePath) else busyIndex = -1
         }
-        Row(
-            Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            val bd = LocalWallBackdrop.current
-            if (useBackdrop && bd != null) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = bd,
-                    modifier = Modifier.height(48.dp).width(160.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .width(160.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-            }
+        Box(Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            UiButton(
+                text = tr(lang, "取消", "Cancel"),
+                onClick = onDismiss,
+                modifier = Modifier.width(160.dp).height(48.dp)
+            )
         }
     }
 }
