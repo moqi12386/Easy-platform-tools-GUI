@@ -2687,6 +2687,15 @@ object Palette {
     val inset: Color get() = if (dark) Color(0xFF121316) else Color(0xFFF5F6F8)
     val chip: Color get() = if (dark) Color(0xFF2A2B30) else Color(0xFFF2F3F5)
     val nativeCard: Color get() = Color(0xFF1B1F27).copy(alpha = 0.92f)
+
+    /** 原生风格在中性底板上用的主色（不跟莫奈走） */
+    val nativeAccent: Color get() = Color(0xFFECEDEF)
+
+    /** 液态玻璃卡片的底料：浅色 #FAFAFA / 深色 #121212（demo 原值） */
+    val glassTint: Color get() = if (dark) Color(0xFF121212) else Color(0xFFFAFAFA)
+
+    /** 玻璃 / 原生 在不支持取样的机器上的纯色兜底 */
+    val glassSolid: Color get() = if (dark) Color(0xFF1F2026) else Color(0xFFFFFFFF)
 }
 
 /** 卡片里的文字颜色：玻璃/深色卡片用白字，其余跟随主题 */
