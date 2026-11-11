@@ -2183,7 +2183,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
                         // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
-                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else LocalAccent.current
+                        LocalAccent provides if (style == UiStyle.Native) Palette.nativeAccent else LocalAccent.current
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -4038,7 +4038,7 @@ fun LiquidBottomBar(
                     else -> Modifier
                         .shadow(12.dp, capsule, clip = false)
                         .clip(capsule)
-                        .background(if (dark) Color(0xFF1B1C20) else Color.White)
+                        .background(Palette.surface)
                 }
                 Box(Modifier.matchParentSize().then(surfaceMod))
 
@@ -4197,13 +4197,13 @@ fun GlassDialogPanel(
                             } else {
                                 Modifier
                                     .clip(RoundedCornerShape(48.dp))
-                                    .background(if (light) Palette.glassTint else Color(0xFF1B1C20))
+                                    .background(if (light) Palette.glassTint else Palette.surface)
                             }
                         }
                     )
             ) {
                 CompositionLocalProvider(
-                    LocalAccent provides (if (light) Color(0xFF16181D) else Color(0xFFECEDEF))
+                    LocalAccent provides Palette.text
                 ) {
                     content()
                 }
@@ -5256,7 +5256,7 @@ fun readableOn(srgbLum: Float): Color {
     val bg = relLuminance(srgbLum)
     val contrastWhite = 1.05f / (bg + 0.05f)
     val contrastInk = (bg + 0.05f) / 0.0604f
-    return if (contrastInk >= contrastWhite) Color(0xFF16181D) else Color.White
+    return if (contrastInk >= contrastWhite) Palette.text else Color.White
 }
 
 /** 一个在线字体：落盘名（filesDir 下）+ 体积 + 多源回退 */
