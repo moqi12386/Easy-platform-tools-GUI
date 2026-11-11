@@ -2564,6 +2564,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
+                                    .navigationBarsPadding()   // 整条浮在导航条之上，图标在 60dp 内居中
                                     // 用带形状的 background 直接填充，不用 clip：
                                     // clip + background 会在边缘留 1px 抗锯齿缝，透出后面的深色
                                     .background(
@@ -2623,8 +2624,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         }
                                     }
                                 }
-                                // 导航条区域：同色留白，底色一直铺到屏幕底部
-                                Box(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.navigationBars))
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
