@@ -2339,6 +2339,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             surface = Surface,
                                             surfaceContainer = Surface,
                                             surfaceContainerLow = Surface,
+                                            surfaceContainerHigh = Surface,
+                                            surfaceContainerHighest = Surface,
                                             onSurface = TextPrimary,
                                             background = Bg,
                                             onBackground = TextPrimary
@@ -2350,6 +2352,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             surface = Surface,
                                             surfaceContainer = Surface,
                                             surfaceContainerLow = Surface,
+                                            surfaceContainerHigh = Surface,
+                                            surfaceContainerHighest = Surface,
                                             onSurface = TextPrimary,
                                             background = Bg,
                                             onBackground = TextPrimary
@@ -2544,6 +2548,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     // 摆在一起像两个东西
                                     surfaceContainer = Surface,
                                     surfaceContainerLow = Surface,
+                                    surfaceContainerHigh = Surface,
+                                    surfaceContainerHighest = Surface,
                                     // NavigationBarItem 的选中药丸取 secondaryContainer、图标取 onSecondaryContainer，
                                     // 不覆盖的话是 M3 基线那套紫色，跟本项目的蓝色主色对不上
                                     secondaryContainer = Palette.accent.copy(alpha = 0.24f),
@@ -2560,6 +2566,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     surface = Surface,
                                     surfaceContainer = Surface,
                                     surfaceContainerLow = Surface,
+                                    surfaceContainerHigh = Surface,
+                                    surfaceContainerHighest = Surface,
                                     secondaryContainer = Palette.accent.copy(alpha = 0.14f),
                                     onSecondaryContainer = Palette.accent,
                                     onSurface = TextPrimary,
