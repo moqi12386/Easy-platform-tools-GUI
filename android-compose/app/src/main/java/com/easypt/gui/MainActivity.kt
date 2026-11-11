@@ -2489,13 +2489,28 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     selected = page == 0,
                                     onClick = { page = 0 },
                                     icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                                    label = { Text(t("主页", "Home")) }
+                                    label = { Text(t("主页", "Home")) },
+                                    // 显式给色：底栏图标/文字/胶囊都跟着莫奈取色，别依赖主题的 secondaryContainer
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Palette.accent,
+                                        selectedTextColor = Palette.accent,
+                                        indicatorColor = Palette.accent.copy(alpha = 0.20f),
+                                        unselectedIconColor = Palette.text2,
+                                        unselectedTextColor = Palette.text2
+                                    )
                                 )
                                 NavigationBarItem(
                                     selected = page == 1,
                                     onClick = { page = 1 },
                                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                                    label = { Text(t("设置", "Settings")) }
+                                    label = { Text(t("设置", "Settings")) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Palette.accent,
+                                        selectedTextColor = Palette.accent,
+                                        indicatorColor = Palette.accent.copy(alpha = 0.20f),
+                                        unselectedIconColor = Palette.text2,
+                                        unselectedTextColor = Palette.text2
+                                    )
                                 )
                             }
                         }
