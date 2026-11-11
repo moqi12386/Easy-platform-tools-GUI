@@ -3784,6 +3784,8 @@ fun SettingsPage(
                 if (slidersOpen) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 SliderRow(style, tr(lang, "面板不透明度", "Panel opacity"), opacity, onOpacity)
+                SliderRow(style, tr(lang, "玻璃模糊", "Glass blur"), glassBlur, onGlassBlur)
+                SliderRow(style, tr(lang, "玻璃浓度", "Glass density"), glassDensity, onGlassDensity)
                 Spacer(Modifier.height(2.dp))
                 // 统一次级按钮（玻璃风格会自动换成 LiquidButton）
                 UiSecondaryButton(
