@@ -52,11 +52,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.rememberGraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -195,17 +190,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
-    /** 每次回到前台 +1，用来强制重算动态色（换壁纸后系统取色会变） */
-    private var colorEpoch by mutableStateOf(0)
-    /** 实验：状态栏真模糊（内容录两遍，只露顶部模糊条） */
-    private var expBlur by mutableStateOf(false)
-    /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
-    private var screenCorner by mutableStateOf(20f)
     private var fontChoice by mutableStateOf(AppFont.System)
     /** 启动时自动检查更新（默认开启，可在设置里关掉） */
     private var autoUpdate by mutableStateOf(true)
-    /** 仅供测试：控制设置里是否显示模拟刷机等调试入口 */
-    private var testTools by mutableStateOf(false)
     private var customFont by mutableStateOf<androidx.compose.ui.text.font.FontFamily?>(null)
     /** 在线字体已加载的家族，key = AppFont.name */
     private val onlineFamilies =
@@ -337,8 +324,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
-        expBlur = sp.getBoolean("expblur", false)
-        Palette.cardTint = sp.getFloat("cardtint", 0.06f)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         val dk = sp.getBoolean("dark", false)
         logCmdColor = readLogColor(sp, "lc2Cmd")
@@ -419,55 +404,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         mark("04-prefs")
         reloadWallpaper(sync = true)
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
-        readScreenCorner()
-        FlashService.ensureChannel(this)   // 通道提前建好，否则首次刷机不会显示实况通知
         XmsfBypass.appCtx = applicationContext
         checkInterruptedFlash()
-        readScreenCorner()
-        FlashService.ensureChannel(this)   // 通道提前建好，否则首次刷机不会显示实况通知
         XmsfBypass.appCtx = applicationContext
         checkInterruptedFlash()
         XmsfBypass.requestPermission()
         android.util.Log.i("EasyPT", "xmsfSelfTest: " + XmsfBypass.selfTest(this))
         mark("05-setContent")
         setContent { EasyApp() }
-    }
-
-    /**
-     * 读屏幕物理圆角，供底栏圆角自动匹配。
-     * RoundedCorner 是 API 31+ 的隐藏/新 API，用反射调用，取不到就保持 20dp 兜底。
-     */
-    /**
-     * 读屏幕物理圆角，供底栏圆角自动匹配。
-     * 优先读系统资源里定义的圆角尺寸（各家 ROM 常用这些名字），
-     * 读不到就保持 20dp 兜底。
-     */
-    private fun readScreenCorner() {
-        val names = arrayOf(
-            "rounded_corner_radius",
-            "config_roundedCornerRadius",
-            "rounded_corner_radius_top",
-            "status_bar_rounded_corner_radius",
-            "compat_screen_rounded_corner_radius"
-        )
-        for (n in names) {
-            val id = resources.getIdentifier(n, "dimen", "android")
-            if (id != 0) {
-                val px = runCatching { resources.getDimensionPixelSize(id) }.getOrDefault(0)
-                if (px > 0) {
-                    screenCorner = px / resources.displayMetrics.density
-                    screenCornerGlobal = screenCorner
-                    android.util.Log.i("EasyPT", "screenCorner=" + screenCorner + "dp (资源 " + n + ", " + px + "px)")
-                    return
-                }
-            }
-        }
-        android.util.Log.i("EasyPT", "screenCorner: 系统资源没定义，用兜底 " + screenCorner + "dp")
-    }
-    override fun onResume() {
-        super.onResume()
-        // 换壁纸后系统的动态色会变，回到前台时重新取一次
-        colorEpoch++
     }
 
     private fun installCrashHandler() {
@@ -790,27 +734,17 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             logs.add(LogLine("[$ts] $text", c))
             while (logs.size > 300) logs.removeAt(0)
         }
-        // 只有「线刷」才推实况通知：检查更新/读分区表这类后台活不碰它，
-        // 否则前台服务会被任何动作拉起来常驻，保活过强
-        if (flashing) {
-            // 节流 900ms：之前 300ms 太快，胶囊闪得看不清
+        // 刷机期间：实况通知的文字跟着日志最新一行走（节流 300ms，避免刷爆通知）
+        if (busy) {
             val now = System.currentTimeMillis()
-            val pct = run {
-                val m = Regex("(\\d{1,3})\\s*%").find(text)
-                m?.groupValues?.get(1)
-                    ?: if (flashMax > 0) (flashStep * 100 / flashMax).toString() else "0"
-            }
-            val cap = "$pct%"   // 右侧只留百分比，分区名放到图标位
-            if (cap != lastCapText && now - lastNotifyPush > 900L) {
-                lastCapText = cap
+            if (now - lastNotifyPush > 300L) {
                 lastNotifyPush = now
                 runCatching {
                     updateFlashLive(
                         LiveUpdate(
                             t("线刷中", "Flashing"),
-                            text.trim().take(70),
-                            flashStep, flashMax,
-                            short = cap
+                            (if (flashPart.isEmpty()) "" else "$flashPart · ") + text.trim().take(70),
+                            flashStep, flashMax
                         )
                     )
                 }
@@ -820,9 +754,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     private var lastNotifyPush = 0L
     private var flashPart = ""
-    private var lastCapText = ""
-    /** 只有线刷过程为 true —— 实况通知只在这段时间存在 */
-    private var flashing = false
     private var flashStep = 0
     private var flashMax = 0
     fun clearLog() { logs.clear() }
@@ -855,41 +786,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ),
                 ErrColor
             )
-        }
-    }
-
-    /**
-     * 模拟刷机：不碰 USB，只跑「日志 + 实况通知 + 胶囊」这条链路。
-     * 用来测通知效果，不必真的反复刷机。
-     */
-    fun simulateFlash() {
-        if (flashing) return
-        bg {
-            flashing = true
-            flashMax = 24
-            flashStep = 0
-            flashPart = ""
-            append(t("=== 模拟刷机开始（不连接任何设备）===", "=== simulated flash (no device) ==="), Accent)
-            lastCapText = ""
-            lastNotifyPush = 0L
-            repeat(3) {
-                updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, 24))
-                Thread.sleep(800)
-            }
-            val parts = listOf("vendor", "system", "product")
-            for (i in 1..24) {
-                flashPart = parts[(i - 1) / 8]
-                flashStep = i
-                append("[${i}/24] 写入 ${flashPart}.img", Accent)
-                for (p in listOf(10, 40, 70, 100)) {
-                    append("  $p%", TextSecondary)
-                    Thread.sleep(120)
-                }
-                append("  OK", OkColor)
-            }
-            append(t("模拟刷机结束：成功 24 · 失败 0", "simulated flash done: 24 ok"), OkColor)
-            flashing = false
-            finishFlashLive(true)
         }
     }
 
@@ -1369,16 +1265,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 小米系会积极回收后台进程。刷机期间：保持屏幕常亮 + 尝试进电池白名单。
         ui.post { runCatching { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
         ensureBatteryExempt()        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
-        flashing = true
         runCatching { flashMarker().writeText("${romProduct.ifEmpty { "未知机型" }} · ${steps.size} 步") }
-        // 预热：系统对「刚出现的通知」有一次性的提升迟疑，
-        // 连续推几次、留出间隔，第一次刷机也能立刻显示实况通知
-        lastCapText = ""
-        lastNotifyPush = 0L
-        repeat(3) {
-            updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
-            Thread.sleep(800)
-        }
+        updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
         for ((i, s) in steps.withIndex()) {
             flashPart = s.part
             flashStep = i + 1; flashMax = steps.size
@@ -1399,7 +1287,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             }
             if (s.kind == "reboot" && ok) break
         }
-        flashing = false
         runCatching { flashMarker().delete() }
         finishFlashLive(failCount == 0)
         ui.post { runCatching { window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
@@ -1954,8 +1841,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             .putExtra(FlashService.EXTRA_STEP, island.step)
             .putExtra(FlashService.EXTRA_MAX, island.max)
             .putExtra(FlashService.EXTRA_COLOR, accent)
-            .putExtra(FlashService.EXTRA_SHORT, island.short ?: island.text)
-            .putExtra(FlashService.EXTRA_PART, flashPart)
         // 启动失败要说出来，并且退回普通通知：上一版静默失败，
         // 用户只看到「通知没了」，日志里一个字都没有
         runCatching {
@@ -2015,7 +1900,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     /** 实况通知要显示的状态 */
-    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false, val failed: Boolean = false, val short: String? = null)
+    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false, val failed: Boolean = false)
     // ---------------- 检查更新 ----------------
 
     /** 本机版本名，比如 3.50.3 */
@@ -2147,18 +2032,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ThemeMode.Night -> true
             ThemeMode.System -> systemDark
         }
-        // 订阅 colorEpoch：回到前台/换壁纸后重算动态色
-        val epochTick = colorEpoch
         Palette.dark = dark
-        android.util.Log.i("EasyPT", "colorProbe monet=" + monet + " style=" + style +
-            " m3=" + (Palette.m3 != null) + " surface=" + Palette.surface + " bg=" + Palette.bg + " accent=" + Palette.accent)
-        // 只有开了「莫奈取色」才走系统动态色；关掉就回到项目自己的配色。
-        // 注意：有自定义壁纸时也不能用系统动态色 —— 系统取的是桌面壁纸，
-        // 我们显示的是应用内这张图，颜色源不同必然不协调；
-        // 这种情况走下面从这张图分析出来的 monetColor。
-        Palette.m3 = if (style != UiStyle.Material || !monet || customWallpaper != null) {
-            null
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // Material 风格：整个 Palette 转发到 Material You 动态色（系统从壁纸取色）
+        Palette.m3 = if (style != UiStyle.Material) null
+        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
             else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
         } else null
@@ -2170,22 +2047,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     runCatching {
                         val bmp = assets.full.asAndroidBitmap()
                         val pal = androidx.palette.graphics.Palette.from(bmp).clearFilters().generate()
-                        // 优先挑暖色（红/橙/黄）：壁纸里青色云占了很大面积，
-                        // 取出来会变成青蓝，和画面主调（火光）不搭
-                        val warm = pal.swatches
-                            .map { it.rgb }
-                            .filter { rgb ->
-                                val hsv = FloatArray(3)
-                                android.graphics.Color.colorToHSV(rgb, hsv)
-                                (hsv[0] <= 60f || hsv[0] >= 330f) && hsv[1] >= 0.25f && hsv[2] >= 0.25f
-                            }
-                            .maxByOrNull { rgb ->
-                                val hsv = FloatArray(3)
-                                android.graphics.Color.colorToHSV(rgb, hsv)
-                                hsv[1]
-                            }
-                        val c = warm
-                            ?: pal.getVibrantColor(0).takeIf { it != 0 }
+                        val c = pal.getVibrantColor(0)
+                            .takeIf { it != 0 }
                             ?: pal.getLightVibrantColor(0).takeIf { it != 0 }
                             ?: pal.getDominantColor(0)
                         if (c == 0) null else Color(c)
@@ -2230,7 +2093,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 启动时按设置决定要不要检查更新（默认开启，设置里可关）
         LaunchedEffect(Unit) {
             autoUpdate = getSharedPreferences(PREF, MODE_PRIVATE).getBoolean("autoupdate", true)
-        testTools = getSharedPreferences(PREF, MODE_PRIVATE).getBoolean("testtools", false)
             if (autoUpdate) checkUpdate()
         }
         // 字体诊断：每次字体变化打一条，便于确认「已应用但没效果」到底卡在哪
@@ -2296,24 +2158,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
-                // 实验：内容录两遍，正常画一遍；顶部 120dp 内再画一遍模糊的
-                val contentLayer = rememberGraphicsLayer()
-                val blurLayer = rememberGraphicsLayer()
-                val contentMod = if (expBlur) {
-                    Modifier.drawWithContent {
-                        contentLayer.record { this@drawWithContent.drawContent() }
-                        blurLayer.record { this@drawWithContent.drawContent() }
-                        // 半径用 dp 转 px：之前写死 80f 是按像素算的，糊成一片白
-                        val r = 8.dp.toPx()   // 模糊很轻，只做质感
-                        blurLayer.renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r)
-                        drawLayer(contentLayer)
-                        // 只露顶部这一条，外面一律裁剪掉
-                        clipRect(0f, 0f, size.width, 72.dp.toPx()) {
-                            drawLayer(blurLayer)
-                        }
-                    }
-                } else Modifier
-                Box(Modifier.fillMaxSize().then(contentMod)) {
+                // 顶部渐变：和底栏同一套 Brush，标题仍然清晰
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Bg.copy(alpha = 0.85f),
+                                    Bg.copy(alpha = 0.45f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+                Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
                         LocalGlassAssets provides assets,
@@ -2323,7 +2183,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
                         // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
-                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else Palette.accent
+                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else LocalAccent.current
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -2331,29 +2191,27 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     familyFor(fontChoice)
                                 ),
                                 colorScheme = run {
-                                    // 这里的主题只是外层容器：Palette.m3 已经包含了
-                                    // 「该不该用系统动态色」的判断，这里只需用它或本项目的方案
-                                    Palette.m3 ?: if (dark) {
+                                    // Material You：API 31+ 直接用系统从壁纸取的动态配色，
+                                    // 低版本回退到项目自己这套
+                                    val c = LocalContext.current
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        if (dark) androidx.compose.material3.dynamicDarkColorScheme(c)
+                                        else androidx.compose.material3.dynamicLightColorScheme(c)
+                                    } else if (dark) {
                                         darkColorScheme(
-                                            primary = Palette.accent,
+                                            primary = LocalAccent.current,
                                             surface = Surface,
                                             surfaceContainer = Surface,
-                                            surfaceContainerLow = Surface,
-                                            surfaceContainerHigh = Surface,
-                                            surfaceContainerHighest = Surface,
                                             onSurface = TextPrimary,
                                             background = Bg,
                                             onBackground = TextPrimary
                                         )
                                     } else {
                                         lightColorScheme(
-                                            primary = Palette.accent,
+                                            primary = LocalAccent.current,
                                             onPrimary = Color.White,
                                             surface = Surface,
                                             surfaceContainer = Surface,
-                                            surfaceContainerLow = Surface,
-                                            surfaceContainerHigh = Surface,
-                                            surfaceContainerHighest = Surface,
                                             onSurface = TextPrimary,
                                             background = Bg,
                                             onBackground = TextPrimary
@@ -2479,21 +2337,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("autoupdate", v).apply()
                                         },
                                         onCheckUpdate = { checkUpdate(true) },
-                            onSimulateFlash = { simulateFlash() },
-                            showTestTools = testTools,
-                            expBlur = expBlur,
-                            onCardTint = { v ->
-                                Palette.cardTint = v
-                                getSharedPreferences(PREF, MODE_PRIVATE).edit().putFloat("cardtint", v).apply()
-                            },
-                            onExpBlur = { v ->
-                                expBlur = v
-                                getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("expblur", v).apply()
-                            },
-                            onTestTools = { v ->
-                                testTools = v
-                                getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("testtools", v).apply()
-                            },
                                         downloadedFonts = onlineFamilies.keys.mapNotNull { k ->
                                             AppFont.entries.firstOrNull { it.name == k }
                                         }.toSet(),
@@ -2530,9 +2373,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                     }
 
-                    // 顶部不做模糊/渐变遮罩（按用户要求去掉，太难看）
-
-
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     // Material Design 3：底部导航直接用 M3 的 NavigationBar + NavigationBarItem
                     if (style == UiStyle.Material) {
@@ -2542,18 +2382,15 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             typography = typographyWith(familyFor(fontChoice)),
                             colorScheme = if (dark) {
                                 darkColorScheme(
-                                    primary = Palette.accent,
+                                    primary = LocalAccent.current,
                                     surface = Surface,
                                     // 底栏底色跟卡片用同一个色，M3 默认的 #211F26 偏紫、比卡片亮一档，
                                     // 摆在一起像两个东西
                                     surfaceContainer = Surface,
-                                    surfaceContainerLow = Surface,
-                                    surfaceContainerHigh = Surface,
-                                    surfaceContainerHighest = Surface,
                                     // NavigationBarItem 的选中药丸取 secondaryContainer、图标取 onSecondaryContainer，
                                     // 不覆盖的话是 M3 基线那套紫色，跟本项目的蓝色主色对不上
-                                    secondaryContainer = Palette.accent.copy(alpha = 0.24f),
-                                    onSecondaryContainer = Palette.accent,
+                                    secondaryContainer = LocalAccent.current.copy(alpha = 0.24f),
+                                    onSecondaryContainer = LocalAccent.current,
                                     onSurface = TextPrimary,
                                     onSurfaceVariant = Palette.text2,
                                     background = Bg,
@@ -2561,15 +2398,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 )
                             } else {
                                 lightColorScheme(
-                                    primary = Palette.accent,
+                                    primary = LocalAccent.current,
                                     onPrimary = Color.White,
                                     surface = Surface,
                                     surfaceContainer = Surface,
-                                    surfaceContainerLow = Surface,
-                                    surfaceContainerHigh = Surface,
-                                    surfaceContainerHighest = Surface,
-                                    secondaryContainer = Palette.accent.copy(alpha = 0.14f),
-                                    onSecondaryContainer = Palette.accent,
+                                    secondaryContainer = LocalAccent.current.copy(alpha = 0.14f),
+                                    onSecondaryContainer = LocalAccent.current,
                                     onSurface = TextPrimary,
                                     onSurfaceVariant = Palette.text2,
                                     background = Bg,
@@ -2579,74 +2413,23 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         ) {
                             // containerColor / tonalElevation 都不写，直接用 NavigationBar 的官方默认
                             // （surfaceContainer + 0dp），跟其它 M3 组件一致
-                            // 用库里的 NavigationBar，高度由组件自己定（内容 80dp + 导航条 inset）
-                            // 自绘紧凑底栏（还原 M3 观感：选中项有胶囊指示器）
-                            Column(
-                                Modifier
+                            NavigationBar(
+                                modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    // 按小米《全面屏手势提示线适配说明》：底栏要铺到屏幕最底部，
-                                    // 小白条就画在底栏颜色上；圆角只做上两角
-                                    .background(
-                                        MaterialTheme.colorScheme.surface,
-                                        RoundedCornerShape(
-                                            screenCorner.dp, screenCorner.dp, 0.dp, 0.dp
-                                        )
-                                    )
+                                    .navigationBarsPadding()
                             ) {
-                                Row(
-                                    Modifier.fillMaxWidth().height(70.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    listOf(
-                                        Triple(Icons.Filled.Home, t("主页", "Home"), 0),
-                                        Triple(Icons.Filled.Settings, t("设置", "Settings"), 1)
-                                    ).forEach { (ic, label, idx) ->
-                                        val sel = page == idx
-                                        Column(
-                                            Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight()
-                                                .clip(androidx.compose.ui.graphics.RectangleShape)
-                                                // 关掉水波纹：长按时会画出一大片矩形阴影
-                                                .clickable(
-                                                    interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
-                                                    indication = null
-                                                ) { page = idx },
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            // 选中态：M3 的胶囊指示器
-                                            Box(
-                                                Modifier
-                                                    .width(56.dp)
-                                                    .height(28.dp)
-                                                    .clip(RoundedCornerShape(50))
-                                                    .background(
-                                                        if (sel) Palette.accent.copy(alpha = 0.14f)
-                                                        else Color.Transparent
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    ic, contentDescription = null,
-                                                    tint = if (sel) Palette.accent
-                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
-                                            Spacer(Modifier.height(2.dp))
-                                            Text(
-                                                label,
-                                                fontSize = 11.sp,
-                                                color = if (sel) Palette.accent
-                                                else MaterialTheme.colorScheme.onSurfaceVariant
-                                                , maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                                // 不做导航条占位：两种风格统一成 70dp 高度
+                                NavigationBarItem(
+                                    selected = page == 0,
+                                    onClick = { page = 0 },
+                                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                                    label = { Text(t("主页", "Home")) }
+                                )
+                                NavigationBarItem(
+                                    selected = page == 1,
+                                    onClick = { page = 1 },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                                    label = { Text(t("设置", "Settings")) }
+                                )
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
@@ -2659,7 +2442,23 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     } else if (useBackdrop) {
-                        // 底栏上方的渐变模糊已按要求去掉
+                        // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
+                        // 底栏上方的渐变淡出：内容照样能滑到底栏下面，只是越靠下越淡
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            Bg.copy(alpha = 0.55f),
+                                            Bg.copy(alpha = 0.92f)
+                                        )
+                                    )
+                                )
+                        )
 
                         LiquidBottomTabs(
                             dark = Palette.dark,
@@ -2761,9 +2560,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     familyFor(fontChoice)
                                 ),
                         colorScheme = if (dark) {
-                            darkColorScheme(primary = Palette.accent, surface = Surface, onSurface = TextPrimary)
+                            darkColorScheme(primary = LocalAccent.current, surface = Surface, onSurface = TextPrimary)
                         } else {
-                            lightColorScheme(primary = Palette.accent, surface = Surface, onSurface = TextPrimary)
+                            lightColorScheme(primary = LocalAccent.current, surface = Surface, onSurface = TextPrimary)
                         }
                     ) {
                         if (showParts) {
@@ -2871,24 +2670,15 @@ object Palette {
      */
     var m3: androidx.compose.material3.ColorScheme? = null
 
-    /** 卡片掺色强度（0 ~ 0.3），设置里可调；越大卡片越明显带壁纸色 */
-    var cardTint: Float by androidx.compose.runtime.mutableStateOf(0.06f)
-
     val bg: Color
         get() = m3?.background ?: run {
             val base = if (dark) Color(0xFF101114) else Color(0xFFF2F3F5)
             monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.10f else 0.05f) } ?: base
         }
     val surface: Color
-        get() = m3?.let {
-            // 卡片底色：surfaceContainer 里掺一点主色，形成「比按钮浅一档」的动态色阶
-            androidx.compose.ui.graphics.lerp(
-                it.surfaceContainer, it.primary,
-                if (dark) 0.34f else 0.30f
-            )
-        } ?: run {
+        get() = m3?.surfaceContainer ?: run {
             val base = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
-            monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, cardTint) } ?: base
+            monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.12f else 0.06f) } ?: base
         }
     val text: Color get() = m3?.onSurface ?: if (dark) Color(0xFFECEDEF) else Color(0xFF16181D)
     val text2: Color get() = m3?.onSurfaceVariant ?: if (dark) Color(0xFF9A9DA5) else Color(0xFF8C9199)
@@ -3108,7 +2898,7 @@ fun KSwitchRow(
                 enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,   // 与按钮同源
+                    checkedTrackColor = LocalAccent.current,
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
                     uncheckedBorderColor = Color.Transparent
@@ -3128,15 +2918,12 @@ fun KSwitchRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 70.dp   // 自绘底栏内容高度
-        UiStyle.Miuix -> 70.dp      // 自绘底栏内容高度
-        // 玻璃/原生：悬浮胶囊栏本身高约 64dp（含上下各 10dp 留白），
-        // 页面留出这段高度，保证「滑到底时最后一项停在底栏之上」，
-        // 滚动过程中内容依然从底栏下面穿过
-        else -> 68.dp
+        UiStyle.Material -> 80.dp   // M3 NavigationBar 默认 80dp
+        UiStyle.Miuix -> 64.dp      // miuix NavigationBar ItemHeight 64dp
+        else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
     }
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    return barHeight + nav
+    return barHeight + nav + 12.dp
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3165,10 +2952,10 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     disabledTextColor = Palette.text2,
     focusedContainerColor = Palette.inset,
     unfocusedContainerColor = Palette.inset,
-    cursorColor = Palette.accent,
-    focusedBorderColor = Palette.accent.copy(alpha = 0.6f),
+    cursorColor = LocalAccent.current,
+    focusedBorderColor = LocalAccent.current.copy(alpha = 0.6f),
     unfocusedBorderColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9),
-    focusedLabelColor = Palette.accent,
+    focusedLabelColor = LocalAccent.current,
     unfocusedLabelColor = Palette.text2,
     focusedPlaceholderColor = Palette.text2,
     unfocusedPlaceholderColor = Palette.text2
@@ -3207,7 +2994,7 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
-                    activeTrackColor = Palette.accent,
+                    activeTrackColor = LocalAccent.current,
                     inactiveTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
                 )
             )
@@ -3409,13 +3196,13 @@ private fun BigLogOverlay(
                 } else {
                     Text(
                         tr(lang, "清空", "Clear"),
-                        color = Palette.accent, fontSize = 14.sp,
+                        color = LocalAccent.current, fontSize = 14.sp,
                         modifier = Modifier.clickable { onClear() }
                     )
                     Spacer(Modifier.width(18.dp))
                     Text(
                         tr(lang, "关闭", "Close"),
-                        color = Palette.accent, fontSize = 14.sp,
+                        color = LocalAccent.current, fontSize = 14.sp,
                         modifier = Modifier.clickable { onClose() }
                     )
                 }
@@ -3496,7 +3283,7 @@ private fun RomDialog(
                     onClick = onStart,
                     backdrop = romBd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
+                    tint = LocalAccent.current
                 ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White, fontSize = 15.sp) }
             }
         } else {
@@ -3615,12 +3402,11 @@ fun HomePage(
     Column(
         Modifier
             .fillMaxSize()
-            // 不在这里垫状态栏：内容要能滚到状态栏下面（沉浸），
-            // 初始留白放到滚动内容里的第一个 Spacer
+            .statusBarsPadding()
             .padding(horizontal = 20.dp)
+            .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
     ) {
-        androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         if (crashBannerVisible) {
             Row(
                 Modifier
@@ -3714,7 +3500,7 @@ fun HomePage(
                         onClick = { onRun(cmd); cmd = "" },
                         backdrop = runWall,
                         modifier = Modifier.height(52.dp),
-                        tint = Palette.accent
+                        tint = LocalAccent.current
                     ) { Text(tr(lang, "执行", "Run"), color = Color.White, fontSize = 15.sp) }
                 } else {
                     Button(
@@ -3740,7 +3526,7 @@ fun HomePage(
                 Text(tr(lang, "日志", "Log"), color = text, fontSize = 16.sp)
                 if (busy) {
                     Spacer(Modifier.width(8.dp))
-                    Text(tr(lang, "· 执行中", "· running"), color = Palette.accent, fontSize = 12.sp)
+                    Text(tr(lang, "· 执行中", "· running"), color = LocalAccent.current, fontSize = 12.sp)
                 }
                 Spacer(Modifier.weight(1f))
                 val clearWall = LocalWallBackdrop.current
@@ -3780,7 +3566,7 @@ fun HomePage(
                 } else {
                     Text(
                         tr(lang, "清空", "Clear"),
-                        color = Palette.accent, fontSize = 13.sp,
+                        color = LocalAccent.current, fontSize = 13.sp,
                         modifier = Modifier.clickable { onClear() }
                     )
                 }
@@ -3800,7 +3586,7 @@ fun HomePage(
                     } else {
                         Text(
                             tr(lang, "放大", "Expand"),
-                            color = Palette.accent, fontSize = 13.sp,
+                            color = LocalAccent.current, fontSize = 13.sp,
                             modifier = Modifier.clickable { onBigLog() }
                         )
                     }
@@ -3898,7 +3684,6 @@ fun HomePage(
 
         Spacer(Modifier.height(12.dp))
 
-        androidx.compose.foundation.layout.Spacer(Modifier.height(bottomSpacer()))
         }
 }
 
@@ -3940,12 +3725,6 @@ fun SettingsPage(
     onLogColors: () -> Unit,
     autoUpdate: Boolean,
     onAutoUpdate: (Boolean) -> Unit,
-    onSimulateFlash: () -> Unit,
-    showTestTools: Boolean,
-    onTestTools: (Boolean) -> Unit,
-    expBlur: Boolean,
-    onExpBlur: (Boolean) -> Unit,
-    onCardTint: (Float) -> Unit,
     onCheckUpdate: () -> Unit,
     downloadedFonts: Set<AppFont>,
     fontTargetKey: String,
@@ -3967,13 +3746,12 @@ fun SettingsPage(
     token: String,
     onToken: (String) -> Unit
 ) {
-        androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
     Column(
         Modifier
             .fillMaxSize()
-            // 不在这里垫状态栏：内容要能滚到状态栏下面（沉浸），
-            // 初始留白放到滚动内容里的第一个 Spacer
+            .statusBarsPadding()
             .padding(horizontal = 20.dp)
+            .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
     ) {
         val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
@@ -4087,23 +3865,6 @@ fun SettingsPage(
                     enabled = canMonet,
                     onCheckedChange = onMonet
                 )
-                // 卡片掺色强度：调大后卡片更明显地带壁纸色
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        tr(lang, "卡片色深  ${(Palette.cardTint * 100).toInt()}%",
-                            "Card tint  ${(Palette.cardTint * 100).toInt()}%"),
-                        color = Palette.text, fontSize = 14.sp
-                    )
-                    androidx.compose.material3.Slider(
-                        value = Palette.cardTint,
-                        onValueChange = { onCardTint(it) },
-                        valueRange = 0f..0.30f
-                    )
-                }
             }
         }
 
@@ -4126,7 +3887,7 @@ fun SettingsPage(
                             onClick = onPickWallpaper,
                             backdrop = wall,
                             modifier = Modifier.weight(1f).height(44.dp),
-                            tint = Palette.accent
+                            tint = LocalAccent.current
                         ) {
                             Text(tr(lang, "选择图片", "Choose"), color = Color.White, fontSize = 14.sp)
                         }
@@ -4186,7 +3947,7 @@ fun SettingsPage(
                     ) {
                         Text(
                             tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = Palette.accent, fontSize = 14.sp
+                            color = LocalAccent.current, fontSize = 14.sp
                         )
                     }
                 } else {
@@ -4195,14 +3956,14 @@ fun SettingsPage(
                             .fillMaxWidth()
                             .padding(horizontal = 18.dp, vertical = 6.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Palette.accent.copy(alpha = 0.14f))
+                            .background(LocalAccent.current.copy(alpha = 0.14f))
                             .clickable { onResetGlass() }
                             .padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
                             tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = Palette.accent, fontSize = 14.sp
+                            color = LocalAccent.current, fontSize = 14.sp
                         )
                     }
                 }
@@ -4242,11 +4003,11 @@ fun SettingsPage(
                         Modifier
                             .size(52.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Palette.accent.copy(alpha = 0.16f))
+                            .background(LocalAccent.current.copy(alpha = 0.16f))
                             .clickable { showPartPicker = true },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.List, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Filled.List, contentDescription = null, tint = LocalAccent.current, modifier = Modifier.size(22.dp))
                     }
                 }
             }
@@ -4335,25 +4096,6 @@ fun SettingsPage(
             )
             // Shizuku 授权：绕过小米超级岛白名单需要它去掐 XMSF 网络。
             // 状态实时反映，点一下就去 Shizuku 拉授权。
-            // 调试开关：默认关，打开后才出现模拟刷机等入口
-            AppSwitchRow(
-                icon = Icons.Filled.Warning,
-                title = tr(lang, "仅供测试", "Test only"),
-                subtitle = tr(
-                    lang, "打开后显示模拟刷机等调试入口，普通使用请保持关闭",
-                    "Shows debug entries such as simulated flashing; keep it off normally"
-                ),
-                checked = showTestTools,
-                onCheckedChange = { onTestTools(it) }
-            )
-            if (showTestTools) {
-                AppRow(
-                    icon = Icons.Filled.Refresh,
-                    title = tr(lang, "模拟刷机（测试实况通知）", "Simulate a flash"),
-                    subtitle = tr(lang, "不连接设备，只跑进度通知和胶囊", "no device, only the notification path"),
-                    onClick = { onSimulateFlash() }
-                )
-            }
             AppRow(
                 icon = Icons.Filled.Lock,
                 title = tr(lang, "Shizuku 授权", "Shizuku permission"),
@@ -4472,7 +4214,6 @@ fun SettingsPage(
             }
         }
         Spacer(Modifier.height(16.dp))
-        androidx.compose.foundation.layout.Spacer(Modifier.height(bottomSpacer()))
     }
 }
 
@@ -4501,7 +4242,7 @@ fun LiquidBottomBar(
     val dark = Palette.dark
     // 原生风格：底栏和上面的卡片同色（深色板），所以字一律白；未选中略淡
     val labelIdle = if (mono) Color.White.copy(alpha = 0.55f) else LocalBarColor.current
-    val accent = if (mono) Color.White else Palette.accent
+    val accent = if (mono) Color.White else LocalAccent.current
 
     LaunchedEffect(page) {
         if (abs(anim.value - page) > 0.01f) anim.animateTo(page.toFloat(), spring(0.85f, 420f, 0.5f))
@@ -4850,7 +4591,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
                     onClick = { if (last) onDone() else page++ },
                     backdrop = bd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
+                    tint = LocalAccent.current
                 ) {
                     Text(
                         if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
@@ -4871,7 +4612,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Palette.accent)
+                        .background(LocalAccent.current)
                         .clickable { if (last) onDone() else page++ }
                         .height(48.dp)
                         .weight(1f),
@@ -4937,7 +4678,7 @@ fun GlassConfirmDialog(
                     onClick = onConfirm,
                     backdrop = bd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = if (destructive) Color(0xFFFF3B30) else Palette.accent
+                    tint = if (destructive) Color(0xFFFF3B30) else LocalAccent.current
                 ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
             } else {
                 Row(
@@ -4953,7 +4694,7 @@ fun GlassConfirmDialog(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(if (destructive) Color(0xFFFF3B30) else Palette.accent)
+                        .background(if (destructive) Color(0xFFFF3B30) else LocalAccent.current)
                         .clickable { onConfirm() }
                         .height(48.dp)
                         .weight(1f),
@@ -5037,7 +4778,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
                     onClick = onDismiss,
                     backdrop = backdrop,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
+                    tint = LocalAccent.current
                 ) {
                     Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp)
                 }
@@ -5055,7 +4796,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Palette.accent)
+                        .background(LocalAccent.current)
                         .clickable { onDismiss() }
                         .height(48.dp)
                         .weight(1f),
@@ -5102,7 +4843,7 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(90.dp)
+                    .height(230.dp)
                     .then(
                         if (useBackdrop) {
                             Modifier.drawBackdrop(
@@ -5171,15 +4912,7 @@ private fun SliderRow(
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            androidx.compose.material3.Slider(
-                value = value, onValueChange = onChange, valueRange = min..max,
-                // 滑条也要跟着壁纸取色，不用 M3 默认的紫色主色
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = Palette.accent,
-                    activeTrackColor = Palette.accent,
-                    inactiveTrackColor = Palette.accent.copy(alpha = 0.24f)
-                )
-            )
+            Slider(value = value, onValueChange = onChange, valueRange = min..max)
         }
     }
 }
@@ -5317,7 +5050,7 @@ fun LiquidChoiceDialog(
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
-        LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else Palette.accent)
+        LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else LocalAccent.current)
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
@@ -5376,7 +5109,7 @@ fun LiquidChoiceDialog(
                             .padding(horizontal = 20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(name, color = if (sel) Palette.accent else contentColor, fontSize = 16.sp)
+                        Text(name, color = if (sel) LocalAccent.current else contentColor, fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
                         if (onDelete != null && deletable.contains(i)) {
                             val delBd = LocalWallBackdrop.current
@@ -5401,7 +5134,7 @@ fun LiquidChoiceDialog(
                             }
                             Spacer(Modifier.width(8.dp))
                         }
-                        if (sel) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
+                        if (sel) Icon(Icons.Filled.Check, null, tint = LocalAccent.current, modifier = Modifier.size(20.dp))
                     }
                 }
                 }  // Column(可滚动选项)
@@ -5493,7 +5226,7 @@ fun GlassField(
         readOnly = readOnly,
         singleLine = true,
         textStyle = TextStyle(color = text, fontSize = 15.sp),
-        cursorBrush = SolidColor(Palette.accent),
+        cursorBrush = SolidColor(LocalAccent.current),
         keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
         else KeyboardOptions.Default,
         modifier = modifier
@@ -5593,10 +5326,10 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             } else {
                 Text(
                     tr(lang, "刷新", "Refresh"),
-                    color = Palette.accent, fontSize = 14.sp,
+                    color = LocalAccent.current, fontSize = 14.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Palette.accent.copy(alpha = 0.12f))
+                        .background(LocalAccent.current.copy(alpha = 0.12f))
                         .clickable { reload++ }
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 )
@@ -5656,7 +5389,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                 },
                                 backdrop = bd,
                                 modifier = Modifier.fillMaxWidth().height(38.dp),
-                                tint = if (isBusy) Palette.accent else Color.Unspecified
+                                tint = if (isBusy) LocalAccent.current else Color.Unspecified
                             ) {
                                 Text(
                                     if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
@@ -5670,7 +5403,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                     .fillMaxWidth()
                                     .height(38.dp)
                                     .clip(RoundedCornerShape(19.dp))
-                                    .background(if (isBusy) Palette.accent else Palette.accent.copy(alpha = 0.18f))
+                                    .background(if (isBusy) LocalAccent.current else LocalAccent.current.copy(alpha = 0.18f))
                                     .clickable { if (!isBusy) { busyIndex = i; progress = 0 } },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -5916,7 +5649,7 @@ fun LogColorDialog(
                     onClick = { onSave(colors) },
                     backdrop = wall,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
+                    tint = LocalAccent.current
                 ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
             } else {
                 Row(
@@ -5932,7 +5665,7 @@ fun LogColorDialog(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Palette.accent)
+                        .background(LocalAccent.current)
                         .clickable { onSave(colors) }
                         .height(48.dp)
                         .weight(1f),
@@ -6075,14 +5808,14 @@ fun OnlineFontRow(
         if (ready) tr(lang, "已下载", "downloaded") else sizeText,
         trailing = {
             if (downloading) {
-                Text("$progress%", color = Palette.accent, fontSize = 13.sp)
+                Text("$progress%", color = LocalAccent.current, fontSize = 13.sp)
             } else {
                 if (useBackdrop && wall != null) {
                     LiquidButton(
                         onClick = onStart,
                         backdrop = wall,
                         modifier = Modifier.height(36.dp),
-                        tint = if (ready) Palette.accent else Color.Unspecified
+                        tint = if (ready) LocalAccent.current else Color.Unspecified
                     ) {
                         Text(
                             if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
@@ -6092,7 +5825,7 @@ fun OnlineFontRow(
                 } else {
                     Text(
                         if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
-                        color = Palette.accent, fontSize = 13.sp,
+                        color = LocalAccent.current, fontSize = 13.sp,
                         modifier = Modifier.clickable { onStart() }
                     )
                 }
@@ -6102,9 +5835,6 @@ fun OnlineFontRow(
 }
 
 /** 进程级日志缓冲：Activity 与 FlashService 共用 */
-/** 屏幕物理圆角（dp），跨文件共享：MainActivity 读取，MiuixSlots 使用 */
-var screenCornerGlobal by androidx.compose.runtime.mutableStateOf(20f)
-
 object AppLog {
     val lines = mutableStateListOf<LogLine>()
 }
