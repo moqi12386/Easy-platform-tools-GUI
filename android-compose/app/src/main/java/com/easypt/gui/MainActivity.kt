@@ -190,6 +190,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
+    /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
+    private var screenCorner by mutableStateOf(20f)
     private var fontChoice by mutableStateOf(AppFont.System)
     /** 启动时自动检查更新（默认开启，可在设置里关掉） */
     private var autoUpdate by mutableStateOf(true)
@@ -406,9 +408,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         mark("04-prefs")
         reloadWallpaper(sync = true)
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
+        readScreenCorner()
         FlashService.ensureChannel(this)   // 通道提前建好，否则首次刷机不会显示实况通知
         XmsfBypass.appCtx = applicationContext
         checkInterruptedFlash()
+        readScreenCorner()
         FlashService.ensureChannel(this)   // 通道提前建好，否则首次刷机不会显示实况通知
         XmsfBypass.appCtx = applicationContext
         checkInterruptedFlash()
@@ -418,6 +422,37 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         setContent { EasyApp() }
     }
 
+    /**
+     * 读屏幕物理圆角，供底栏圆角自动匹配。
+     * RoundedCorner 是 API 31+ 的隐藏/新 API，用反射调用，取不到就保持 20dp 兜底。
+     */
+    /**
+     * 读屏幕物理圆角，供底栏圆角自动匹配。
+     * 优先读系统资源里定义的圆角尺寸（各家 ROM 常用这些名字），
+     * 读不到就保持 20dp 兜底。
+     */
+    private fun readScreenCorner() {
+        val names = arrayOf(
+            "rounded_corner_radius",
+            "config_roundedCornerRadius",
+            "rounded_corner_radius_top",
+            "status_bar_rounded_corner_radius",
+            "compat_screen_rounded_corner_radius"
+        )
+        for (n in names) {
+            val id = resources.getIdentifier(n, "dimen", "android")
+            if (id != 0) {
+                val px = runCatching { resources.getDimensionPixelSize(id) }.getOrDefault(0)
+                if (px > 0) {
+                    screenCorner = px / resources.displayMetrics.density
+                    screenCornerGlobal = screenCorner
+                    android.util.Log.i("EasyPT", "screenCorner=" + screenCorner + "dp (资源 " + n + ", " + px + "px)")
+                    return
+                }
+            }
+        }
+        android.util.Log.i("EasyPT", "screenCorner: 系统资源没定义，用兜底 " + screenCorner + "dp")
+    }
     private fun installCrashHandler() {
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->
@@ -2490,7 +2525,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp))
+                                    .clip(RoundedCornerShape(screenCorner.dp, screenCorner.dp, 0.dp, 0.dp))
                                     .background(MaterialTheme.colorScheme.surface)
                             ) {
                                 Row(
@@ -5977,6 +6012,9 @@ fun OnlineFontRow(
 }
 
 /** 进程级日志缓冲：Activity 与 FlashService 共用 */
+/** 屏幕物理圆角（dp），跨文件共享：MainActivity 读取，MiuixSlots 使用 */
+var screenCornerGlobal by androidx.compose.runtime.mutableStateOf(20f)
+
 object AppLog {
     val lines = mutableStateListOf<LogLine>()
 }
