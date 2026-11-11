@@ -2985,53 +2985,8 @@ fun KDialog(
         MaterialDialog(title = title, onDismiss = onDismiss, body = body)
         return
     }
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        // MIUIX：容器换成库里的 Card。只加这一个分支，
-        // 所有基于 KDialog 的弹窗（线刷步骤 / 分区表 / 擦除确认 / 崩溃日志）一起变成 MIUIX 皮，
-        // 液态玻璃和其它样式的代码一行没动
-        if (style == UiStyle.Miuix) {
-            // MIUIX 皮肤放在 MiuixSlots.MiuixDialog，这里只做派发
-            MiuixDialog(title, body)
-            return@Dialog
-        }
-        val shape = remember { RoundedCornerShape(26.dp) }
-        val wall = LocalWallBackdrop.current
-        Box(Modifier.fillMaxSize().padding(26.dp), contentAlignment = Alignment.Center) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (useBackdrop && wall != null) {
-                            Modifier.drawBackdrop(
-                                backdrop = wall,
-                                shape = { shape },
-                                effects = {
-                                    vibrancy()
-                                    blur(8.dp.toPx())
-                                    lens(24.dp.toPx(), 24.dp.toPx())
-                                },
-                                onDrawSurface = {
-                                    drawRect(
-                                        Palette.glassTint.copy(alpha = 0.6f)
-                                        
-                                    )
-                                }
-                            )
-                        } else {
-                            Modifier.clip(shape).background(Palette.surface)
-                        }
-                    )
-                    .padding(20.dp)
-            ) {
-                Text(title, color = Palette.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(14.dp))
-                body()
-            }
-        }
-    }
+    // 玻璃 / 原生：自绘面板，皮肤在 GlassSlots.GlassDialog
+    GlassDialog(title, onDismiss, body)
 }
 
 @Composable
