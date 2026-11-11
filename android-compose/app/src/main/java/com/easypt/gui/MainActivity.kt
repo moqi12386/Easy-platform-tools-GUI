@@ -143,6 +143,8 @@ private val TextPrimary: Color get() = Palette.text
 private val TextSecondary: Color get() = Palette.text2
 private val Accent: Color get() = Palette.accent
 private val Danger: Color get() = Palette.danger
+private val RebootGreen = Color(0xFF34C759)
+private val RecoveryOrange = Color(0xFFFF9F0A)
 private val OkColor: Color get() = if (Palette.dark) Color(0xFF3DD68C) else Color(0xFF12A150)
 private val ErrColor: Color get() = if (Palette.dark) Color(0xFFFF7B72) else Color(0xFFD93B3B)
 private val LogColor: Color get() = if (Palette.dark) Color(0xFFC9CDD6) else Color(0xFF4A5160)
@@ -2658,6 +2660,9 @@ enum class ThemeMode(val zh: String, val en: String) {
 
 /** 全局调色：用普通 var 存，配合 key() 重建整棵树，避免组合期间写状态 */
 object Palette {
+    /** 深色模式下三种轨道/描边共用的底色 */
+    private val trackDark = Color(0xFF3A3C42)
+
     var dark: Boolean = false
     // 必须是 Compose 状态：之前是普通 var，莫奈取色是异步算出来的，
     // 赋值时没有任何订阅者会重组，于是底栏/按钮一直停在默认蓝，切了莫奈也不变
@@ -2688,13 +2693,13 @@ object Palette {
     val chip: Color get() = if (dark) Color(0xFF2A2B30) else Color(0xFFF2F3F5)
 
     /** 滑块/开关的未选中轨道、输入框描边 —— 三处原本各写一份同样的成对色 */
-    val track: Color get() = if (dark) Color(0xFF3A3C42) else Color(0xFFCED2D8)
+    val track: Color get() = if (dark) trackDark else Color(0xFFCED2D8)
 
     /** 输入框描边（比 track 浅一点） */
-    val outline: Color get() = if (dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9)
+    val outline: Color get() = if (dark) trackDark else Color(0xFFE3E5E9)
 
     /** 滑条未激活轨道 */
-    val trackFaint: Color get() = if (dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
+    val trackFaint: Color get() = if (dark) trackDark else Color(0xFFE1E4E8)
 
     /** 弹窗容器（比 glassTint 更实一点） */
     val dialogSurface: Color get() = if (dark) Color(0xFF14161B) else Color(0xFFFAFBFD)
@@ -3420,9 +3425,9 @@ fun HomePage(
                 AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
                 AppRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = RebootGreen)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                    tint = RecoveryOrange, onClick = { onReboot("recovery") })
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
                     tint = Color(0xFF0A84FF), onClick = { onReboot("bootloader") })
                 AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Palette.danger)
@@ -3435,17 +3440,17 @@ fun HomePage(
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
                 AppRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = RebootGreen)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
-                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                    tint = RecoveryOrange, onClick = { onReboot("recovery") })
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Palette.danger)
             }
             else -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
                 AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = RebootGreen)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                    tint = RecoveryOrange, onClick = { onReboot("recovery") })
             }
         }
 
