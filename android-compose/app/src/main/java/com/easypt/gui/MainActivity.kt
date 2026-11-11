@@ -2993,22 +2993,8 @@ fun KDialog(
         // 所有基于 KDialog 的弹窗（线刷步骤 / 分区表 / 擦除确认 / 崩溃日志）一起变成 MIUIX 皮，
         // 液态玻璃和其它样式的代码一行没动
         if (style == UiStyle.Miuix) {
-            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-                        Column(Modifier.padding(20.dp)) {
-                            Text(
-                                title,
-                                color = MiuixTheme.colorScheme.onBackground,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            body()
-                        }
-                    }
-                }
-            }
+            // MIUIX 皮肤放在 MiuixSlots.MiuixDialog，这里只做派发
+            MiuixDialog(title, body)
             return@Dialog
         }
         val shape = remember { RoundedCornerShape(26.dp) }
