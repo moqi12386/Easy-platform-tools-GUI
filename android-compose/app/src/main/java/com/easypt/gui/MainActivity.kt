@@ -3314,29 +3314,13 @@ fun HomePage(
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
-                // 「执行」用 demo 的液态按钮（有按下形变 + 高光 + 折射）
-                val runWall = LocalWallBackdrop.current
-                if (style == UiStyle.Miuix) {
-                    // MIUIX：官方 Button（主色按钮，见 docs/components/button.md）
-                    top.yukonga.miuix.kmp.basic.Button(
-                        onClick = { onRun(cmd); cmd = "" },
-                        colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.height(52.dp)
-                    ) { Text(tr(lang, "执行", "Run")) }
-                } else if (useBackdrop && runWall != null) {
-                    LiquidButton(
-                        onClick = { onRun(cmd); cmd = "" },
-                        backdrop = runWall,
-                        modifier = Modifier.height(52.dp),
-                        tint = LocalAccent.current
-                    ) { Text(tr(lang, "执行", "Run"), color = Color.White, fontSize = 15.sp) }
-                } else {
-                    Button(
-                        onClick = { onRun(cmd); cmd = "" },
-                        colors = primaryButtonColors(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text(tr(lang, "执行", "Run")) }
-                }
+                GlassButton(
+                    text = tr(lang, "执行", "Run"),
+                    onClick = { onRun(cmd); cmd = "" },
+                    modifier = Modifier.height(52.dp),
+                    primary = true,
+                    tint = LocalAccent.current
+                )
             }
         }
         Spacer(Modifier.height(16.dp))
