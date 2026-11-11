@@ -2468,12 +2468,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(150.dp)
+                            .height(230.dp)
                             .background(
                                 Brush.verticalGradient(
-                                    0f to Bg.copy(alpha = 0.95f),
-                                    0.35f to Bg.copy(alpha = 0.70f),
-                                    0.70f to Bg.copy(alpha = 0.28f),
+                                    0f to Bg.copy(alpha = 0.99f),
+                                    0.22f to Bg.copy(alpha = 0.95f),
+                                    0.42f to Bg.copy(alpha = 0.80f),
+                                    0.62f to Bg.copy(alpha = 0.55f),
+                                    0.82f to Bg.copy(alpha = 0.26f),
                                     1f to Color.Transparent
                                 )
                             )
