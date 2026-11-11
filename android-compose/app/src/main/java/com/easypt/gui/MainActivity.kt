@@ -4746,17 +4746,13 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
             SliderRow(lang, bd, tr(lang, "底料", "Tint"), tintPct, 0f, 100f) { tintPct = it }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                if (useBackdrop) {
-                    LiquidButton(onClick = onClose, backdrop = bd, modifier = Modifier.height(48.dp)) {
-                        Text(tr(lang, "关闭", "Close"), color = Color.White, fontSize = 15.sp)
-                    }
-                } else {
-                    Button(
-                        onClick = onClose,
-                        colors = primaryButtonColors(),
-                        shape = RoundedCornerShape(50)
-                    ) { Text(tr(lang, "关闭", "Close")) }
-                }
+                GlassButton(
+                    text = tr(lang, "关闭", "Close"),
+                    onClick = onClose,
+                    modifier = Modifier.height(48.dp),
+                    primary = true,
+                    tint = LocalAccent.current
+                )
             }
             Spacer(Modifier.height(16.dp))
         }
