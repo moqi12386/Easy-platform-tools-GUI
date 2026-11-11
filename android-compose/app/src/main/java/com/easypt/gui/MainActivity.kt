@@ -4691,63 +4691,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
             color = contentColor.copy(alpha = 0.5f), fontSize = 11.sp,
             modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 12.dp)
         )
-        Row(
-            Modifier.padding(24.dp, 4.dp, 24.dp, 24.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "关闭", "Close"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = onDismiss,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr(lang, "好", "OK"), color = Color.White) }
-            } else if (useBackdrop && backdrop != null) {
-                // demo 的 LiquidButton
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = backdrop,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) {
-                    Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp)
-                }
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = backdrop,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
-                ) {
-                    Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp)
-                }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(containerColor.copy(alpha = 0.2f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Palette.accent)
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp) }
-            }
-        }
+        UiDialogActions(             confirmText = tr(lang, "好", "OK"),             onConfirm = onDismiss,             dismissText = tr(lang, "关闭", "Close"),             onDismiss = onDismiss         )
     }
 }
 
@@ -5545,59 +5489,7 @@ fun LogColorDialog(
             }
         }
         Spacer(Modifier.height(10.dp))
-        Row(
-            Modifier.padding(24.dp, 4.dp, 24.dp, 24.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val wall = LocalWallBackdrop.current
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = { onSave(colors) },
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr(lang, "完成", "Done"), color = Color.White) }
-            } else if (useBackdrop && wall != null) {
-                // 按钮抄 demo 的 LiquidButton
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = wall,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                LiquidButton(
-                    onClick = { onSave(colors) },
-                    backdrop = wall,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Palette.accent
-                ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Palette.accent)
-                        .clickable { onSave(colors) }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
-            }
-        }
+        UiDialogActions(             confirmText = tr(lang, "完成", "Done"),             onConfirm = { onSave(colors) },             dismissText = tr(lang, "取消", "Cancel"),             onDismiss = onDismiss         )
     }
     }
 }
