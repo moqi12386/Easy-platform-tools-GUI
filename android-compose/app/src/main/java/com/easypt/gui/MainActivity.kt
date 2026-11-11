@@ -2162,10 +2162,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
             else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
         } else null
-        // 莫奈取色：直接分析当前壁纸位图（自定义壁纸也算），且只对 Material 风格生效
+        // 莫奈取色：直接分析当前壁纸位图，四种风格共用同一主色
         var monetColor by remember { mutableStateOf<Color?>(null) }
         LaunchedEffect(monet, style, assets, customWallpaper) {
-            monetColor = if (monet && style == UiStyle.Material && assets != null) {
+            monetColor = if (monet && assets != null) {
                 withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
                         val bmp = assets.full.asAndroidBitmap()
@@ -3887,7 +3887,7 @@ fun SettingsPage(
                 selected = themeMode.ordinal,
                 onPick = { onTheme(ThemeMode.entries[it]) }
             )
-            if (style == UiStyle.Material) {
+            if (canMonet) {
                 AppSwitchRow(
                     icon = Icons.Filled.Edit,
                     title = tr(lang, "莫奈取色", "Monet colors"),
