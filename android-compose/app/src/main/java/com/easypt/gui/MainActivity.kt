@@ -4929,23 +4929,9 @@ fun LiquidChoiceDialog(
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
-    // Material：官方 M3 对话框；选项用 M3 ListItem，取消用 TextButton
+    // Material：官方 M3 对话框，皮肤在 MaterialSlots.MaterialChoiceDialog
     if (LocalStyle.current == UiStyle.Material) {
-        MaterialDialog(title = title, onDismiss = onDismiss) {
-            options.forEachIndexed { i, name ->
-                ListItem(
-                    modifier = Modifier.clickable { onPick(i) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = { Text(name, style = MaterialTheme.typography.bodyLarge) },
-                    trailingContent = if (i == selected) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("取消") }
-            }
-        }
+        MaterialChoiceDialog(title, options, selected, onPick, onDismiss)
         return
     }
 
