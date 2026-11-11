@@ -4301,69 +4301,24 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
             Modifier.padding(24.dp, 0.dp, 24.dp, 24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val bd = LocalWallBackdrop.current
             val last = page == pages.lastIndex
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "先不看", "Later"),
-                    onClick = { onDone() },
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = { if (last) onDone() else page++ },
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        if (last) tr(lang, "开始使用", "Get started") else tr(lang, "下一步", "Next"),
-                        color = Color.White
-                    )
-                }
-            } else if (useBackdrop && bd != null) {
-                LiquidButton(
-                    onClick = { if (last) onDone() else onDone() },
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
-                LiquidButton(
-                    onClick = { if (last) onDone() else page++ },
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
-                ) {
-                    Text(
-                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
-                        color = Color.White, fontSize = 15.sp
-                    )
-                }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(contentColor.copy(alpha = 0.10f))
-                        .clickable { onDone() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current)
-                        .clickable { if (last) onDone() else page++ }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
-                        color = Color.White, fontSize = 15.sp
-                    )
-                }
-            }
+            val nextLabel = if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next")
+            GlassButton(
+                text = tr(lang, "先不看", "Later"),
+                onClick = { onDone() },
+                modifier = Modifier.weight(1f),
+                textColor = contentColor,
+                surface = Color.White.copy(alpha = 0.3f),
+                plainBackground = contentColor.copy(alpha = 0.10f)
+            )
+            GlassButton(
+                text = nextLabel,
+                onClick = { if (last) onDone() else page++ },
+                modifier = Modifier.weight(1f),
+                textColor = Color.White,
+                primary = true,
+                tint = LocalAccent.current
+            )
         }
     }
 }
