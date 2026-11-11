@@ -3141,7 +3141,7 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
 @Composable
 fun KDialog(
     style: UiStyle,
-    title: String,
+    title: String? = null,
     onDismiss: () -> Unit = {},
     body: @Composable ColumnScope.() -> Unit
 ) {
@@ -3179,8 +3179,10 @@ fun KDialog(
                     )
                     .padding(20.dp)
             ) {
-                Text(title, color = Palette.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(14.dp))
+                if (title != null) {
+                    Text(title, color = Palette.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(14.dp))
+                }
                 body()
             }
         }
@@ -4431,8 +4433,7 @@ fun LiquidBottomBar(
 // ======================= 关于 / Glass Playground =======================
 
 /**
- * 玻璃弹窗面板 —— 结构/参数照抄 AndroidLiquidGlass demo 的 DialogContent：
- * 压暗 + RoundedRectangle(48dp) + colorControls + blur + lens(depthEffect) + Highlight.Plain
+ * 玻璃弹窗面板：统一走 KDialog（底色来自 Palette，玻璃风格自动加 backdrop）。
  */
 @Composable
 fun GlassDialogPanel(
@@ -4440,108 +4441,10 @@ fun GlassDialogPanel(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val light = !Palette.dark
-    val containerColor = Ui.surface.copy(alpha = 0.60f)
-    val dimColor = Palette.bg.copy(alpha = 0.45f)
-
-
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        // MIUIX：容器换成库里的 Card。只加这一个分支，所有基于 GlassDialogPanel 的弹窗
-        // （开机向导 / 确认框 / 关于 / 在线壁纸 / 日志颜色）一起变成 MIUIX 皮，
-        // 液态玻璃那条路一行没动
-        if (LocalStyle.current == UiStyle.Miuix) {
-            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
-                Box(Modifier.fillMaxSize()) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(dimColor)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onDismiss() }
-                    )
-                    Column(
-                        Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp)
-                            .fillMaxWidth()
-                            .heightIn(max = 620.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-                            Column { content() }
-                        }
-                    }
-                }
-            }
-            return@Dialog
-        }
-        Box(Modifier.fillMaxSize()) {
-            // 压暗层（点空白关闭）
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(dimColor)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onDismiss() }
-            )
-            Column(
-                Modifier
-                    .align(Alignment.Center)
-                    .padding(40.dp)
-                    .fillMaxWidth()
-                    .then(
-                        if (useBackdrop && backdrop != null) {
-                            Modifier.drawBackdrop(
-                                backdrop = backdrop,
-                                shape = { RoundedCornerShape(48.dp) },
-                                effects = {
-                                    colorControls(
-                                        brightness = if (light) 0.2f else 0f,
-                                        saturation = 1.5f
-                                    )
-                                    blur(if (light) 16.dp.toPx() else 8.dp.toPx())
-                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
-                                },
-                                highlight = { Highlight.Plain },
-                                onDrawSurface = { drawRect(containerColor) }
-                            )
-                        } else {
-                            val as2 = LocalGlassAssets.current
-                            val sc = LocalGlassScreen.current
-                            if (as2 != null && sc.width > 0) {
-                                Modifier.glassSurface(
-                                    assets = as2,
-                                    shape = RoundedCornerShape(48.dp),
-                                    cornerDp = 48,
-                                    screen = sc,
-                                    blurLevel = 0.25f,
-                                    density = 0.6f,
-                                    light = light,
-                                    tint = if (light) Color.White else Color(0xFF121212),
-                                    tintAlpha = if (light) 0.55f else 0.5f
-                                )
-                            } else {
-                                Modifier
-                                    .clip(RoundedCornerShape(48.dp))
-                                    .background(if (light) Color(0xFFFAFAFA) else Color(0xFF1B1C20))
-                            }
-                        }
-                    )
-            ) {
-                CompositionLocalProvider(
-                    LocalAccent provides (if (light) Color(0xFF16181D) else Color(0xFFECEDEF))
-                ) {
-                    content()
-                }
-            }
-        }
+    KDialog(style = LocalStyle.current, title = null, onDismiss = onDismiss) {
+        content()
     }
 }
-
 /** 首次使用向导：几页说明 + 跳过/下一步，液态玻璃面板 */
 @Composable
 fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
