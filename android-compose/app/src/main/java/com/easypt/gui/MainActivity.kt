@@ -2151,8 +2151,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         Palette.dark = dark
         android.util.Log.i("EasyPT", "colorProbe monet=" + monet + " style=" + style +
             " m3=" + (Palette.m3 != null) + " surface=" + Palette.surface + " bg=" + Palette.bg + " accent=" + Palette.accent)
-        // 只有开了「莫奈取色」才走系统动态色；关掉就回到项目自己的配色
-        Palette.m3 = if (style != UiStyle.Material || !monet) {
+        // 只有开了「莫奈取色」才走系统动态色；关掉就回到项目自己的配色。
+        // 注意：有自定义壁纸时也不能用系统动态色 —— 系统取的是桌面壁纸，
+        // 我们显示的是应用内这张图，颜色源不同必然不协调；
+        // 这种情况走下面从这张图分析出来的 monetColor。
+        Palette.m3 = if (style != UiStyle.Material || !monet || customWallpaper != null) {
             null
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
