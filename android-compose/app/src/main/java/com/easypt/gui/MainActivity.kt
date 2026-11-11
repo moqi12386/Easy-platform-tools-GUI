@@ -3057,37 +3057,25 @@ private fun BigLogOverlay(
                 Spacer(Modifier.width(8.dp))
                 Text("(${logs.size})", color = text.copy(alpha = 0.45f), fontSize = 12.sp)
                 Spacer(Modifier.weight(1f))
-                val bigBd = LocalWallBackdrop.current
-                if (useBackdrop && bigBd != null) {
-                    // 放大后的「清空」「关闭」也用液态按钮，和主页日志头那两个一致
-                    val btnSurface = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
-                    else Color.White.copy(alpha = 0.35f)
-                    LiquidButton(
-                        onClick = onClear,
-                        backdrop = bigBd,
-                        modifier = Modifier.height(48.dp),
-                        surfaceColor = btnSurface
-                    ) { Text(tr(lang, "清空", "Clear"), color = text, fontSize = 13.sp) }
-                    Spacer(Modifier.width(22.dp))
-                    LiquidButton(
-                        onClick = onClose,
-                        backdrop = bigBd,
-                        modifier = Modifier.height(48.dp),
-                        surfaceColor = btnSurface
-                    ) { Text(tr(lang, "关闭", "Close"), color = text, fontSize = 13.sp) }
-                } else {
-                    Text(
-                        tr(lang, "清空", "Clear"),
-                        color = LocalAccent.current, fontSize = 14.sp,
-                        modifier = Modifier.clickable { onClear() }
-                    )
-                    Spacer(Modifier.width(18.dp))
-                    Text(
-                        tr(lang, "关闭", "Close"),
-                        color = LocalAccent.current, fontSize = 14.sp,
-                        modifier = Modifier.clickable { onClose() }
-                    )
-                }
+                GlassButton(
+                    text = tr(lang, "清空", "Clear"),
+                    onClick = onClear,
+                    fontSize = 13.sp,
+                    textColor = text,
+                    surface = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                    else Color.White.copy(alpha = 0.35f),
+                    plainBackground = Color.Transparent
+                )
+                Spacer(Modifier.width(22.dp))
+                GlassButton(
+                    text = tr(lang, "关闭", "Close"),
+                    onClick = onClose,
+                    fontSize = 13.sp,
+                    textColor = text,
+                    surface = if (Palette.dark) Color.Black.copy(alpha = 0.22f)
+                    else Color.White.copy(alpha = 0.35f),
+                    plainBackground = Color.Transparent
+                )
             }
             Spacer(Modifier.height(10.dp))
             val inset = if (style == UiStyle.Glass) {
