@@ -2896,7 +2896,6 @@ object Palette {
     val chevron: Color get() = if (dark) Color(0xFF5C6068) else Color(0xFFC2C6CC)
     val inset: Color get() = if (dark) Color(0xFF121316) else Color(0xFFF5F6F8)
     val chip: Color get() = if (dark) Color(0xFF2A2B30) else Color(0xFFF2F3F5)
-    val nativeCard: Color get() = Color(0xFF1B1F27).copy(alpha = 0.92f)
 }
 
 /** 卡片里的文字颜色：玻璃/深色卡片用白字，其余跟随主题 */
@@ -4343,14 +4342,13 @@ fun LiquidBottomBar(
                     }
             ) {
                 // —— 以下参数照抄 AndroidLiquidGlass 的 LiquidBottomTabs ——
-                val containerColor = if (dark) Color(0xFF121212).copy(alpha = 0.4f)
-                else Color(0xFFFAFAFA).copy(alpha = 0.4f)
+                val containerColor = Ui.surface.copy(alpha = 0.40f)
                 val surfaceMod = when {
                     // 原生风格：和上面卡片完全同一个色板，风格统一
                     mono -> Modifier
                         .shadow(10.dp, capsule, clip = false)
                         .clip(capsule)
-                        .background(Palette.nativeCard)
+                        .background(Ui.surface)
                     useBackdrop -> Modifier.drawBackdrop(
                         backdrop = backdrop,
                         shape = { capsule },
@@ -4453,7 +4451,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
     // 所以 Material 下把外层留白收掉
     val isM3 = LocalStyle.current == UiStyle.Material
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    val contentColor = Ui.text
     val pages = listOf(
         Triple(
             tr(lang, "欢迎使用 EasyPT", "Welcome to EasyPT"),
