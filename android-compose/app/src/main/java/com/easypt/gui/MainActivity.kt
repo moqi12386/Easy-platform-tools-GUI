@@ -4697,26 +4697,13 @@ fun LiquidChoiceDialog(
                         Text(name, color = if (sel) LocalAccent.current else contentColor, fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
                         if (onDelete != null && deletable.contains(i)) {
-                            val delBd = LocalWallBackdrop.current
-                            if (useBackdrop && delBd != null) {
-                                LiquidButton(
-                                    onClick = { onDelete(i) },
-                                    backdrop = delBd,
-                                    modifier = Modifier.height(48.dp)
-                                ) {
-                                    Text("删除", color = contentColor, fontSize = 12.sp)
-                                }
-                            } else {
-                                Text(
-                                    "删除",
-                                    color = contentColor, fontSize = 12.sp,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(contentColor.copy(alpha = 0.12f))
-                                        .clickable { onDelete(i) }
-                                        .padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
-                            }
+                            GlassButton(
+                                text = "删除",
+                                onClick = { onDelete(i) },
+                                textColor = contentColor,
+                                fontSize = 12.sp,
+                                plainBackground = contentColor.copy(alpha = 0.12f)
+                            )
                             Spacer(Modifier.width(8.dp))
                         }
                         if (sel) Icon(Icons.Filled.Check, null, tint = LocalAccent.current, modifier = Modifier.size(20.dp))
