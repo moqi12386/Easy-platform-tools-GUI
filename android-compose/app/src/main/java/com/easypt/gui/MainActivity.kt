@@ -4951,38 +4951,20 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                     else tr(lang, "选择", "Select")
                                 )
                             }
-                        } else if (useBackdrop && bd != null) {
-                            LiquidButton(
-                                onClick = {
-                                    if (!isBusy) { busyIndex = i; progress = 0 }
-                                },
-                                backdrop = bd,
-                                modifier = Modifier.fillMaxWidth().height(38.dp),
-                                tint = if (isBusy) LocalAccent.current else Color.Unspecified
-                            ) {
-                                Text(
-                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
-                                    else tr(lang, "选择", "Select"),
-                                    color = contentColor, fontSize = 13.sp
-                                )
-                            }
                         } else {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(38.dp)
-                                    .clip(RoundedCornerShape(19.dp))
-                                    .background(if (isBusy) LocalAccent.current else LocalAccent.current.copy(alpha = 0.18f))
-                                    .clickable { if (!isBusy) { busyIndex = i; progress = 0 } },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
-                                    else tr(lang, "选择", "Select"),
-                                    color = if (isBusy) Color.White else contentColor,
-                                    fontSize = 13.sp
-                                )
-                            }
+                            GlassButton(
+                                text = if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                else tr(lang, "选择", "Select"),
+                                onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
+                                modifier = Modifier.fillMaxWidth(),
+                                textColor = if (isBusy) Color.White else contentColor,
+                                fontSize = 13.sp,
+                                height = 38.dp,
+                                primary = isBusy,
+                                tint = LocalAccent.current,
+                                plainBackground = if (isBusy) LocalAccent.current
+                                else LocalAccent.current.copy(alpha = 0.18f)
+                            )
                         }
                     }
                 }
