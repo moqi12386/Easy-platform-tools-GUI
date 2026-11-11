@@ -52,6 +52,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -190,6 +194,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
+    /** 实验：状态栏真模糊（内容录两遍，只露顶部模糊条） */
+    private var expBlur by mutableStateOf(true)
     /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
     private var screenCorner by mutableStateOf(20f)
     private var fontChoice by mutableStateOf(AppFont.System)
@@ -328,6 +334,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
+        expBlur = sp.getBoolean("expblur", true)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         val dk = sp.getBoolean("dark", false)
         logCmdColor = readLogColor(sp, "lc2Cmd")
@@ -2258,7 +2265,24 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
-                Box(Modifier.fillMaxSize()) {
+                // 实验：内容录两遍，正常画一遍；顶部 120dp 内再画一遍模糊的
+                val contentLayer = rememberGraphicsLayer()
+                val blurLayer = rememberGraphicsLayer()
+                val contentMod = if (expBlur) {
+                    Modifier.drawWithContent {
+                        contentLayer.record { this@drawWithContent.drawContent() }
+                        blurLayer.record { this@drawWithContent.drawContent() }
+                        // 半径用 dp 转 px：之前写死 80f 是按像素算的，糊成一片白
+                        val r = 22.dp.toPx()
+                        blurLayer.renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r)
+                        drawLayer(contentLayer)
+                        // 只露顶部这一条，外面一律裁剪掉
+                        clipRect(0f, 0f, size.width, 120.dp.toPx()) {
+                            drawLayer(blurLayer)
+                        }
+                    }
+                } else Modifier
+                Box(Modifier.fillMaxSize().then(contentMod)) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
                         LocalGlassAssets provides assets,
@@ -2424,6 +2448,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onCheckUpdate = { checkUpdate(true) },
                             onSimulateFlash = { simulateFlash() },
                             showTestTools = testTools,
+                            expBlur = expBlur,
+                            onExpBlur = { v ->
+                                expBlur = v
+                                getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("expblur", v).apply()
+                            },
                             onTestTools = { v ->
                                 testTools = v
                                 getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("testtools", v).apply()
@@ -2468,7 +2497,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(230.dp)
+                            .height(120.dp)
                             .background(
                                 Brush.verticalGradient(
                                     0f to Bg.copy(alpha = 0.99f),
@@ -3885,6 +3914,8 @@ fun SettingsPage(
     onSimulateFlash: () -> Unit,
     showTestTools: Boolean,
     onTestTools: (Boolean) -> Unit,
+    expBlur: Boolean,
+    onExpBlur: (Boolean) -> Unit,
     onCheckUpdate: () -> Unit,
     downloadedFonts: Set<AppFont>,
     fontTargetKey: String,
@@ -5022,7 +5053,7 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(230.dp)
+                    .height(120.dp)
                     .then(
                         if (useBackdrop) {
                             Modifier.drawBackdrop(
