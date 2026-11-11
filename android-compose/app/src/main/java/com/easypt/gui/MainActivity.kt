@@ -2170,8 +2170,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     runCatching {
                         val bmp = assets.full.asAndroidBitmap()
                         val pal = androidx.palette.graphics.Palette.from(bmp).clearFilters().generate()
-                        val c = pal.getVibrantColor(0)
-                            .takeIf { it != 0 }
+                        // 优先挑暖色（红/橙/黄）：壁纸里青色云占了很大面积，
+                        // 取出来会变成青蓝，和画面主调（火光）不搭
+                        val warm = pal.swatches
+                            .map { it.rgb }
+                            .filter { rgb ->
+                                val hsv = FloatArray(3)
+                                android.graphics.Color.colorToHSV(rgb, hsv)
+                                (hsv[0] <= 60f || hsv[0] >= 330f) && hsv[1] >= 0.25f && hsv[2] >= 0.25f
+                            }
+                            .maxByOrNull { rgb ->
+                                val hsv = FloatArray(3)
+                                android.graphics.Color.colorToHSV(rgb, hsv)
+                                hsv[1]
+                            }
+                        val c = warm
+                            ?: pal.getVibrantColor(0).takeIf { it != 0 }
                             ?: pal.getLightVibrantColor(0).takeIf { it != 0 }
                             ?: pal.getDominantColor(0)
                         if (c == 0) null else Color(c)
@@ -2317,13 +2331,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     familyFor(fontChoice)
                                 ),
                                 colorScheme = run {
-                                    // Material You：API 31+ 直接用系统从壁纸取的动态配色，
-                                    // 低版本回退到项目自己这套
-                                    val c = LocalContext.current
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        if (dark) androidx.compose.material3.dynamicDarkColorScheme(c)
-                                        else androidx.compose.material3.dynamicLightColorScheme(c)
-                                    } else if (dark) {
+                                    // 这里的主题只是外层容器：Palette.m3 已经包含了
+                                    // 「该不该用系统动态色」的判断，这里只需用它或本项目的方案
+                                    Palette.m3 ?: if (dark) {
                                         darkColorScheme(
                                             primary = Palette.accent,
                                             surface = Surface,
@@ -3090,7 +3100,7 @@ fun KSwitchRow(
                 enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = Palette.accent,   // 实时读，跟卡片同源
+                    checkedTrackColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,   // 与按钮同源
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
                     uncheckedBorderColor = Color.Transparent
