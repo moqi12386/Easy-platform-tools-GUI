@@ -4639,58 +4639,13 @@ fun GlassConfirmDialog(
             message, color = contentColor.copy(alpha = 0.72f), fontSize = 14.sp, lineHeight = 20.sp,
             modifier = Modifier.padding(28.dp, 0.dp, 28.dp, 10.dp)
         )
-        Row(
-            Modifier.padding(24.dp, 6.dp, 24.dp, 24.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val bd = LocalWallBackdrop.current
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = onConfirm,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(confirmText, color = Color.White) }
-            } else if (useBackdrop && bd != null) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                LiquidButton(
-                    onClick = onConfirm,
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = if (destructive) Tints.red else Palette.accent
-                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(contentColor.copy(alpha = 0.10f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(if (destructive) Tints.red else Palette.accent)
-                        .clickable { onConfirm() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
-            }
-        }
+        UiDialogActions(
+            confirmText = confirmText,
+            onConfirm = onConfirm,
+            dismissText = tr(lang, "取消", "Cancel"),
+            onDismiss = onDismiss,
+            confirmColor = if (destructive) Tints.red else null
+        )
     }
 }
 
