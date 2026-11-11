@@ -734,8 +734,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             logs.add(LogLine("[$ts] $text", c))
             while (logs.size > 300) logs.removeAt(0)
         }
-        // 刷机期间：实况通知的文字跟着日志最新一行走（节流 300ms，避免刷爆通知）
-        if (busy) {
+        // 只有「线刷」才推实况通知：检查更新/读分区表这类后台活不碰它，
+        // 否则前台服务会被任何动作拉起来常驻，保活过强
+        if (flashing) {
             val now = System.currentTimeMillis()
             if (now - lastNotifyPush > 300L) {
                 lastNotifyPush = now
@@ -743,7 +744,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     updateFlashLive(
                         LiveUpdate(
                             t("线刷中", "Flashing"),
-                            (if (flashPart.isEmpty()) "" else "$flashPart · ") + text.trim().take(70),
+                            text.trim().take(70),
                             flashStep, flashMax
                         )
                     )
@@ -754,6 +755,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     private var lastNotifyPush = 0L
     private var flashPart = ""
+    /** 只有线刷过程为 true —— 实况通知只在这段时间存在 */
+    private var flashing = false
     private var flashStep = 0
     private var flashMax = 0
     fun clearLog() { logs.clear() }
@@ -1265,6 +1268,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 小米系会积极回收后台进程。刷机期间：保持屏幕常亮 + 尝试进电池白名单。
         ui.post { runCatching { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
         ensureBatteryExempt()        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
+        flashing = true
         runCatching { flashMarker().writeText("${romProduct.ifEmpty { "未知机型" }} · ${steps.size} 步") }
         updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
         for ((i, s) in steps.withIndex()) {
@@ -1287,6 +1291,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             }
             if (s.kind == "reboot" && ok) break
         }
+        flashing = false
         runCatching { flashMarker().delete() }
         finishFlashLive(failCount == 0)
         ui.post { runCatching { window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
@@ -1841,6 +1846,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             .putExtra(FlashService.EXTRA_STEP, island.step)
             .putExtra(FlashService.EXTRA_MAX, island.max)
             .putExtra(FlashService.EXTRA_COLOR, accent)
+            .putExtra(FlashService.EXTRA_SHORT, island.short ?: island.text)
         // 启动失败要说出来，并且退回普通通知：上一版静默失败，
         // 用户只看到「通知没了」，日志里一个字都没有
         runCatching {
@@ -1900,7 +1906,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     /** 实况通知要显示的状态 */
-    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false, val failed: Boolean = false)
+    data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false, val failed: Boolean = false, val short: String? = null)
     // ---------------- 检查更新 ----------------
 
     /** 本机版本名，比如 3.50.3 */
