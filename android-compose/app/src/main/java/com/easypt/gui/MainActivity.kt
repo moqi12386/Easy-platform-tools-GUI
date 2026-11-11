@@ -3102,17 +3102,11 @@ fun KSwitchRow(
                 backdrop = wall
             )
         } else {
-            Switch(
+            // 统一组件：颜色全部走 Ui（= Palette），不再写 MaterialTheme/硬编码
+            UiSwitch(
                 checked = checked,
                 onCheckedChange = { onCheckedChange(it) },
-                enabled = enabled,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,   // 与按钮同源
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
-                    uncheckedBorderColor = Color.Transparent
-                )
+                enabled = enabled
             )
         }
     }
