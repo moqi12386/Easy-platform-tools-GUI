@@ -2308,7 +2308,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
                         // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
-                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else LocalAccent.current
+                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else Palette.accent
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -2324,7 +2324,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         else androidx.compose.material3.dynamicLightColorScheme(c)
                                     } else if (dark) {
                                         darkColorScheme(
-                                            primary = LocalAccent.current,
+                                            primary = Palette.accent,
                                             surface = Surface,
                                             surfaceContainer = Surface,
                                             surfaceContainerLow = Surface,
@@ -2334,7 +2334,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         )
                                     } else {
                                         lightColorScheme(
-                                            primary = LocalAccent.current,
+                                            primary = Palette.accent,
                                             onPrimary = Color.White,
                                             surface = Surface,
                                             surfaceContainer = Surface,
@@ -2544,7 +2544,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             typography = typographyWith(familyFor(fontChoice)),
                             colorScheme = if (dark) {
                                 darkColorScheme(
-                                    primary = LocalAccent.current,
+                                    primary = Palette.accent,
                                     surface = Surface,
                                     // 底栏底色跟卡片用同一个色，M3 默认的 #211F26 偏紫、比卡片亮一档，
                                     // 摆在一起像两个东西
@@ -2552,8 +2552,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     surfaceContainerLow = Surface,
                                     // NavigationBarItem 的选中药丸取 secondaryContainer、图标取 onSecondaryContainer，
                                     // 不覆盖的话是 M3 基线那套紫色，跟本项目的蓝色主色对不上
-                                    secondaryContainer = LocalAccent.current.copy(alpha = 0.24f),
-                                    onSecondaryContainer = LocalAccent.current,
+                                    secondaryContainer = Palette.accent.copy(alpha = 0.24f),
+                                    onSecondaryContainer = Palette.accent,
                                     onSurface = TextPrimary,
                                     onSurfaceVariant = Palette.text2,
                                     background = Bg,
@@ -2561,13 +2561,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 )
                             } else {
                                 lightColorScheme(
-                                    primary = LocalAccent.current,
+                                    primary = Palette.accent,
                                     onPrimary = Color.White,
                                     surface = Surface,
                                     surfaceContainer = Surface,
                                     surfaceContainerLow = Surface,
-                                    secondaryContainer = LocalAccent.current.copy(alpha = 0.14f),
-                                    onSecondaryContainer = LocalAccent.current,
+                                    secondaryContainer = Palette.accent.copy(alpha = 0.14f),
+                                    onSecondaryContainer = Palette.accent,
                                     onSurface = TextPrimary,
                                     onSurfaceVariant = Palette.text2,
                                     background = Bg,
@@ -2628,7 +2628,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             ) {
                                                 Icon(
                                                     ic, contentDescription = null,
-                                                    tint = if (sel) LocalAccent.current
+                                                    tint = if (sel) Palette.accent
                                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier.size(22.dp)
                                                 )
@@ -2637,7 +2637,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             Text(
                                                 label,
                                                 fontSize = 11.sp,
-                                                color = if (sel) LocalAccent.current
+                                                color = if (sel) Palette.accent
                                                 else MaterialTheme.colorScheme.onSurfaceVariant
                                                 , maxLines = 1
                                             )
@@ -2775,9 +2775,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     familyFor(fontChoice)
                                 ),
                         colorScheme = if (dark) {
-                            darkColorScheme(primary = LocalAccent.current, surface = Surface, onSurface = TextPrimary)
+                            darkColorScheme(primary = Palette.accent, surface = Surface, onSurface = TextPrimary)
                         } else {
-                            lightColorScheme(primary = LocalAccent.current, surface = Surface, onSurface = TextPrimary)
+                            lightColorScheme(primary = Palette.accent, surface = Surface, onSurface = TextPrimary)
                         }
                     ) {
                         if (showParts) {
@@ -3176,10 +3176,10 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     disabledTextColor = Palette.text2,
     focusedContainerColor = Palette.inset,
     unfocusedContainerColor = Palette.inset,
-    cursorColor = LocalAccent.current,
-    focusedBorderColor = LocalAccent.current.copy(alpha = 0.6f),
+    cursorColor = Palette.accent,
+    focusedBorderColor = Palette.accent.copy(alpha = 0.6f),
     unfocusedBorderColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9),
-    focusedLabelColor = LocalAccent.current,
+    focusedLabelColor = Palette.accent,
     unfocusedLabelColor = Palette.text2,
     focusedPlaceholderColor = Palette.text2,
     unfocusedPlaceholderColor = Palette.text2
@@ -3218,7 +3218,7 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
-                    activeTrackColor = LocalAccent.current,
+                    activeTrackColor = Palette.accent,
                     inactiveTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
                 )
             )
@@ -3420,13 +3420,13 @@ private fun BigLogOverlay(
                 } else {
                     Text(
                         tr(lang, "清空", "Clear"),
-                        color = LocalAccent.current, fontSize = 14.sp,
+                        color = Palette.accent, fontSize = 14.sp,
                         modifier = Modifier.clickable { onClear() }
                     )
                     Spacer(Modifier.width(18.dp))
                     Text(
                         tr(lang, "关闭", "Close"),
-                        color = LocalAccent.current, fontSize = 14.sp,
+                        color = Palette.accent, fontSize = 14.sp,
                         modifier = Modifier.clickable { onClose() }
                     )
                 }
@@ -3507,7 +3507,7 @@ private fun RomDialog(
                     onClick = onStart,
                     backdrop = romBd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
+                    tint = Palette.accent
                 ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White, fontSize = 15.sp) }
             }
         } else {
@@ -3725,7 +3725,7 @@ fun HomePage(
                         onClick = { onRun(cmd); cmd = "" },
                         backdrop = runWall,
                         modifier = Modifier.height(52.dp),
-                        tint = LocalAccent.current
+                        tint = Palette.accent
                     ) { Text(tr(lang, "执行", "Run"), color = Color.White, fontSize = 15.sp) }
                 } else {
                     Button(
@@ -3751,7 +3751,7 @@ fun HomePage(
                 Text(tr(lang, "日志", "Log"), color = text, fontSize = 16.sp)
                 if (busy) {
                     Spacer(Modifier.width(8.dp))
-                    Text(tr(lang, "· 执行中", "· running"), color = LocalAccent.current, fontSize = 12.sp)
+                    Text(tr(lang, "· 执行中", "· running"), color = Palette.accent, fontSize = 12.sp)
                 }
                 Spacer(Modifier.weight(1f))
                 val clearWall = LocalWallBackdrop.current
@@ -3791,7 +3791,7 @@ fun HomePage(
                 } else {
                     Text(
                         tr(lang, "清空", "Clear"),
-                        color = LocalAccent.current, fontSize = 13.sp,
+                        color = Palette.accent, fontSize = 13.sp,
                         modifier = Modifier.clickable { onClear() }
                     )
                 }
@@ -3811,7 +3811,7 @@ fun HomePage(
                     } else {
                         Text(
                             tr(lang, "放大", "Expand"),
-                            color = LocalAccent.current, fontSize = 13.sp,
+                            color = Palette.accent, fontSize = 13.sp,
                             modifier = Modifier.clickable { onBigLog() }
                         )
                     }
@@ -4119,7 +4119,7 @@ fun SettingsPage(
                             onClick = onPickWallpaper,
                             backdrop = wall,
                             modifier = Modifier.weight(1f).height(44.dp),
-                            tint = LocalAccent.current
+                            tint = Palette.accent
                         ) {
                             Text(tr(lang, "选择图片", "Choose"), color = Color.White, fontSize = 14.sp)
                         }
@@ -4179,7 +4179,7 @@ fun SettingsPage(
                     ) {
                         Text(
                             tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = LocalAccent.current, fontSize = 14.sp
+                            color = Palette.accent, fontSize = 14.sp
                         )
                     }
                 } else {
@@ -4195,7 +4195,7 @@ fun SettingsPage(
                     ) {
                         Text(
                             tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = LocalAccent.current, fontSize = 14.sp
+                            color = Palette.accent, fontSize = 14.sp
                         )
                     }
                 }
@@ -4235,11 +4235,11 @@ fun SettingsPage(
                         Modifier
                             .size(52.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(LocalAccent.current.copy(alpha = 0.16f))
+                            .background(Palette.accent.copy(alpha = 0.16f))
                             .clickable { showPartPicker = true },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.List, contentDescription = null, tint = LocalAccent.current, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Filled.List, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(22.dp))
                     }
                 }
             }
@@ -4494,7 +4494,7 @@ fun LiquidBottomBar(
     val dark = Palette.dark
     // 原生风格：底栏和上面的卡片同色（深色板），所以字一律白；未选中略淡
     val labelIdle = if (mono) Color.White.copy(alpha = 0.55f) else LocalBarColor.current
-    val accent = if (mono) Color.White else LocalAccent.current
+    val accent = if (mono) Color.White else Palette.accent
 
     LaunchedEffect(page) {
         if (abs(anim.value - page) > 0.01f) anim.animateTo(page.toFloat(), spring(0.85f, 420f, 0.5f))
@@ -4843,7 +4843,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
                     onClick = { if (last) onDone() else page++ },
                     backdrop = bd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
+                    tint = Palette.accent
                 ) {
                     Text(
                         if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
@@ -4864,7 +4864,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current)
+                        .background(Palette.accent)
                         .clickable { if (last) onDone() else page++ }
                         .height(48.dp)
                         .weight(1f),
@@ -4930,7 +4930,7 @@ fun GlassConfirmDialog(
                     onClick = onConfirm,
                     backdrop = bd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = if (destructive) Color(0xFFFF3B30) else LocalAccent.current
+                    tint = if (destructive) Color(0xFFFF3B30) else Palette.accent
                 ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
             } else {
                 Row(
@@ -4946,7 +4946,7 @@ fun GlassConfirmDialog(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(if (destructive) Color(0xFFFF3B30) else LocalAccent.current)
+                        .background(if (destructive) Color(0xFFFF3B30) else Palette.accent)
                         .clickable { onConfirm() }
                         .height(48.dp)
                         .weight(1f),
@@ -5030,7 +5030,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
                     onClick = onDismiss,
                     backdrop = backdrop,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
+                    tint = Palette.accent
                 ) {
                     Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp)
                 }
@@ -5048,7 +5048,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current)
+                        .background(Palette.accent)
                         .clickable { onDismiss() }
                         .height(48.dp)
                         .weight(1f),
@@ -5302,7 +5302,7 @@ fun LiquidChoiceDialog(
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
-        LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else LocalAccent.current)
+        LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else Palette.accent)
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
@@ -5361,7 +5361,7 @@ fun LiquidChoiceDialog(
                             .padding(horizontal = 20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(name, color = if (sel) LocalAccent.current else contentColor, fontSize = 16.sp)
+                        Text(name, color = if (sel) Palette.accent else contentColor, fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
                         if (onDelete != null && deletable.contains(i)) {
                             val delBd = LocalWallBackdrop.current
@@ -5386,7 +5386,7 @@ fun LiquidChoiceDialog(
                             }
                             Spacer(Modifier.width(8.dp))
                         }
-                        if (sel) Icon(Icons.Filled.Check, null, tint = LocalAccent.current, modifier = Modifier.size(20.dp))
+                        if (sel) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
                     }
                 }
                 }  // Column(可滚动选项)
@@ -5478,7 +5478,7 @@ fun GlassField(
         readOnly = readOnly,
         singleLine = true,
         textStyle = TextStyle(color = text, fontSize = 15.sp),
-        cursorBrush = SolidColor(LocalAccent.current),
+        cursorBrush = SolidColor(Palette.accent),
         keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
         else KeyboardOptions.Default,
         modifier = modifier
@@ -5578,10 +5578,10 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             } else {
                 Text(
                     tr(lang, "刷新", "Refresh"),
-                    color = LocalAccent.current, fontSize = 14.sp,
+                    color = Palette.accent, fontSize = 14.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current.copy(alpha = 0.12f))
+                        .background(Palette.accent.copy(alpha = 0.12f))
                         .clickable { reload++ }
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 )
@@ -5641,7 +5641,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                 },
                                 backdrop = bd,
                                 modifier = Modifier.fillMaxWidth().height(38.dp),
-                                tint = if (isBusy) LocalAccent.current else Color.Unspecified
+                                tint = if (isBusy) Palette.accent else Color.Unspecified
                             ) {
                                 Text(
                                     if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
@@ -5655,7 +5655,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                     .fillMaxWidth()
                                     .height(38.dp)
                                     .clip(RoundedCornerShape(19.dp))
-                                    .background(if (isBusy) LocalAccent.current else LocalAccent.current.copy(alpha = 0.18f))
+                                    .background(if (isBusy) Palette.accent else Palette.accent.copy(alpha = 0.18f))
                                     .clickable { if (!isBusy) { busyIndex = i; progress = 0 } },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -5901,7 +5901,7 @@ fun LogColorDialog(
                     onClick = { onSave(colors) },
                     backdrop = wall,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
+                    tint = Palette.accent
                 ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
             } else {
                 Row(
@@ -5917,7 +5917,7 @@ fun LogColorDialog(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current)
+                        .background(Palette.accent)
                         .clickable { onSave(colors) }
                         .height(48.dp)
                         .weight(1f),
@@ -6060,14 +6060,14 @@ fun OnlineFontRow(
         if (ready) tr(lang, "已下载", "downloaded") else sizeText,
         trailing = {
             if (downloading) {
-                Text("$progress%", color = LocalAccent.current, fontSize = 13.sp)
+                Text("$progress%", color = Palette.accent, fontSize = 13.sp)
             } else {
                 if (useBackdrop && wall != null) {
                     LiquidButton(
                         onClick = onStart,
                         backdrop = wall,
                         modifier = Modifier.height(36.dp),
-                        tint = if (ready) LocalAccent.current else Color.Unspecified
+                        tint = if (ready) Palette.accent else Color.Unspecified
                     ) {
                         Text(
                             if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
@@ -6077,7 +6077,7 @@ fun OnlineFontRow(
                 } else {
                     Text(
                         if (ready) tr(lang, "应用", "Apply") else tr(lang, "下载", "Download"),
-                        color = LocalAccent.current, fontSize = 13.sp,
+                        color = Palette.accent, fontSize = 13.sp,
                         modifier = Modifier.clickable { onStart() }
                     )
                 }
