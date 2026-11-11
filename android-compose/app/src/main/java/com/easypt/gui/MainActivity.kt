@@ -2314,7 +2314,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
                         // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
-                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else Palette.accent
+                        LocalAccent provides Palette.accent
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -2934,8 +2934,8 @@ fun KSwitchRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 70.dp   // 自绘底栏内容高度
-        UiStyle.Miuix -> 70.dp      // 自绘底栏内容高度
+        UiStyle.Material -> 70.dp   // UiBottomBar 的内容高度
+        UiStyle.Miuix -> 70.dp      // 同上（两种风格已共用 UiBottomBar）
         // 玻璃/原生：悬浮胶囊栏本身高约 64dp（含上下各 10dp 留白），
         // 页面留出这段高度，保证「滑到底时最后一项停在底栏之上」，
         // 滚动过程中内容依然从底栏下面穿过
@@ -3496,12 +3496,7 @@ fun HomePage(
             }
             // 日志输出框：和「fastboot 命令」输入框同一套底料
             val logShape = remember { RoundedCornerShape(16.dp) }
-            val logSurface = if (style == UiStyle.Material) {
-                // Material：日志区就是一块 M3 tonal surface，不用再自绘底板
-                Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            } else if (style == UiStyle.Glass) {
+            val logSurface = if (style == UiStyle.Glass && useBackdrop) {
                 glassInsetSurface(logShape)
             } else {
                 // 和输入框兜底底板完全一致：以前原生风格用「黑 45%」压深色卡片，
@@ -4611,7 +4606,7 @@ fun LiquidChoiceDialog(
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
-        LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else Palette.accent)
+        LocalAccent provides Palette.accent
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
