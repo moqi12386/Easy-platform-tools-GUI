@@ -2986,7 +2986,7 @@ fun PageTitle(text: String) {
         fontSize = 34.sp,
         fontWeight = FontWeight.Bold,
         style = LocalTextStyle.current.copy(shadow = shadow),
-        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 14.dp)
+        modifier = Modifier.statusBarsPadding().padding(start = 4.dp, top = 8.dp, bottom = 14.dp)
     )
 }
 
@@ -3277,7 +3277,6 @@ fun HomePage(
     Column(
         Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .padding(horizontal = 20.dp)
             .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
@@ -3567,7 +3566,6 @@ fun SettingsPage(
     Column(
         Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .padding(horizontal = 20.dp)
             .padding(bottom = bottomSpacer())
             .verticalScroll(rememberScrollState())
