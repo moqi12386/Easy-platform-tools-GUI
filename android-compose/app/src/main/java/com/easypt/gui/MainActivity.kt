@@ -2716,6 +2716,9 @@ object Palette {
     /** 玻璃 / 原生 在不支持取样的机器上的纯色兜底 */
     val glassSolid: Color get() = if (dark) Color(0xFF1F2026) else Color(0xFFFFFFFF)
 
+    /** 日志颜色编辑页的整页底色（比卡片更深一点） */
+    val sheet: Color get() = if (dark) Color(0xFF17181C) else Color(0xFFF7F8FA)
+
     /** 危险操作（擦除、删除）的红色，深浅色一致 */
     val danger: Color get() = Color(0xFFE5484D)
 
@@ -5090,7 +5093,7 @@ fun LogColorDialog(
                 .navigationBarsPadding()
                 .padding(12.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(if (Palette.dark) Color(0xFF17181C) else Color(0xFFF7F8FA))
+                .background(Palette.sheet)
         ) {
         Text(
             tr(lang, "日志颜色", "Log colors"),
