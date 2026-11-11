@@ -2447,9 +2447,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             // containerColor / tonalElevation 都不写，直接用 NavigationBar 的官方默认
                             // （surfaceContainer + 0dp），跟其它 M3 组件一致
                             NavigationBar(
+                                // 不再在外部加 navigationBarsPadding：底栏背景要铺到手势条下面，
+                                // 内容的内边距由 NavigationBar 自己的 windowInsets 负责。
+                                // 圆角跟手机屏幕一致（系统上报的半径）。
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .navigationBarsPadding()
+                                    .clip(RoundedCornerShape(rememberScreenCorner()))
                             ) {
                                 NavigationBarItem(
                                     selected = page == 0,
