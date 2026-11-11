@@ -2277,7 +2277,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         blurLayer.renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r)
                         drawLayer(contentLayer)
                         // 只露顶部这一条，外面一律裁剪掉
-                        clipRect(0f, 0f, size.width, 120.dp.toPx()) {
+                        clipRect(0f, 0f, size.width, 72.dp.toPx()) {
                             drawLayer(blurLayer)
                         }
                     }
@@ -2497,7 +2497,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
+                            .height(110.dp)
                             .background(
                                 Brush.verticalGradient(
                                     0f to Bg.copy(alpha = 0.99f),
@@ -5053,7 +5053,7 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(120.dp)
+                    .height(110.dp)
                     .then(
                         if (useBackdrop) {
                             Modifier.drawBackdrop(
