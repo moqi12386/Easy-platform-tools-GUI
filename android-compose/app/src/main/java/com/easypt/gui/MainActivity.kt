@@ -1913,6 +1913,38 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         if (success) runCatching { ui.post { toast(t("刷写完成", "Flashing finished")) } }
     }
 
+    /** 测试实况通知：不刷机也能看胶囊/超级岛是否被系统提升 */
+    private fun testLiveUpdate() {
+        if (liveTestRunning) return
+        liveTestRunning = true
+        liveBusy = true
+        Thread {
+            try {
+                for (i in 0..10) {
+                    updateFlashLive(
+                        LiveUpdate(
+                            t("测试实况", "Test live update"),
+                            if (i == 0) t("准备中…", "Preparing…") else "$i/10 · boot",
+                            i, 10
+                        )
+                    )
+                    Thread.sleep(600)
+                }
+                updateFlashLive(
+                    LiveUpdate(t("测试完成", "Test finished"), t("10/10 · 完成", "10/10 · done"), 10, 10, done = true)
+                )
+                Thread.sleep(1200)
+            } catch (_: Throwable) {
+            } finally {
+                liveBusy = false
+                liveTestRunning = false
+                runCatching { finishFlashLive(true) }
+            }
+        }.start()
+    }
+
+    private var liveTestRunning = false
+
     /** 实况通知要显示的状态 */
     data class LiveUpdate(val title: String, val text: String, val step: Int, val max: Int, val done: Boolean = false, val failed: Boolean = false)
     // ---------------- 检查更新 ----------------
@@ -2301,6 +2333,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onForceSafe = { chooseForceSafe(it) },
                                         onAbout = { showAbout = true },
                                         onShowGuide = { showOnboarding = true },
+                                        onTestLive = { testLiveUpdate() },
                                         onOpenSource = {
                                             runCatching {
                                                 startActivity(
@@ -3488,6 +3521,7 @@ fun SettingsPage(
     onAbout: () -> Unit,
     onOpenSource: () -> Unit,
     onShowGuide: () -> Unit,
+    onTestLive: () -> Unit,
     onPlayground: () -> Unit,
     themeMode: ThemeMode,
     onTheme: (ThemeMode) -> Unit,
@@ -3926,6 +3960,12 @@ fun SettingsPage(
                 tr(lang, "使用向导", "Guide"),
                 tr(lang, "再看一遍新手引导", "Show the intro again"),
                 onClick = { onShowGuide() }
+            )
+            AppRow(
+                Icons.Filled.Refresh,
+                tr(lang, "测试实况通知", "Test live update"),
+                tr(lang, "模拟 10 步进度，6 秒走完", "Simulates 10 steps in 6s"),
+                onClick = onTestLive
             )
             AppRow(
                 Icons.Filled.Share,
