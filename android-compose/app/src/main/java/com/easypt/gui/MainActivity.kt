@@ -2942,60 +2942,6 @@ fun miuixIconColor(icon: ImageVector): Color = when (icon) {
 // ======================= 通用组件 =======================
 
 
-/** 一行设置项：图标 + 标题 + 副标题 + 右侧尾随内容 */
-@Composable
-fun KRow(
-    icon: ImageVector? = null,
-    title: String,
-    subtitle: String? = null,
-    trailing: (@Composable RowScope.() -> Unit)? = null,
-    chevron: Boolean = true,
-    tint: Color? = null,
-    onClick: (() -> Unit)? = null
-) {
-    val text = LocalCardText.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val uiStyle = LocalStyle.current
-        if (icon != null) {
-            if (uiStyle == UiStyle.Miuix) {
-                Box(
-                    Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(tint ?: miuixIconColor(icon)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-                }
-            } else {
-                Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
-            }
-            Spacer(Modifier.width(14.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(title, color = text, fontSize = 16.sp)
-            if (subtitle != null) {
-                Text(subtitle, color = text.copy(alpha = 0.55f), fontSize = 12.sp, lineHeight = 16.sp)
-            }
-        }
-        if (trailing != null) {
-            trailing()
-        } else if (chevron && onClick != null) {
-            Icon(
-                Icons.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = text.copy(alpha = 0.35f),
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-}
 
 /** 选择行：右侧当前值 + 下拉箭头，弹窗贴行右对齐 */
 @Composable
