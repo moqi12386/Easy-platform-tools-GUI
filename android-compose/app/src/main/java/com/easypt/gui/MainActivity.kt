@@ -2484,21 +2484,62 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             // containerColor / tonalElevation 都不写，直接用 NavigationBar 的官方默认
                             // （surfaceContainer + 0dp），跟其它 M3 组件一致
                             // 用库里的 NavigationBar，高度由组件自己定（内容 80dp + 导航条 inset）
-                            NavigationBar(
-                                modifier = Modifier.align(Alignment.BottomCenter)
+                            // 自绘紧凑底栏（还原 M3 观感：选中项有胶囊指示器）
+                            Column(
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceContainer)
                             ) {
-                                NavigationBarItem(
-                                    selected = page == 0,
-                                    onClick = { page = 0 },
-                                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                                    label = { Text(t("主页", "Home")) }
-                                )
-                                NavigationBarItem(
-                                    selected = page == 1,
-                                    onClick = { page = 1 },
-                                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                                    label = { Text(t("设置", "Settings")) }
-                                )
+                                Row(
+                                    Modifier.fillMaxWidth().height(60.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    listOf(
+                                        Triple(Icons.Filled.Home, t("主页", "Home"), 0),
+                                        Triple(Icons.Filled.Settings, t("设置", "Settings"), 1)
+                                    ).forEach { (ic, label, idx) ->
+                                        val sel = page == idx
+                                        Column(
+                                            Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .clickable { page = idx },
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            // 选中态：M3 的胶囊指示器
+                                            Box(
+                                                Modifier
+                                                    .width(56.dp)
+                                                    .height(28.dp)
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(
+                                                        if (sel) MaterialTheme.colorScheme.secondaryContainer
+                                                        else Color.Transparent
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    ic, contentDescription = null,
+                                                    tint = if (sel) MaterialTheme.colorScheme.onSecondaryContainer
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                label,
+                                                fontSize = 11.sp,
+                                                color = if (sel) MaterialTheme.colorScheme.onSurface
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                                , maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                                // 导航条区域：同色留白，底色一直铺到屏幕底部
+                                Box(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.navigationBars))
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
