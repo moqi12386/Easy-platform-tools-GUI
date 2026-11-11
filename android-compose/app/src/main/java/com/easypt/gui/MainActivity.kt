@@ -51,12 +51,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -80,7 +78,6 @@ import androidx.core.view.WindowCompat
 import androidx.documentfile.provider.DocumentFile
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -92,17 +89,11 @@ import com.easypt.gui.glass.LiquidBottomTabs
 import com.easypt.gui.glass.LiquidBottomTab
 import com.easypt.gui.glass.LiquidButton
 import com.easypt.gui.glass.LiquidSlider
-import com.easypt.gui.glass.LiquidToggle
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Slider as MiuixSlider
 // 官方 miuix 组件（照 https://github.com/compose-miuix-ui/miuix 的文档用法直接调）：
 // 行一律 BasicComponent，开关/输入框/底栏都用库里自己的实现，不再自绘
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
-import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
-import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
-import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.darkColorScheme as miuixDark
 import top.yukonga.miuix.kmp.theme.lightColorScheme as miuixLight
