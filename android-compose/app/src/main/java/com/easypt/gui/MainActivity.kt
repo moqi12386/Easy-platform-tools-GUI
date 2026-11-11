@@ -2258,18 +2258,20 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
-                // 顶部渐变：和底栏同一套 Brush，标题仍然清晰
+                // 顶部虚化过渡：内容滚进状态栏区域时逐渐淡出（相册那种效果）。
+                // 多段渐变更平滑，越靠上越接近背景色。
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(190.dp)
+                        .height(240.dp)
                         .background(
                             Brush.verticalGradient(
-                                listOf(
-                                    Bg.copy(alpha = 0.85f),
-                                    Bg.copy(alpha = 0.45f),
-                                    Color.Transparent
-                                )
+                                0f to Bg.copy(alpha = 0.98f),
+                                0.18f to Bg.copy(alpha = 0.88f),
+                                0.38f to Bg.copy(alpha = 0.62f),
+                                0.62f to Bg.copy(alpha = 0.30f),
+                                0.82f to Bg.copy(alpha = 0.10f),
+                                1f to Color.Transparent
                             )
                         )
                 )
