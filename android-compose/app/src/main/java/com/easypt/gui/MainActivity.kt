@@ -2103,7 +2103,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 }
             } else null
         }
-        Palette.monetAccent = monetColor
+        // 莫奈只给 Material 用：其它风格一律回到默认主色
+        Palette.monetAccent = if (style == UiStyle.Material) monetColor else null
         // 莫奈：卡片背景 / 底栏整块配色都来自软件壁纸的取色（不是系统壁纸）
         if (monet && style == UiStyle.Material && monetColor != null) {
             val seed = monetColor!!
@@ -2709,7 +2710,7 @@ object Palette {
      * 之所以放在这里：Palette 被四种风格共用，不能只改 Material 分支，
      * 只能让 Material 时这些 getter 转发到动态色。
      */
-    var m3: androidx.compose.material3.ColorScheme? = null
+    var m3: androidx.compose.material3.ColorScheme? by androidx.compose.runtime.mutableStateOf(null)
 
     val bg: Color
         get() = m3?.background ?: run {
