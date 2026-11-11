@@ -2934,29 +2934,8 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
             Text(label, color = LocalCardText.current, fontSize = 16.sp, modifier = Modifier.weight(1f))
             Text("${value.toInt()}%", color = LocalCardText.current.copy(alpha = 0.55f), fontSize = 14.sp)
         }
-        val wall = LocalWallBackdrop.current
-        android.util.Log.i("EasyPT", "switchProbe style=" + LocalStyle.current + " useBackdrop=" + useBackdrop + " wall=" + (wall != null) + " dark=" + Palette.dark)
-        if (useBackdrop && wall != null) {
-            // demo 的 LiquidSlider 原样使用（手势已经在 DragGestureInspector 里改成 Initial 阶段抢占）
-            LiquidSlider(
-                value = { value },
-                onValueChange = { onChange(it) },
-                valueRange = 0f..100f,
-                visibilityThreshold = 0.01f,
-                backdrop = wall,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-            )
-        } else if (style == UiStyle.Miuix) {
-            // 用 miuix 库自带的滑块
-            MiuixSlider(
-                value = value,
-                onValueChange = onChange,
-                valueRange = 0f..100f,
-                modifier = Modifier.fillMaxWidth()
-            )
-        } else {
-            UiSlider(value = value, onValueChange = onChange, valueRange = 0f..100f)
-        }
+        // 统一滑条：液态玻璃 -> LiquidSlider，MIUIX -> 库里的 Slider，其余 -> M3
+        UiSlider(value = value, onValueChange = onChange, valueRange = 0f..100f)
     }
 }
 
@@ -3781,15 +3760,11 @@ fun SettingsPage(
                             onClick = onPickWallpaper,
                             modifier = Modifier.weight(1f)
                         )
-                        Button(
+                        UiSecondaryButton(
+                            text = tr(lang, "恢复默认", "Reset"),
                             onClick = onResetWallpaper,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = LocalCardText.current.copy(alpha = 0.10f),
-                                contentColor = LocalCardText.current
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text(tr(lang, "恢复默认", "Reset"), fontSize = 13.sp) }
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -3812,36 +3787,15 @@ fun SettingsPage(
                 SliderRow(style, tr(lang, "玻璃模糊", "Glass blur"), glassBlur, onGlassBlur)
                 SliderRow(style, tr(lang, "玻璃浓度", "Glass density"), glassDensity, onGlassDensity)
                 Spacer(Modifier.height(2.dp))
-                // 按钮一律用 demo 的 LiquidButton（有按下液态形变 + 高光）
-                val resetWall = LocalWallBackdrop.current
-                if (useBackdrop && resetWall != null) {
-                    LiquidButton(
-                        onClick = onResetGlass,
-                        backdrop = resetWall,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = Palette.accent, fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Palette.accent.copy(alpha = 0.14f))
-                            .clickable { onResetGlass() }
-                            .padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = Palette.accent, fontSize = 14.sp
-                        )
-                    }
-                }
+                // 统一次级按钮（玻璃风格会自动换成 LiquidButton）
+                UiSecondaryButton(
+                    text = tr(lang, "重置为默认参数", "Reset to defaults"),
+                    onClick = onResetGlass,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(24.dp)
+                )
                 if (!realGlass) {
                     Text(
                         tr(
