@@ -746,7 +746,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 m?.groupValues?.get(1)
                     ?: if (flashMax > 0) (flashStep * 100 / flashMax).toString() else "0"
             }
-            val cap = if (flashPart.isEmpty()) "$pct%" else "$flashPart · $pct%"
+            val cap = "$pct%"   // 右侧只留百分比，分区名放到图标位
             if (cap != lastCapText && now - lastNotifyPush > 900L) {
                 lastCapText = cap
                 lastNotifyPush = now
@@ -1889,6 +1889,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             .putExtra(FlashService.EXTRA_MAX, island.max)
             .putExtra(FlashService.EXTRA_COLOR, accent)
             .putExtra(FlashService.EXTRA_SHORT, island.short ?: island.text)
+            .putExtra(FlashService.EXTRA_PART, flashPart)
         // 启动失败要说出来，并且退回普通通知：上一版静默失败，
         // 用户只看到「通知没了」，日志里一个字都没有
         runCatching {
