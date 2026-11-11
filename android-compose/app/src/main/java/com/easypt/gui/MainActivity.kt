@@ -5038,27 +5038,16 @@ fun LiquidChoiceDialog(
                     Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                val bd = LocalWallBackdrop.current
-                if (useBackdrop && bd != null) {
-                    // demo 的 Transparent Liquid Button
-                    LiquidButton(
+                    // 玻璃/其它：统一用 GlassButton（有壁纸走 LiquidButton，没有走胶囊底）
+                    GlassButton(
+                        text = "取消",
                         onClick = onDismiss,
-                        backdrop = bd,
-                        modifier = Modifier.weight(1f).height(48.dp)
-                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
-                } else {
-                    Row(
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(containerColor.copy(alpha = 0.2f))
-                            .clickable { onDismiss() }
-                            .height(48.dp)
-                            .weight(1f),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+                        modifier = Modifier.weight(1f),
+                        textColor = contentColor,
+                        fontSize = 16.sp,
+                        plainBackground = containerColor.copy(alpha = 0.2f)
+                    )
                 }
-            }
         }
     }
 }
