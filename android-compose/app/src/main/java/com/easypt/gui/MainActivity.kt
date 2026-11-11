@@ -3001,47 +3001,13 @@ fun ConfirmDialog(
     AppDialog(style, title, onDismiss) {
         Text(message, color = Palette.text2, fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
-        val eraseBd = LocalWallBackdrop.current
-        if (LocalStyle.current == UiStyle.Miuix) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = onConfirm,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White) }
-            }
-        } else if (useBackdrop && eraseBd != null) {
-            // 玻璃风格：跟「线刷步骤」「选择脚本」那几个框一样，用 demo 的 LiquidButton
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = eraseBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
-                LiquidButton(
-                    onClick = onConfirm,
-                    backdrop = eraseBd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = Danger
-                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White, fontSize = 15.sp) }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
-                Spacer(Modifier.width(6.dp))
-                Button(
-                    onClick = onConfirm,
-                    colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text(tr(lang, "擦除", "Erase")) }
-            }
-        }
+        DialogActions(
+            dismissText = tr(lang, "取消", "Cancel"),
+            onDismiss = onDismiss,
+            confirmText = tr(lang, "擦除", "Erase"),
+            onConfirm = onConfirm,
+            confirmColor = Danger
+        )
     }
 }
 
