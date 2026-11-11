@@ -2490,6 +2490,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp))
                                     .background(MaterialTheme.colorScheme.surface)
                             ) {
                                 Row(
