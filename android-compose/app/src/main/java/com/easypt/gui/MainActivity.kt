@@ -2925,10 +2925,10 @@ fun miuixIconColor(icon: ImageVector): Color = when (icon) {
     Icons.Filled.PlayArrow -> Color(0xFF4C8DFF)
     Icons.Filled.Info -> Color(0xFF9AA0A6)
     Icons.Filled.List -> Color(0xFF5B8DEF)
-    Icons.Filled.Build -> Color(0xFFFF9F0A)
-    Icons.Filled.Refresh -> Color(0xFF34C759)
-    Icons.Filled.Delete -> Color(0xFFFF3B30)
-    Icons.Filled.Share -> Color(0xFF0A84FF)
+    Icons.Filled.Build -> Tints.orange
+    Icons.Filled.Refresh -> Tints.green
+    Icons.Filled.Delete -> Tints.red
+    Icons.Filled.Share -> Tints.blue
     Icons.Filled.Lock -> Color(0xFF636366)
     Icons.Filled.Warning -> Color(0xFFFF9500)
     Icons.Filled.Star -> Color(0xFFFFCC00)
@@ -3673,16 +3673,16 @@ fun HomePage(
                 AppRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
                 AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
-                    tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Color(0xFF5E5CE6), onClick = onRom)
-                AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
+                    tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Tints.purple, onClick = onRom)
+                AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Tints.purple, onClick = onRomArchive)
                 AppRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Tints.green)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                    tint = Tints.orange, onClick = { onReboot("recovery") })
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
-                    tint = Color(0xFF0A84FF), onClick = { onReboot("bootloader") })
-                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Color(0xFFFF3B30))
+                    tint = Tints.blue, onClick = { onReboot("bootloader") })
+                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Tints.red)
             }
             1 -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
@@ -3692,17 +3692,17 @@ fun HomePage(
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
                 AppRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Tints.green)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
-                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Color(0xFFFF3B30))
+                    tint = Tints.orange, onClick = { onReboot("recovery") })
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Tints.red)
             }
             else -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
                 AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Tints.green)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                    tint = Tints.orange, onClick = { onReboot("recovery") })
             }
         }
 
@@ -4441,8 +4441,8 @@ fun GlassDialogPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val light = !Palette.dark
-    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
-    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+    val containerColor = Ui.surface.copy(alpha = 0.60f)
+    val dimColor = Palette.bg.copy(alpha = 0.45f)
 
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -4666,7 +4666,7 @@ fun GlassConfirmDialog(
                     onClick = onConfirm,
                     backdrop = bd,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    tint = if (destructive) Color(0xFFFF3B30) else Palette.accent
+                    tint = if (destructive) Tints.red else Palette.accent
                 ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
             } else {
                 Row(
@@ -4682,7 +4682,7 @@ fun GlassConfirmDialog(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(if (destructive) Color(0xFFFF3B30) else Palette.accent)
+                        .background(if (destructive) Tints.red else Palette.accent)
                         .clickable { onConfirm() }
                         .height(48.dp)
                         .weight(1f),
@@ -4698,7 +4698,7 @@ fun GlassConfirmDialog(
 fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -> Unit) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
-    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val containerColor = Ui.surface.copy(alpha = 0.60f)
     val ctx = LocalContext.current
     val ver = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
@@ -5004,8 +5004,8 @@ fun LiquidChoiceDialog(
 ) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
-    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
-    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+    val containerColor = Ui.surface.copy(alpha = 0.60f)
+    val dimColor = Palette.bg.copy(alpha = 0.45f)
 
 
     // MIUIX：容器用库里的 Card，行用 BasicComponent，取消用官方 TextButton。
