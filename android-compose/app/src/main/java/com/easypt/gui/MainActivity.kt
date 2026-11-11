@@ -51,10 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -78,6 +80,7 @@ import androidx.core.view.WindowCompat
 import androidx.documentfile.provider.DocumentFile
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -89,11 +92,17 @@ import com.easypt.gui.glass.LiquidBottomTabs
 import com.easypt.gui.glass.LiquidBottomTab
 import com.easypt.gui.glass.LiquidButton
 import com.easypt.gui.glass.LiquidSlider
+import com.easypt.gui.glass.LiquidToggle
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Slider as MiuixSlider
 // 官方 miuix 组件（照 https://github.com/compose-miuix-ui/miuix 的文档用法直接调）：
 // 行一律 BasicComponent，开关/输入框/底栏都用库里自己的实现，不再自绘
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
+import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
+import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.darkColorScheme as miuixDark
 import top.yukonga.miuix.kmp.theme.lightColorScheme as miuixLight
@@ -138,10 +147,10 @@ private val Surface: Color get() = Palette.surface
 private val TextPrimary: Color get() = Palette.text
 private val TextSecondary: Color get() = Palette.text2
 private val Accent: Color get() = Palette.accent
-private val Danger: Color get() = LogColors.danger
-private val OkColor: Color get() = LogColors.ok
-private val ErrColor: Color get() = LogColors.err
-private val LogColor: Color get() = LogColors.text
+private val Danger = Color(0xFFE5484D)
+private val OkColor: Color get() = if (Palette.dark) Color(0xFF3DD68C) else Color(0xFF12A150)
+private val ErrColor: Color get() = if (Palette.dark) Color(0xFFFF7B72) else Color(0xFFD93B3B)
+private val LogColor: Color get() = if (Palette.dark) Color(0xFFC9CDD6) else Color(0xFF4A5160)
 
 class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
@@ -2153,7 +2162,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
             else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
         } else null
-        // 莫奈取色：只对 Material 生效（其它风格有各自的视觉，不跟着壁纸走）
+        // 莫奈取色：直接分析当前壁纸位图（自定义壁纸也算），且只对 Material 风格生效
         var monetColor by remember { mutableStateOf<Color?>(null) }
         LaunchedEffect(monet, style, assets, customWallpaper) {
             monetColor = if (monet && style == UiStyle.Material && assets != null) {
@@ -2313,8 +2322,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalBarColor provides onBar,
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
-                        LocalLang provides lang,
-                        LocalAccent provides Palette.accent
+                        // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
+                        LocalAccent provides if (style == UiStyle.Native) Color(0xFFECEDEF) else Palette.accent
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -2526,9 +2535,123 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     // Material Design 3：底部导航直接用 M3 的 NavigationBar + NavigationBarItem
-                    if (style == UiStyle.Material || style == UiStyle.Miuix) {
-                        // unified bottom bar (Material + MIUIX share one implementation)
-                        UiBottomBar(
+                    if (style == UiStyle.Material) {
+                        // 这段在页面的 MaterialTheme 外面，不自己套一层的话拿到的是 M3 默认【浅色】主题
+                        // —— 深色模式下整屏都黑了，只有底栏还是浅紫色的，就是这里的原因。
+                        MaterialTheme(
+                            typography = typographyWith(familyFor(fontChoice)),
+                            colorScheme = if (dark) {
+                                darkColorScheme(
+                                    primary = Palette.accent,
+                                    surface = Surface,
+                                    // 底栏底色跟卡片用同一个色，M3 默认的 #211F26 偏紫、比卡片亮一档，
+                                    // 摆在一起像两个东西
+                                    surfaceContainer = Surface,
+                                    surfaceContainerLow = Surface,
+                                    surfaceContainerHigh = Surface,
+                                    surfaceContainerHighest = Surface,
+                                    // NavigationBarItem 的选中药丸取 secondaryContainer、图标取 onSecondaryContainer，
+                                    // 不覆盖的话是 M3 基线那套紫色，跟本项目的蓝色主色对不上
+                                    secondaryContainer = Palette.accent.copy(alpha = 0.24f),
+                                    onSecondaryContainer = Palette.accent,
+                                    onSurface = TextPrimary,
+                                    onSurfaceVariant = Palette.text2,
+                                    background = Bg,
+                                    onBackground = TextPrimary
+                                )
+                            } else {
+                                lightColorScheme(
+                                    primary = Palette.accent,
+                                    onPrimary = Color.White,
+                                    surface = Surface,
+                                    surfaceContainer = Surface,
+                                    surfaceContainerLow = Surface,
+                                    surfaceContainerHigh = Surface,
+                                    surfaceContainerHighest = Surface,
+                                    secondaryContainer = Palette.accent.copy(alpha = 0.14f),
+                                    onSecondaryContainer = Palette.accent,
+                                    onSurface = TextPrimary,
+                                    onSurfaceVariant = Palette.text2,
+                                    background = Bg,
+                                    onBackground = TextPrimary
+                                )
+                            }
+                        ) {
+                            // containerColor / tonalElevation 都不写，直接用 NavigationBar 的官方默认
+                            // （surfaceContainer + 0dp），跟其它 M3 组件一致
+                            // 用库里的 NavigationBar，高度由组件自己定（内容 80dp + 导航条 inset）
+                            // 自绘紧凑底栏（还原 M3 观感：选中项有胶囊指示器）
+                            Column(
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    // 按小米《全面屏手势提示线适配说明》：底栏要铺到屏幕最底部，
+                                    // 小白条就画在底栏颜色上；圆角只做上两角
+                                    .background(
+                                        MaterialTheme.colorScheme.surface,
+                                        RoundedCornerShape(
+                                            screenCorner.dp, screenCorner.dp, 0.dp, 0.dp
+                                        )
+                                    )
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().height(70.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    listOf(
+                                        Triple(Icons.Filled.Home, t("主页", "Home"), 0),
+                                        Triple(Icons.Filled.Settings, t("设置", "Settings"), 1)
+                                    ).forEach { (ic, label, idx) ->
+                                        val sel = page == idx
+                                        Column(
+                                            Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .clip(androidx.compose.ui.graphics.RectangleShape)
+                                                // 关掉水波纹：长按时会画出一大片矩形阴影
+                                                .clickable(
+                                                    interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
+                                                    indication = null
+                                                ) { page = idx },
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            // 选中态：M3 的胶囊指示器
+                                            Box(
+                                                Modifier
+                                                    .width(56.dp)
+                                                    .height(28.dp)
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(
+                                                        if (sel) Palette.accent.copy(alpha = 0.14f)
+                                                        else Color.Transparent
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    ic, contentDescription = null,
+                                                    tint = if (sel) Palette.accent
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                label,
+                                                fontSize = 11.sp,
+                                                color = if (sel) Palette.accent
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                                , maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                                // 不做导航条占位：两种风格统一成 70dp 高度
+                            }
+                        }
+                    } else if (style == UiStyle.Miuix) {
+                        // MIUIX 底栏已搬到 MiuixSlots.kt（MiuixBottomBar）
+                        MiuixBottomBar(
                             page = page,
                             onPage = { page = it },
                             homeLabel = t("主页", "Home"),
@@ -2773,13 +2896,13 @@ object Palette {
     val chevron: Color get() = if (dark) Color(0xFF5C6068) else Color(0xFFC2C6CC)
     val inset: Color get() = if (dark) Color(0xFF121316) else Color(0xFFF5F6F8)
     val chip: Color get() = if (dark) Color(0xFF2A2B30) else Color(0xFFF2F3F5)
+    val nativeCard: Color get() = Color(0xFF1B1F27).copy(alpha = 0.92f)
 }
 
 /** 卡片里的文字颜色：玻璃/深色卡片用白字，其余跟随主题 */
 val LocalCardText = androidx.compose.runtime.staticCompositionLocalOf { Palette.text }
 /** 当前界面风格，供组件内部做分化样式 */
 val LocalStyle = androidx.compose.runtime.staticCompositionLocalOf { UiStyle.Native }
-val LocalLang = androidx.compose.runtime.staticCompositionLocalOf { Lang.Zh }
 /**
  * 主色（强调色）。原生风格下会被覆盖成纯中性色，保证「原生风格不出现任何彩色」。
  */
@@ -2799,26 +2922,80 @@ data class BarItem(val icon: ImageVector, val label: String)
 
 /** MIUIX 风格下的彩色图标底色 */
 fun miuixIconColor(icon: ImageVector): Color = when (icon) {
-    Icons.Filled.PlayArrow -> Tints.blue
-    Icons.Filled.Info -> Tints.gray
-    Icons.Filled.List -> Tints.blue
-    Icons.Filled.Build -> Tints.orange
-    Icons.Filled.Refresh -> Tints.green
-    Icons.Filled.Delete -> Tints.red
-    Icons.Filled.Share -> Tints.blue
-    Icons.Filled.Lock -> Tints.gray
-    Icons.Filled.Warning -> Tints.orange
-    Icons.Filled.Star -> Tints.orange
-    Icons.Filled.Public -> Tints.blue
-    Icons.Filled.Home -> Tints.blue
-    Icons.Filled.Settings -> Tints.gray
-    Icons.Filled.Search -> Tints.gray
-    else -> Tints.blue
+    Icons.Filled.PlayArrow -> Color(0xFF4C8DFF)
+    Icons.Filled.Info -> Color(0xFF9AA0A6)
+    Icons.Filled.List -> Color(0xFF5B8DEF)
+    Icons.Filled.Build -> Color(0xFFFF9F0A)
+    Icons.Filled.Refresh -> Color(0xFF34C759)
+    Icons.Filled.Delete -> Color(0xFFFF3B30)
+    Icons.Filled.Share -> Color(0xFF0A84FF)
+    Icons.Filled.Lock -> Color(0xFF636366)
+    Icons.Filled.Warning -> Color(0xFFFF9500)
+    Icons.Filled.Star -> Color(0xFFFFCC00)
+    Icons.Filled.Public -> Color(0xFF007AFF)
+    Icons.Filled.Home -> Color(0xFF4C8DFF)
+    Icons.Filled.Settings -> Color(0xFF8E8E93)
+    Icons.Filled.Search -> Color(0xFF8E8E93)
+    else -> Color(0xFF5B8DEF)
 }
 
 // ======================= 通用组件 =======================
 
 
+/** 一行设置项：图标 + 标题 + 副标题 + 右侧尾随内容 */
+@Composable
+fun KRow(
+    icon: ImageVector? = null,
+    title: String,
+    subtitle: String? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    chevron: Boolean = true,
+    tint: Color? = null,
+    onClick: (() -> Unit)? = null
+) {
+    val text = LocalCardText.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 18.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val uiStyle = LocalStyle.current
+        if (icon != null) {
+            if (uiStyle == UiStyle.Miuix) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(tint ?: miuixIconColor(icon)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                }
+            } else {
+                Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, color = text, fontSize = 16.sp)
+            if (subtitle != null) {
+                Text(subtitle, color = text.copy(alpha = 0.55f), fontSize = 12.sp, lineHeight = 16.sp)
+            }
+        }
+        if (trailing != null) {
+            trailing()
+        } else if (chevron && onClick != null) {
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = text.copy(alpha = 0.35f),
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
 
 /** 选择行：右侧当前值 + 下拉箭头，弹窗贴行右对齐 */
 @Composable
@@ -2870,6 +3047,76 @@ fun KSelectRow(
     }
 }
 
+@Composable
+fun KSwitchRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val text = LocalCardText.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val uiStyleS = LocalStyle.current
+        if (uiStyleS == UiStyle.Miuix) {
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (enabled) miuixIconColor(icon) else miuixIconColor(icon).copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+            }
+        } else {
+            Icon(
+                icon, contentDescription = null,
+                tint = if (enabled) text else text.copy(alpha = 0.35f),
+                modifier = Modifier.size(23.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                color = if (enabled) text else text.copy(alpha = 0.4f),
+                fontSize = 16.sp
+            )
+            if (subtitle != null) {
+                Text(subtitle, color = text.copy(alpha = 0.55f), fontSize = 12.sp, lineHeight = 16.sp)
+            }
+        }
+        val wall = LocalWallBackdrop.current
+        if (useBackdrop && wall != null) {
+            // 照 demo 原样：LiquidToggle 自带 64x28 胶囊尺寸，不要套盒子改尺寸
+            LiquidToggle(
+                selected = { checked },
+                onSelect = { onCheckedChange(it) },
+                backdrop = wall
+            )
+        } else {
+            Switch(
+                checked = checked,
+                onCheckedChange = { onCheckedChange(it) },
+                enabled = enabled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,   // 与按钮同源
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
+                    uncheckedBorderColor = Color.Transparent
+                )
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2881,8 +3128,8 @@ fun KSelectRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 70.dp   // UiBottomBar 的内容高度
-        UiStyle.Miuix -> 70.dp      // 同上（两种风格已共用 UiBottomBar）
+        UiStyle.Material -> 70.dp   // 自绘底栏内容高度
+        UiStyle.Miuix -> 70.dp      // 自绘底栏内容高度
         // 玻璃/原生：悬浮胶囊栏本身高约 64dp（含上下各 10dp 留白），
         // 页面留出这段高度，保证「滑到底时最后一项停在底栏之上」，
         // 滚动过程中内容依然从底栏下面穿过
@@ -2920,7 +3167,7 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = Palette.inset,
     cursorColor = Palette.accent,
     focusedBorderColor = Palette.accent.copy(alpha = 0.6f),
-    unfocusedBorderColor = Palette.text2.copy(alpha = 0.45f),
+    unfocusedBorderColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9),
     focusedLabelColor = Palette.accent,
     unfocusedLabelColor = Palette.text2,
     focusedPlaceholderColor = Palette.text2,
@@ -2934,8 +3181,37 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
             Text(label, color = LocalCardText.current, fontSize = 16.sp, modifier = Modifier.weight(1f))
             Text("${value.toInt()}%", color = LocalCardText.current.copy(alpha = 0.55f), fontSize = 14.sp)
         }
-        // 统一滑条：液态玻璃 -> LiquidSlider，MIUIX -> 库里的 Slider，其余 -> M3
-        UiSlider(value = value, onValueChange = onChange, valueRange = 0f..100f)
+        val wall = LocalWallBackdrop.current
+        if (useBackdrop && wall != null) {
+            // demo 的 LiquidSlider 原样使用（手势已经在 DragGestureInspector 里改成 Initial 阶段抢占）
+            LiquidSlider(
+                value = { value },
+                onValueChange = { onChange(it) },
+                valueRange = 0f..100f,
+                visibilityThreshold = 0.01f,
+                backdrop = wall,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            )
+        } else if (style == UiStyle.Miuix) {
+            // 用 miuix 库自带的滑块
+            MiuixSlider(
+                value = value,
+                onValueChange = onChange,
+                valueRange = 0f..100f,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            Slider(
+                value = value,
+                onValueChange = onChange,
+                valueRange = 0f..100f,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Palette.accent,
+                    inactiveTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
+                )
+            )
+        }
     }
 }
 
@@ -2943,37 +3219,57 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
 @Composable
 fun KDialog(
     style: UiStyle,
-    title: String? = null,
+    title: String,
     onDismiss: () -> Unit = {},
     body: @Composable ColumnScope.() -> Unit
 ) {
-    // one dialog implementation for every style: colour from Ui, glass adds a backdrop
+    // Material：用官方 M3 对话框（BasicAlertDialog + Surface），不套自绘面板
+    if (style == UiStyle.Material) {
+        MaterialDialog(title = title, onDismiss = onDismiss, body = body)
+        return
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        // MIUIX：容器换成库里的 Card。只加这一个分支，
+        // 所有基于 KDialog 的弹窗（线刷步骤 / 分区表 / 擦除确认 / 崩溃日志）一起变成 MIUIX 皮，
+        // 液态玻璃和其它样式的代码一行没动
+        if (style == UiStyle.Miuix) {
+            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
+                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                        Column(Modifier.padding(20.dp)) {
+                            Text(
+                                title,
+                                color = MiuixTheme.colorScheme.onBackground,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            body()
+                        }
+                    }
+                }
+            }
+            return@Dialog
+        }
         val shape = remember { RoundedCornerShape(26.dp) }
         val wall = LocalWallBackdrop.current
-        CompositionLocalProvider(LocalWallBackdrop provides wall) {
         Box(Modifier.fillMaxSize().padding(26.dp), contentAlignment = Alignment.Center) {
             Column(
                 Modifier
                     .fillMaxWidth()
                     .then(
                         if (useBackdrop && wall != null) {
-                            // glass style: demo dialog parameters
                             Modifier.drawBackdrop(
                                 backdrop = wall,
                                 shape = { shape },
                                 effects = {
-                                    colorControls(
-                                        brightness = if (Palette.dark) 0f else 0.2f,
-                                        saturation = 1.5f
-                                    )
-                                    blur(if (Palette.dark) 8.dp.toPx() else 16.dp.toPx())
-                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
+                                    vibrancy()
+                                    blur(8.dp.toPx())
+                                    lens(24.dp.toPx(), 24.dp.toPx())
                                 },
-                                highlight = { Highlight.Plain },
                                 onDrawSurface = {
                                     drawRect(
                                         if (Palette.dark) Color(0xFF121212).copy(alpha = 0.6f)
@@ -2987,13 +3283,10 @@ fun KDialog(
                     )
                     .padding(20.dp)
             ) {
-                if (title != null) {
-                    Text(title, color = Palette.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(14.dp))
-                }
+                Text(title, color = Palette.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(14.dp))
                 body()
             }
-        }
         }
     }
 }
@@ -3010,14 +3303,47 @@ fun ConfirmDialog(
     AppDialog(style, title, onDismiss) {
         Text(message, color = Palette.text2, fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
-        // 统一动作行（危险操作传 confirmColor）
-        UiDialogActions(
-            confirmText = tr(lang, "擦除", "Erase"),
-            onConfirm = onConfirm,
-            dismissText = tr(lang, "取消", "Cancel"),
-            onDismiss = onDismiss,
-            confirmColor = Danger
-        )
+        val eraseBd = LocalWallBackdrop.current
+        if (LocalStyle.current == UiStyle.Miuix) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onConfirm,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White) }
+            }
+        } else if (useBackdrop && eraseBd != null) {
+            // 玻璃风格：跟「线刷步骤」「选择脚本」那几个框一样，用 demo 的 LiquidButton
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = eraseBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
+                LiquidButton(
+                    onClick = onConfirm,
+                    backdrop = eraseBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Danger
+                ) { Text(tr(lang, "擦除", "Erase"), color = Color.White, fontSize = 15.sp) }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
+                Spacer(Modifier.width(6.dp))
+                Button(
+                    onClick = onConfirm,
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(tr(lang, "擦除", "Erase")) }
+            }
+        }
     }
 }
 
@@ -3100,7 +3426,7 @@ private fun BigLogOverlay(
             } else {
                 Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Palette.bg)
+                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
             }
             LazyColumn(
                 state = listState,
@@ -3143,13 +3469,47 @@ private fun RomDialog(
             }
         }
         Spacer(Modifier.height(16.dp))
-        // unified: one action row for all four styles
-        UiDialogActions(
-            confirmText = tr(lang, "开始刷写", "Start"),
-            onConfirm = onStart,
-            dismissText = tr(lang, "取消", "Cancel"),
-            onDismiss = onDismiss
-        )
+        val romBd = LocalWallBackdrop.current
+        if (LocalStyle.current == UiStyle.Miuix) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onStart,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White) }
+            }
+        } else if (useBackdrop && romBd != null) {
+            // 「开始刷写」也要是液态按钮，之前这里还是 Material 的实心蓝按钮
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = romBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = Palette.text, fontSize = 15.sp) }
+                LiquidButton(
+                    onClick = onStart,
+                    backdrop = romBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Palette.accent
+                ) { Text(tr(lang, "开始刷写", "Start"), color = Color.White, fontSize = 15.sp) }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text(tr(lang, "取消", "Cancel"), color = Palette.text2) }
+                Spacer(Modifier.width(6.dp))
+                Button(
+                    onClick = onStart,
+                    colors = primaryButtonColors(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(tr(lang, "开始刷写", "Start")) }
+            }
+        }
     }
 }
 
@@ -3182,11 +3542,30 @@ private fun PartsDialog(
             }
         }
         Spacer(Modifier.height(8.dp))
-        // unified action row
-        UiDialogActions(
-            confirmText = tr(lang, "关闭", "Close"),
-            onConfirm = onClose
-        )
+        val partsBd = LocalWallBackdrop.current
+        if (LocalStyle.current == UiStyle.Miuix) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "关闭", "Close"),
+                    onClick = onClose,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        } else if (useBackdrop && partsBd != null) {
+            // 「关闭」也换成液态按钮，读分区表这一屏之前只有一行蓝字
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LiquidButton(
+                    onClick = onClose,
+                    backdrop = partsBd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onClose) { Text(tr(lang, "关闭", "Close"), color = Palette.text2) }
+            }
+        }
     }
 }
 
@@ -3338,11 +3717,11 @@ fun HomePage(
                         tint = Palette.accent
                     ) { Text(tr(lang, "执行", "Run"), color = Color.White, fontSize = 15.sp) }
                 } else {
-                    UiButton(
-                        text = tr(lang, "执行", "Run"),
+                    Button(
                         onClick = { onRun(cmd); cmd = "" },
+                        colors = primaryButtonColors(),
                         shape = RoundedCornerShape(12.dp)
-                    )
+                    ) { Text(tr(lang, "执行", "Run")) }
                 }
             }
         }
@@ -3429,14 +3808,19 @@ fun HomePage(
             }
             // 日志输出框：和「fastboot 命令」输入框同一套底料
             val logShape = remember { RoundedCornerShape(16.dp) }
-            val logSurface = if (style == UiStyle.Glass && useBackdrop) {
+            val logSurface = if (style == UiStyle.Material) {
+                // Material：日志区就是一块 M3 tonal surface，不用再自绘底板
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            } else if (style == UiStyle.Glass) {
                 glassInsetSurface(logShape)
             } else {
                 // 和输入框兜底底板完全一致：以前原生风格用「黑 45%」压深色卡片，
                 // 深底上再写深色日志，日间模式直接看不清
                 Modifier
                     .clip(logShape)
-                    .background(Palette.bg)
+                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
             }
             // 新日志进来就贴到最后一行；不滚的话窗口一直停在最旧那几行，得手动往下拉
             val logListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -3479,16 +3863,16 @@ fun HomePage(
                 AppRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
                     tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
                 AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
-                    tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Tints.purple, onClick = onRom)
-                AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Tints.purple, onClick = onRomArchive)
+                    tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Color(0xFF5E5CE6), onClick = onRom)
+                AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
                 AppRow(Icons.Filled.Delete, tr(lang, "擦除分区", "Erase partition"), part,
                     onClick = { onErase(part) })
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Tints.green)
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), null, onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    tint = Tints.orange, onClick = { onReboot("recovery") })
+                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
-                    tint = Tints.blue, onClick = { onReboot("bootloader") })
-                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Tints.red)
+                    tint = Color(0xFF0A84FF), onClick = { onReboot("bootloader") })
+                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Color(0xFFFF3B30))
             }
             1 -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
@@ -3498,17 +3882,17 @@ fun HomePage(
                     tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
                 AppRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Tints.green)
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
-                    tint = Tints.orange, onClick = { onReboot("recovery") })
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Tints.red)
+                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Color(0xFFFF3B30))
             }
             else -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
                 AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/api/partitions", onClick = onParts)
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Tints.green)
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "/api/reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "recovery",
-                    tint = Tints.orange, onClick = { onReboot("recovery") })
+                    tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
             }
         }
 
@@ -3693,7 +4077,7 @@ fun SettingsPage(
                 selected = themeMode.ordinal,
                 onPick = { onTheme(ThemeMode.entries[it]) }
             )
-            if (canMonet && style == UiStyle.Material) {
+            if (style == UiStyle.Material) {
                 AppSwitchRow(
                     icon = Icons.Filled.Edit,
                     title = tr(lang, "莫奈取色", "Monet colors"),
@@ -3714,7 +4098,7 @@ fun SettingsPage(
                             "Card tint  ${(Palette.cardTint * 100).toInt()}%"),
                         color = Palette.text, fontSize = 14.sp
                     )
-                    UiSlider(
+                    androidx.compose.material3.Slider(
                         value = Palette.cardTint,
                         onValueChange = { onCardTint(it) },
                         valueRange = 0f..0.30f
@@ -3755,16 +4139,21 @@ fun SettingsPage(
                             Text(tr(lang, "恢复默认", "Reset"), color = LocalCardText.current, fontSize = 14.sp)
                         }
                     } else {
-                        UiButton(
-                            text = tr(lang, "选择图片", "Choose"),
+                        Button(
                             onClick = onPickWallpaper,
-                            modifier = Modifier.weight(1f)
-                        )
-                        UiSecondaryButton(
-                            text = tr(lang, "恢复默认", "Reset"),
+                            modifier = Modifier.weight(1f),
+                            colors = primaryButtonColors(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text(tr(lang, "选择图片", "Choose"), fontSize = 13.sp) }
+                        Button(
                             onClick = onResetWallpaper,
-                            modifier = Modifier.weight(1f)
-                        )
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LocalCardText.current.copy(alpha = 0.10f),
+                                contentColor = LocalCardText.current
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text(tr(lang, "恢复默认", "Reset"), fontSize = 13.sp) }
                     }
                 }
             }
@@ -3787,15 +4176,36 @@ fun SettingsPage(
                 SliderRow(style, tr(lang, "玻璃模糊", "Glass blur"), glassBlur, onGlassBlur)
                 SliderRow(style, tr(lang, "玻璃浓度", "Glass density"), glassDensity, onGlassDensity)
                 Spacer(Modifier.height(2.dp))
-                // 统一次级按钮（玻璃风格会自动换成 LiquidButton）
-                UiSecondaryButton(
-                    text = tr(lang, "重置为默认参数", "Reset to defaults"),
-                    onClick = onResetGlass,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(24.dp)
-                )
+                // 按钮一律用 demo 的 LiquidButton（有按下液态形变 + 高光）
+                val resetWall = LocalWallBackdrop.current
+                if (useBackdrop && resetWall != null) {
+                    LiquidButton(
+                        onClick = onResetGlass,
+                        backdrop = resetWall,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            tr(lang, "重置为默认参数", "Reset to defaults"),
+                            color = Palette.accent, fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Palette.accent.copy(alpha = 0.14f))
+                            .clickable { onResetGlass() }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            tr(lang, "重置为默认参数", "Reset to defaults"),
+                            color = Palette.accent, fontSize = 14.sp
+                        )
+                    }
+                }
                 if (!realGlass) {
                     Text(
                         tr(
@@ -4001,11 +4411,31 @@ fun SettingsPage(
                         Text(crashText, color = Palette.text2, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                     }
                     Spacer(Modifier.height(10.dp))
-                    // unified action row
-                    UiDialogActions(
-                        confirmText = tr(lang, "关闭", "Close"),
-                        onConfirm = { showCrash = false }
-                    )
+                    val crashBd = LocalWallBackdrop.current
+                    if (LocalStyle.current == UiStyle.Miuix) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            top.yukonga.miuix.kmp.basic.TextButton(
+                                text = tr(lang, "关闭", "Close"),
+                                onClick = { showCrash = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else if (useBackdrop && crashBd != null) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            LiquidButton(
+                                onClick = { showCrash = false },
+                                backdrop = crashBd,
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                surfaceColor = Color.White.copy(alpha = 0.3f)
+                            ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { showCrash = false }) {
+                                Text(tr(lang, "关闭", "Close"), color = Palette.text2)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -4122,13 +4552,14 @@ fun LiquidBottomBar(
                     }
             ) {
                 // —— 以下参数照抄 AndroidLiquidGlass 的 LiquidBottomTabs ——
-                val containerColor = Ui.surface.copy(alpha = 0.40f)
+                val containerColor = if (dark) Color(0xFF121212).copy(alpha = 0.4f)
+                else Color(0xFFFAFAFA).copy(alpha = 0.4f)
                 val surfaceMod = when {
                     // 原生风格：和上面卡片完全同一个色板，风格统一
                     mono -> Modifier
                         .shadow(10.dp, capsule, clip = false)
                         .clip(capsule)
-                        .background(Ui.surface)
+                        .background(Palette.nativeCard)
                     useBackdrop -> Modifier.drawBackdrop(
                         backdrop = backdrop,
                         shape = { capsule },
@@ -4211,7 +4642,8 @@ fun LiquidBottomBar(
 // ======================= 关于 / Glass Playground =======================
 
 /**
- * 玻璃弹窗面板：统一走 KDialog（底色来自 Palette，玻璃风格自动加 backdrop）。
+ * 玻璃弹窗面板 —— 结构/参数照抄 AndroidLiquidGlass demo 的 DialogContent：
+ * 压暗 + RoundedRectangle(48dp) + colorControls + blur + lens(depthEffect) + Highlight.Plain
  */
 @Composable
 fun GlassDialogPanel(
@@ -4219,10 +4651,113 @@ fun GlassDialogPanel(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    KDialog(style = LocalStyle.current, title = null, onDismiss = onDismiss) {
-        content()
+    val light = !Palette.dark
+    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
+
+    // Material：用官方 M3 对话框
+    if (LocalStyle.current == UiStyle.Material) {
+        MaterialDialog(title = null, onDismiss = onDismiss, body = content)
+        return
+    }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        // MIUIX：容器换成库里的 Card。只加这一个分支，所有基于 GlassDialogPanel 的弹窗
+        // （开机向导 / 确认框 / 关于 / 在线壁纸 / 日志颜色）一起变成 MIUIX 皮，
+        // 液态玻璃那条路一行没动
+        if (LocalStyle.current == UiStyle.Miuix) {
+            MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(dimColor)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onDismiss() }
+                    )
+                    Column(
+                        Modifier
+                            .align(Alignment.Center)
+                            .padding(32.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 620.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                            Column { content() }
+                        }
+                    }
+                }
+            }
+            return@Dialog
+        }
+        Box(Modifier.fillMaxSize()) {
+            // 压暗层（点空白关闭）
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(dimColor)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onDismiss() }
+            )
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(40.dp)
+                    .fillMaxWidth()
+                    .then(
+                        if (useBackdrop && backdrop != null) {
+                            Modifier.drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(48.dp) },
+                                effects = {
+                                    colorControls(
+                                        brightness = if (light) 0.2f else 0f,
+                                        saturation = 1.5f
+                                    )
+                                    blur(if (light) 16.dp.toPx() else 8.dp.toPx())
+                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
+                                },
+                                highlight = { Highlight.Plain },
+                                onDrawSurface = { drawRect(containerColor) }
+                            )
+                        } else {
+                            val as2 = LocalGlassAssets.current
+                            val sc = LocalGlassScreen.current
+                            if (as2 != null && sc.width > 0) {
+                                Modifier.glassSurface(
+                                    assets = as2,
+                                    shape = RoundedCornerShape(48.dp),
+                                    cornerDp = 48,
+                                    screen = sc,
+                                    blurLevel = 0.25f,
+                                    density = 0.6f,
+                                    light = light,
+                                    tint = if (light) Color.White else Color(0xFF121212),
+                                    tintAlpha = if (light) 0.55f else 0.5f
+                                )
+                            } else {
+                                Modifier
+                                    .clip(RoundedCornerShape(48.dp))
+                                    .background(if (light) Color(0xFFFAFAFA) else Color(0xFF1B1C20))
+                            }
+                        }
+                    )
+            ) {
+                CompositionLocalProvider(
+                    LocalAccent provides (if (light) Color(0xFF16181D) else Color(0xFFECEDEF))
+                ) {
+                    content()
+                }
+            }
+        }
     }
 }
+
 /** 首次使用向导：几页说明 + 跳过/下一步，液态玻璃面板 */
 @Composable
 fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
@@ -4231,7 +4766,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
     // 所以 Material 下把外层留白收掉
     val isM3 = LocalStyle.current == UiStyle.Material
     val light = !Palette.dark
-    val contentColor = Ui.text
+    val contentColor = if (light) Color.Black else Color.White
     val pages = listOf(
         Triple(
             tr(lang, "欢迎使用 EasyPT", "Welcome to EasyPT"),
@@ -4286,14 +4821,69 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
             Modifier.padding(24.dp, 0.dp, 24.dp, 24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            val bd = LocalWallBackdrop.current
             val last = page == pages.lastIndex
-            // unified action row
-            UiDialogActions(
-                confirmText = if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
-                onConfirm = { if (last) onDone() else page++ },
-                dismissText = tr(lang, "先不看", "Later"),
-                onDismiss = { onDone() }
-            )
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "先不看", "Later"),
+                    onClick = { onDone() },
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = { if (last) onDone() else page++ },
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        if (last) tr(lang, "开始使用", "Get started") else tr(lang, "下一步", "Next"),
+                        color = Color.White
+                    )
+                }
+            } else if (useBackdrop && bd != null) {
+                LiquidButton(
+                    onClick = { if (last) onDone() else onDone() },
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
+                LiquidButton(
+                    onClick = { if (last) onDone() else page++ },
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Palette.accent
+                ) {
+                    Text(
+                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
+                        color = Color.White, fontSize = 15.sp
+                    )
+                }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(contentColor.copy(alpha = 0.10f))
+                        .clickable { onDone() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "先不看", "Later"), color = contentColor, fontSize = 15.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Palette.accent)
+                        .clickable { if (last) onDone() else page++ }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (last) tr(lang, "开始使用", "Start") else tr(lang, "下一步", "Next"),
+                        color = Color.White, fontSize = 15.sp
+                    )
+                }
+            }
         }
     }
 }
@@ -4320,13 +4910,58 @@ fun GlassConfirmDialog(
             message, color = contentColor.copy(alpha = 0.72f), fontSize = 14.sp, lineHeight = 20.sp,
             modifier = Modifier.padding(28.dp, 0.dp, 28.dp, 10.dp)
         )
-        UiDialogActions(
-            confirmText = confirmText,
-            onConfirm = onConfirm,
-            dismissText = tr(lang, "取消", "Cancel"),
-            onDismiss = onDismiss,
-            confirmColor = if (destructive) Tints.red else null
-        )
+        Row(
+            Modifier.padding(24.dp, 6.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val bd = LocalWallBackdrop.current
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onConfirm,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(confirmText, color = Color.White) }
+            } else if (useBackdrop && bd != null) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+                LiquidButton(
+                    onClick = onConfirm,
+                    backdrop = bd,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = if (destructive) Color(0xFFFF3B30) else Palette.accent
+                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(contentColor.copy(alpha = 0.10f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (destructive) Color(0xFFFF3B30) else Palette.accent)
+                        .clickable { onConfirm() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
+            }
+        }
     }
 }
 
@@ -4334,7 +4969,7 @@ fun GlassConfirmDialog(
 fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -> Unit) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
-    val containerColor = Ui.surface.copy(alpha = 0.60f)
+    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val ctx = LocalContext.current
     val ver = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
@@ -4372,7 +5007,63 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
             color = contentColor.copy(alpha = 0.5f), fontSize = 11.sp,
             modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 12.dp)
         )
-        UiDialogActions(             confirmText = tr(lang, "好", "OK"),             onConfirm = onDismiss,             dismissText = tr(lang, "关闭", "Close"),             onDismiss = onDismiss         )
+        Row(
+            Modifier.padding(24.dp, 4.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "关闭", "Close"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onDismiss,
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "好", "OK"), color = Color.White) }
+            } else if (useBackdrop && backdrop != null) {
+                // demo 的 LiquidButton
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = backdrop,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) {
+                    Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp)
+                }
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = backdrop,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Palette.accent
+                ) {
+                    Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp)
+                }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(containerColor.copy(alpha = 0.2f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "关闭", "Close"), color = contentColor, fontSize = 16.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Palette.accent)
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "好", "OK"), color = Color.White, fontSize = 16.sp) }
+            }
+        }
     }
 }
 
@@ -4443,11 +5134,11 @@ fun GlassPlaygroundOverlay(assets: GlassAssets?, lang: Lang, onClose: () -> Unit
                         Text(tr(lang, "关闭", "Close"), color = Color.White, fontSize = 15.sp)
                     }
                 } else {
-                    UiButton(
-                        text = tr(lang, "关闭", "Close"),
+                    Button(
                         onClick = onClose,
+                        colors = primaryButtonColors(),
                         shape = RoundedCornerShape(50)
-                    )
+                    ) { Text(tr(lang, "关闭", "Close")) }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -4480,7 +5171,15 @@ private fun SliderRow(
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            UiSlider(value = value, onValueChange = onChange, valueRange = min..max)
+            androidx.compose.material3.Slider(
+                value = value, onValueChange = onChange, valueRange = min..max,
+                // 滑条也要跟着壁纸取色，不用 M3 默认的紫色主色
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = Palette.accent,
+                    activeTrackColor = Palette.accent,
+                    inactiveTrackColor = Palette.accent.copy(alpha = 0.24f)
+                )
+            )
         }
     }
 }
@@ -4490,6 +5189,86 @@ private fun SliderRow(
  * 压暗 + 48dp 玻璃面板 + colorControls/blur/lens(depthEffect) + Highlight.Plain + 胶囊按钮
  */
 /** MIUIX 版选择弹窗：容器是库里的 Card，行是 BasicComponent，取消是官方 TextButton */
+@Composable
+fun MiuixChoiceDialog(
+    title: String,
+    options: List<String>,
+    selected: Int,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    deletable: Set<Int> = emptySet(),
+    onDelete: ((Int) -> Unit)? = null
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
+            Box(Modifier.fillMaxSize()) {
+                // 点空白处关闭
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onDismiss() }
+                )
+                Column(
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(40.dp)
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                        Column(Modifier.padding(vertical = 8.dp)) {
+                            Text(
+                                title,
+                                color = MiuixTheme.colorScheme.onBackground,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)
+                            )
+                            options.forEachIndexed { i, name ->
+                                BasicComponent(
+                                    title = name,
+                                    onClick = { onPick(i) },
+                                    endActions = {
+                                        // 自己导入的字体多一个删除按钮（之前这分支被我漏掉了，
+                                        // 结果 MIUIX 下自定义字体删不掉）
+                                        if (onDelete != null && deletable.contains(i)) {
+                                            top.yukonga.miuix.kmp.basic.TextButton(
+                                                text = "删除",
+                                                onClick = { onDelete.invoke(i) }
+                                            )
+                                        }
+                                        if (i == selected) {
+                                            Icon(
+                                                Icons.Filled.Check, contentDescription = null,
+                                                tint = MiuixTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                            top.yukonga.miuix.kmp.basic.TextButton(
+                                text = "取消",
+                                onClick = onDismiss,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun LiquidChoiceDialog(
     backdrop: Backdrop?,
@@ -4504,19 +5283,41 @@ fun LiquidChoiceDialog(
 ) {
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
-    val containerColor = Ui.surface.copy(alpha = 0.60f)
-    val dimColor = Palette.bg.copy(alpha = 0.45f)
+    val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
+    val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
+    // Material：官方 M3 对话框；选项用 M3 ListItem，取消用 TextButton
+    if (LocalStyle.current == UiStyle.Material) {
+        MaterialDialog(title = title, onDismiss = onDismiss) {
+            options.forEachIndexed { i, name ->
+                ListItem(
+                    modifier = Modifier.clickable { onPick(i) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text(name, style = MaterialTheme.typography.bodyLarge) },
+                    trailingContent = if (i == selected) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                    } else null
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        }
+        return
+    }
 
     // MIUIX：容器用库里的 Card，行用 BasicComponent，取消用官方 TextButton。
     // 窗口仍用 Compose 的 Dialog —— miuix 的 WindowDialog 需要
     // LocalNavigationEventDispatcherOwner（本工程没提供，会崩），
+    // OverlayDialog 又必须放在根级 Box 才能盖满屏，嵌在页面里画不出来。
+    if (LocalStyle.current == UiStyle.Miuix) {
+        MiuixChoiceDialog(title, options, selected, onPick, onDismiss, deletable, onDelete)
+        return
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
-        LocalAccent provides Palette.accent,
-        // 弹窗里也要能取到 backdrop，否则 UiButton/UiSlider/UiSwitch 在玻璃风格下会退化成实心控件
-        LocalWallBackdrop provides backdrop
+        LocalAccent provides (if (LocalStyle.current == UiStyle.Native) contentColor else Palette.accent)
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
@@ -4578,27 +5379,57 @@ fun LiquidChoiceDialog(
                         Text(name, color = if (sel) Palette.accent else contentColor, fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
                         if (onDelete != null && deletable.contains(i)) {
-                            UiChip(
-                                text = tr(LocalLang.current, "删除", "Delete"),
-                                onClick = { onDelete(i) }
-                            )
+                            val delBd = LocalWallBackdrop.current
+                            if (useBackdrop && delBd != null) {
+                                LiquidButton(
+                                    onClick = { onDelete(i) },
+                                    backdrop = delBd,
+                                    modifier = Modifier.height(48.dp)
+                                ) {
+                                    Text("删除", color = contentColor, fontSize = 12.sp)
+                                }
+                            } else {
+                                Text(
+                                    "删除",
+                                    color = contentColor, fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(contentColor.copy(alpha = 0.12f))
+                                        .clickable { onDelete(i) }
+                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                )
+                            }
                             Spacer(Modifier.width(8.dp))
                         }
                         if (sel) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
                     }
                 }
                 }  // Column(可滚动选项)
-                Box(
-                    Modifier
-                        .padding(24.dp, 12.dp, 24.dp, 24.dp)
-                        .fillMaxWidth()
+                Row(
+                    Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    UiButton(
-                        text = tr(LocalLang.current, "取消", "Cancel"),
+                val bd = LocalWallBackdrop.current
+                if (useBackdrop && bd != null) {
+                    // demo 的 Transparent Liquid Button
+                    LiquidButton(
                         onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
-                    )
+                        backdrop = bd,
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
+                } else {
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(containerColor.copy(alpha = 0.2f))
+                            .clickable { onDismiss() }
+                            .height(48.dp)
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
                 }
+            }
         }
     }
 }
@@ -4634,7 +5465,7 @@ fun glassInsetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
     } else {
         Modifier
             .clip(shape)
-            .background(Palette.bg)
+            .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
     }
 }
 
@@ -4749,16 +5580,27 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 modifier = Modifier.weight(1f)
             )
             val refreshBd = LocalWallBackdrop.current
-            // unified accent chip
-            Text(
-                tr(lang, "刷新", "Refresh"),
-                color = Palette.accent, fontSize = 14.sp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Palette.accent.copy(alpha = 0.12f))
-                    .clickable { reload++ }
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-            )
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "刷新", "Refresh"),
+                    onClick = { reload++ }
+                )
+            } else if (useBackdrop && refreshBd != null) {
+                // 刷新也是玻璃按钮，不是一行蓝字
+                LiquidButton(onClick = { reload++ }, backdrop = refreshBd) {
+                    Text(tr(lang, "刷新", "Refresh"), color = contentColor, fontSize = 14.sp)
+                }
+            } else {
+                Text(
+                    tr(lang, "刷新", "Refresh"),
+                    color = Palette.accent, fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Palette.accent.copy(alpha = 0.12f))
+                        .clickable { reload++ }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
         }
         when {
             loading -> Text(
@@ -4773,7 +5615,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             )
             else -> LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier.heightIn(max = 320.dp).padding(horizontal = 18.dp),
+                modifier = Modifier.heightIn(max = 420.dp).padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -4792,14 +5634,54 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                         )
                         Spacer(Modifier.height(6.dp))
                         val isBusy = busyIndex == i
-                        // unified: UiButton for every style
-                        UiButton(
-                            text = if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
-                                   else tr(lang, "选择", "Select"),
-                            onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
-                            enabled = !isBusy,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (LocalStyle.current == UiStyle.Miuix) {
+                            top.yukonga.miuix.kmp.basic.Button(
+                                onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
+                                colors = if (isBusy) {
+                                    top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary()
+                                } else {
+                                    top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                    else tr(lang, "选择", "Select")
+                                )
+                            }
+                        } else if (useBackdrop && bd != null) {
+                            LiquidButton(
+                                onClick = {
+                                    if (!isBusy) { busyIndex = i; progress = 0 }
+                                },
+                                backdrop = bd,
+                                modifier = Modifier.fillMaxWidth().height(38.dp),
+                                tint = if (isBusy) Palette.accent else Color.Unspecified
+                            ) {
+                                Text(
+                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                    else tr(lang, "选择", "Select"),
+                                    color = contentColor, fontSize = 13.sp
+                                )
+                            }
+                        } else {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(19.dp))
+                                    .background(if (isBusy) Palette.accent else Palette.accent.copy(alpha = 0.18f))
+                                    .clickable { if (!isBusy) { busyIndex = i; progress = 0 } },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                    else tr(lang, "选择", "Select"),
+                                    color = if (isBusy) Color.White else contentColor,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -4835,12 +5717,30 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             // 这里已经下好了，把本地文件路径交出去；以前传的是 url，上层又下一遍（3.7 MB 白下两次）
             if (file != null) onPick(file.absolutePath) else busyIndex = -1
         }
-        Box(Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            UiButton(
-                text = tr(lang, "取消", "Cancel"),
-                onClick = onDismiss,
-                modifier = Modifier.width(160.dp).height(48.dp)
-            )
+        Row(
+            Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            val bd = LocalWallBackdrop.current
+            if (useBackdrop && bd != null) {
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = bd,
+                    modifier = Modifier.height(48.dp).width(160.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .width(160.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+            }
         }
     }
 }
@@ -4857,7 +5757,7 @@ fun LogColorDialog(
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
     // 和日志输出框同一套底料（glassInsetSurface），预览和对比度保护才准
-    val bgSample = Ui.surface
+    val bgSample = if (light) Color(0xFFFAFAFA) else Color(0xFF121212)
     var colors by remember { mutableStateOf(initial) }
     var active by remember { mutableIntStateOf(0) }
     val names = listOf(
@@ -4896,7 +5796,7 @@ fun LogColorDialog(
                 .navigationBarsPadding()
                 .padding(12.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(Palette.bg)
+                .background(if (Palette.dark) Color(0xFF17181C) else Color(0xFFF7F8FA))
         ) {
         Text(
             tr(lang, "日志颜色", "Log colors"),
@@ -4988,42 +5888,73 @@ fun LogColorDialog(
             }
         }
         Spacer(Modifier.height(10.dp))
-        UiDialogActions(             confirmText = tr(lang, "完成", "Done"),             onConfirm = { onSave(colors) },             dismissText = tr(lang, "取消", "Cancel"),             onDismiss = onDismiss         )
+        Row(
+            Modifier.padding(24.dp, 4.dp, 24.dp, 24.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val wall = LocalWallBackdrop.current
+            if (LocalStyle.current == UiStyle.Miuix) {
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = tr(lang, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = { onSave(colors) },
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) { Text(tr(lang, "完成", "Done"), color = Color.White) }
+            } else if (useBackdrop && wall != null) {
+                // 按钮抄 demo 的 LiquidButton
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = wall,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    surfaceColor = Color.White.copy(alpha = 0.3f)
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+                LiquidButton(
+                    onClick = { onSave(colors) },
+                    backdrop = wall,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    tint = Palette.accent
+                ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
+            } else {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .clickable { onDismiss() }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Palette.accent)
+                        .clickable { onSave(colors) }
+                        .height(48.dp)
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
+            }
+        }
     }
     }
 }
 
-
-/** 主按钮配色：原生风格不要彩色，用中性白底（@Composable 见下） */
-/**
- * 全 App 唯一的 Material 配色：所有 token 都从 Palette 来，
- * 弹窗 / 开关 / 滑条 / 按钮 / 卡片因此必然同色，不会再各取各的。
- * Palette.m3 非空时（系统动态色可用）直接用它。
- */
-fun appScheme(dark: Boolean): androidx.compose.material3.ColorScheme {
-    Palette.m3?.let { return it }
-    val base = if (dark) androidx.compose.material3.darkColorScheme()
-               else androidx.compose.material3.lightColorScheme()
-    return base.copy(
-        primary = Palette.accent,
-        onPrimary = Color.White,
-        primaryContainer = Palette.accent.copy(alpha = 0.16f),
-        onPrimaryContainer = Palette.accent,
-        secondaryContainer = Palette.accent.copy(alpha = 0.24f),
-        onSecondaryContainer = Palette.accent,
-        surface = Palette.surface,
-        surfaceContainer = Palette.surface,
-        surfaceContainerLow = Palette.surface,
-        surfaceContainerHigh = Palette.surface,
-        surfaceContainerHighest = Palette.surface,
-        background = Palette.bg,
-        onBackground = Palette.text,
-        onSurface = Palette.text,
-        onSurfaceVariant = Palette.text2,
-        outline = Palette.text2.copy(alpha = 0.45f),
-        outlineVariant = Palette.text2.copy(alpha = 0.22f)
-    )
-}
+/** 主按钮配色：原生风格不要彩色，用中性白底 */
+@Composable
+fun primaryButtonColors(): ButtonColors =
+    if (LocalStyle.current == UiStyle.Native)
+        ButtonDefaults.buttonColors(
+            containerColor = Color.White.copy(alpha = 0.16f),
+            contentColor = Color.White
+        )
+    else
+        ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White)
 
 /** sRGB 亮度(0..1) -> WCAG 相对亮度 */
 fun relLuminance(v: Float): Float {
