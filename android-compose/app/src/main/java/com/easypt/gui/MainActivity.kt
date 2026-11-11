@@ -2096,9 +2096,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ThemeMode.System -> systemDark
         }
         Palette.dark = dark
-        // Material 风格：整个 Palette 转发到 Material You 动态色（系统从壁纸取色）
-        Palette.m3 = if (style != UiStyle.Material) null
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // 只有开了「莫奈取色」才走系统动态色；关掉就回到项目自己的配色
+        Palette.m3 = if (style != UiStyle.Material || !monet) {
+            null
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
             else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
         } else null
@@ -2489,7 +2490,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                                    .background(MaterialTheme.colorScheme.surface)
                             ) {
                                 Row(
                                     Modifier.fillMaxWidth().height(60.dp),
@@ -2509,24 +2510,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             verticalArrangement = Arrangement.Center
                                         ) {
                                             // 选中态：M3 的胶囊指示器
-                                            Box(
-                                                Modifier
-                                                    .width(56.dp)
-                                                    .height(28.dp)
-                                                    .clip(RoundedCornerShape(50))
-                                                    .background(
-                                                        if (sel) MaterialTheme.colorScheme.secondaryContainer
-                                                        else Color.Transparent
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    ic, contentDescription = null,
-                                                    tint = if (sel) MaterialTheme.colorScheme.onSecondaryContainer
-                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
+                                            // 纯图标着色（不画胶囊底，避免出现色块/阴影感）
+                                            Icon(
+                                                ic, contentDescription = null,
+                                                tint = if (sel) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(22.dp)
+                                            )
                                             Spacer(Modifier.height(2.dp))
                                             Text(
                                                 label,
@@ -3033,7 +3023,7 @@ fun bottomSpacer(): androidx.compose.ui.unit.Dp {
         else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
     }
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    return barHeight + nav + 12.dp
+    return barHeight + nav
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
