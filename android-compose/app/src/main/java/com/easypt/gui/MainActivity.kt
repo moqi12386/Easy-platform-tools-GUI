@@ -2761,13 +2761,9 @@ fun KRow(
             .padding(horizontal = 18.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val uiStyle = LocalStyle.current
         if (icon != null) {
-            if (uiStyle == UiStyle.Miuix) {
-                IconTile(icon, tint)
-            } else {
-                Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
-            }
+            // MIUIX 的行由 MiuixRow 负责，这里只剩玻璃 / 原生的纯图标
+            Icon(icon, contentDescription = null, tint = text, modifier = Modifier.size(23.dp))
             Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
@@ -2856,16 +2852,12 @@ fun KSwitchRow(
             .padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val uiStyleS = LocalStyle.current
-        if (uiStyleS == UiStyle.Miuix) {
-            IconTile(icon, enabled = enabled)
-        } else {
-            Icon(
-                icon, contentDescription = null,
-                tint = if (enabled) text else text.copy(alpha = 0.35f),
-                modifier = Modifier.size(23.dp)
-            )
-        }
+        // MIUIX 的开关行由 MiuixSwitchRow 负责（用 miuix 的 Switch 控件）
+        Icon(
+            icon, contentDescription = null,
+            tint = if (enabled) text else text.copy(alpha = 0.35f),
+            modifier = Modifier.size(23.dp)
+        )
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
