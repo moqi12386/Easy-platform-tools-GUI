@@ -2686,6 +2686,25 @@ object Palette {
     val chevron: Color get() = if (dark) Color(0xFF5C6068) else Color(0xFFC2C6CC)
     val inset: Color get() = if (dark) Color(0xFF121316) else Color(0xFFF5F6F8)
     val chip: Color get() = if (dark) Color(0xFF2A2B30) else Color(0xFFF2F3F5)
+
+    /** 滑块/开关的未选中轨道、输入框描边 —— 三处原本各写一份同样的成对色 */
+    val track: Color get() = if (dark) Color(0xFF3A3C42) else Color(0xFFCED2D8)
+
+    /** 输入框描边（比 track 浅一点） */
+    val outline: Color get() = if (dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9)
+
+    /** 滑条未激活轨道 */
+    val trackFaint: Color get() = if (dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
+
+    /** 弹窗容器（比 glassTint 更实一点） */
+    val dialogSurface: Color get() = if (dark) Color(0xFF14161B) else Color(0xFFFAFBFD)
+
+    /** 行内小卡片 / 内嵌块 */
+    val insetBlock: Color get() = if (dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7)
+
+    /** 警告条：底色 + 前景 */
+    val warnBg: Color get() = if (dark) Color(0xFF3A2E12) else Color(0xFFFFF3D6)
+    val warnFg: Color get() = if (dark) Color(0xFFFFC04D) else Color(0xFF8A5A00)
     val nativeCard: Color get() = Color(0xFF1B1F27).copy(alpha = 0.92f)
 
     /** 原生风格在中性底板上用的主色（不跟莫奈走） */
@@ -2875,7 +2894,7 @@ fun KSwitchRow(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = LocalAccent.current,
                     uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFCED2D8),
+                    uncheckedTrackColor = Palette.track,
                     uncheckedBorderColor = Color.Transparent
                 )
             )
@@ -2929,7 +2948,7 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = Palette.inset,
     cursorColor = LocalAccent.current,
     focusedBorderColor = LocalAccent.current.copy(alpha = 0.6f),
-    unfocusedBorderColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE3E5E9),
+    unfocusedBorderColor = Palette.outline,
     focusedLabelColor = LocalAccent.current,
     unfocusedLabelColor = Palette.text2,
     focusedPlaceholderColor = Palette.text2,
@@ -2970,7 +2989,7 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
                     activeTrackColor = LocalAccent.current,
-                    inactiveTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
+                    inactiveTrackColor = Palette.trackFaint
                 )
             )
         }
@@ -3139,8 +3158,7 @@ private fun BigLogOverlay(
                 .padding(12.dp)
                 .clip(shape)
                 .background(
-                    if (Palette.dark) Color(0xFF14161B).copy(alpha = 0.97f)
-                    else Color(0xFFFAFBFD).copy(alpha = 0.97f)
+                            Palette.dialogSurface.copy(alpha = 0.97f)
                 )
                 .clickable { }
                 .padding(14.dp)
@@ -3188,7 +3206,7 @@ private fun BigLogOverlay(
             } else {
                 Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+                    .background(Palette.insetBlock)
             }
             LazyColumn(
                 state = listState,
@@ -3387,12 +3405,12 @@ fun HomePage(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (Palette.dark) Color(0xFF3A2E12) else Color(0xFFFFF3D6))
+                    .background(Palette.warnBg)
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Icon(
                     Icons.Filled.Warning, null,
-                    tint = if (Palette.dark) Color(0xFFFFC04D) else Color(0xFF8A5A00),
+                    tint = Palette.warnFg,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(10.dp))
@@ -3581,7 +3599,7 @@ fun HomePage(
                 // 深底上再写深色日志，日间模式直接看不清
                 Modifier
                     .clip(logShape)
-                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+                    .background(Palette.insetBlock)
             }
             // 新日志进来就贴到最后一行；不滚的话窗口一直停在最旧那几行，得手动往下拉
             val logListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -5173,7 +5191,7 @@ fun glassInsetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
     } else {
         Modifier
             .clip(shape)
-            .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+            .background(Palette.insetBlock)
     }
 }
 
