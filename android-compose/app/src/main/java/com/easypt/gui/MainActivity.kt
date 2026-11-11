@@ -2483,48 +2483,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         ) {
                             // containerColor / tonalElevation 都不写，直接用 NavigationBar 的官方默认
                             // （surfaceContainer + 0dp），跟其它 M3 组件一致
-                            // 自绘紧凑底栏：NavigationBar 固定 80dp 偏高，
-                            // 这里用 56dp 内容 + 导航条 inset，容器色一铺到底
-                            Column(
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                            // 用库里的 NavigationBar，高度由组件自己定（内容 80dp + 导航条 inset）
+                            NavigationBar(
+                                modifier = Modifier.align(Alignment.BottomCenter)
                             ) {
-                                Row(
-                                    Modifier.fillMaxWidth().height(56.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    listOf(
-                                        Triple(Icons.Filled.Home, t("主页", "Home"), 0),
-                                        Triple(Icons.Filled.Settings, t("设置", "Settings"), 1)
-                                    ).forEach { (ic, label, idx) ->
-                                        val sel = page == idx
-                                        Column(
-                                            Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight()
-                                                .clickable { page = idx },
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                ic, contentDescription = null,
-                                                tint = if (sel) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                            Text(
-                                                label,
-                                                fontSize = 11.sp,
-                                                color = if (sel) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                                // 导航条高度：留白但同色
-                                Box(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.navigationBars))
+                                NavigationBarItem(
+                                    selected = page == 0,
+                                    onClick = { page = 0 },
+                                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                                    label = { Text(t("主页", "Home")) }
+                                )
+                                NavigationBarItem(
+                                    selected = page == 1,
+                                    onClick = { page = 1 },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                                    label = { Text(t("设置", "Settings")) }
+                                )
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
@@ -3013,7 +2987,7 @@ fun KSwitchRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 56.dp   // 自绘紧凑底栏的内容高度
+        UiStyle.Material -> 80.dp   // 库组件的内容高度
         UiStyle.Miuix -> 64.dp      // miuix NavigationBar ItemHeight 64dp
         else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
     }
