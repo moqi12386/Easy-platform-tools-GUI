@@ -4706,7 +4706,7 @@ fun LiquidChoiceDialog(
 
     // Material：官方 M3 对话框，皮肤在 MaterialSlots.MaterialChoiceDialog
     if (LocalStyle.current == UiStyle.Material) {
-        MaterialChoiceDialog(title, options, selected, onPick, onDismiss)
+        MaterialChoiceDialog(title, options, selected, onPick, onDismiss, deletable, onDelete)
         return
     }
 
