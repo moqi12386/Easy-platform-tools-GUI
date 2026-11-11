@@ -2204,21 +2204,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
-                // 顶部渐变：和底栏同一套 Brush，标题仍然清晰
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(190.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Bg.copy(alpha = 0.85f),
-                                    Bg.copy(alpha = 0.45f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
+
                 Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
@@ -2489,23 +2475,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     } else if (useBackdrop) {
-                        // 照抄 demo 的 Progressive blur：底栏上方做一层渐变模糊
-                        // 底栏上方的渐变淡出：内容照样能滑到底栏下面，只是越靠下越淡
-                        Box(
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color.Transparent,
-                                            Bg.copy(alpha = 0.55f),
-                                            Bg.copy(alpha = 0.92f)
-                                        )
-                                    )
-                                )
-                        )
 
                         LiquidBottomTabs(
                             dark = Palette.dark,
