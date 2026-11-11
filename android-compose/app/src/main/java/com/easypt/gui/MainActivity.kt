@@ -4901,28 +4901,13 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 color = contentColor, fontSize = 24.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
             )
-            val refreshBd = LocalWallBackdrop.current
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "刷新", "Refresh"),
-                    onClick = { reload++ }
-                )
-            } else if (useBackdrop && refreshBd != null) {
-                // 刷新也是玻璃按钮，不是一行蓝字
-                LiquidButton(onClick = { reload++ }, backdrop = refreshBd) {
-                    Text(tr(lang, "刷新", "Refresh"), color = contentColor, fontSize = 14.sp)
-                }
-            } else {
-                Text(
-                    tr(lang, "刷新", "Refresh"),
-                    color = LocalAccent.current, fontSize = 14.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current.copy(alpha = 0.12f))
-                        .clickable { reload++ }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                )
-            }
+            GlassButton(
+                text = tr(lang, "刷新", "Refresh"),
+                onClick = { reload++ },
+                textColor = contentColor,
+                fontSize = 14.sp,
+                plainBackground = LocalAccent.current.copy(alpha = 0.12f)
+            )
         }
         when {
             loading -> Text(
