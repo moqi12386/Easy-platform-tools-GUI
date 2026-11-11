@@ -3981,31 +3981,14 @@ fun SettingsPage(
                         Text(crashText, color = Palette.text2, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                     }
                     Spacer(Modifier.height(10.dp))
-                    val crashBd = LocalWallBackdrop.current
-                    if (LocalStyle.current == UiStyle.Miuix) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            top.yukonga.miuix.kmp.basic.TextButton(
-                                text = tr(lang, "关闭", "Close"),
-                                onClick = { showCrash = false },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    } else if (useBackdrop && crashBd != null) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LiquidButton(
-                                onClick = { showCrash = false },
-                                backdrop = crashBd,
-                                modifier = Modifier.weight(1f).height(48.dp),
-                                surfaceColor = Color.White.copy(alpha = 0.3f)
-                            ) { Text(tr(lang, "关闭", "Close"), color = Palette.text, fontSize = 15.sp) }
-                        }
-                    } else {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { showCrash = false }) {
-                                Text(tr(lang, "关闭", "Close"), color = Palette.text2)
-                            }
-                        }
-                    }
+                    GlassButton(
+                        text = tr(lang, "关闭", "Close"),
+                        onClick = { showCrash = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        textColor = Palette.text,
+                        surface = Color.White.copy(alpha = 0.3f),
+                        plainText = true
+                    )
                 }
             }
         }
