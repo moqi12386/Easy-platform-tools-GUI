@@ -2153,10 +2153,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
             else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
         } else null
-        // 莫奈取色：直接分析当前壁纸位图，四种风格共用同一主色
+        // 莫奈取色：只对 Material 生效（其它风格有各自的视觉，不跟着壁纸走）
         var monetColor by remember { mutableStateOf<Color?>(null) }
         LaunchedEffect(monet, style, assets, customWallpaper) {
-            monetColor = if (monet && assets != null) {
+            monetColor = if (monet && style == UiStyle.Material && assets != null) {
                 withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
                         val bmp = assets.full.asAndroidBitmap()
@@ -2313,7 +2313,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalBarColor provides onBar,
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
-                        // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
+                        LocalLang provides lang,
                         LocalAccent provides Palette.accent
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
@@ -2779,6 +2779,7 @@ object Palette {
 val LocalCardText = androidx.compose.runtime.staticCompositionLocalOf { Palette.text }
 /** 当前界面风格，供组件内部做分化样式 */
 val LocalStyle = androidx.compose.runtime.staticCompositionLocalOf { UiStyle.Native }
+val LocalLang = androidx.compose.runtime.staticCompositionLocalOf { Lang.Zh }
 /**
  * 主色（强调色）。原生风格下会被覆盖成纯中性色，保证「原生风格不出现任何彩色」。
  */
@@ -2980,14 +2981,19 @@ fun KDialog(
                     .fillMaxWidth()
                     .then(
                         if (useBackdrop && wall != null) {
+                            // glass style: demo dialog parameters
                             Modifier.drawBackdrop(
                                 backdrop = wall,
                                 shape = { shape },
                                 effects = {
-                                    vibrancy()
-                                    blur(8.dp.toPx())
-                                    lens(24.dp.toPx(), 24.dp.toPx())
+                                    colorControls(
+                                        brightness = if (Palette.dark) 0f else 0.2f,
+                                        saturation = 1.5f
+                                    )
+                                    blur(if (Palette.dark) 8.dp.toPx() else 16.dp.toPx())
+                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
                                 },
+                                highlight = { Highlight.Plain },
                                 onDrawSurface = {
                                     drawRect(
                                         if (Palette.dark) Color(0xFF121212).copy(alpha = 0.6f)
@@ -3706,7 +3712,7 @@ fun SettingsPage(
                 selected = themeMode.ordinal,
                 onPick = { onTheme(ThemeMode.entries[it]) }
             )
-            if (canMonet) {
+            if (canMonet && style == UiStyle.Material) {
                 AppSwitchRow(
                     icon = Icons.Filled.Edit,
                     title = tr(lang, "莫奈取色", "Monet colors"),
@@ -4614,57 +4620,21 @@ fun LiquidChoiceDialog(
                         Text(name, color = if (sel) Palette.accent else contentColor, fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
                         if (onDelete != null && deletable.contains(i)) {
-                            val delBd = LocalWallBackdrop.current
-                            if (useBackdrop && delBd != null) {
-                                LiquidButton(
-                                    onClick = { onDelete(i) },
-                                    backdrop = delBd,
-                                    modifier = Modifier.height(48.dp)
-                                ) {
-                                    Text("删除", color = contentColor, fontSize = 12.sp)
-                                }
-                            } else {
-                                Text(
-                                    "删除",
-                                    color = contentColor, fontSize = 12.sp,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(contentColor.copy(alpha = 0.12f))
-                                        .clickable { onDelete(i) }
-                                        .padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
-                            }
+                            UiChip(
+                                text = tr(LocalLang.current, "删除", "Delete"),
+                                onClick = { onDelete(i) }
+                            )
                             Spacer(Modifier.width(8.dp))
                         }
                         if (sel) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
                     }
                 }
                 }  // Column(可滚动选项)
-                Row(
-                    Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                val bd = LocalWallBackdrop.current
-                if (useBackdrop && bd != null) {
-                    // demo 的 Transparent Liquid Button
-                    LiquidButton(
-                        onClick = onDismiss,
-                        backdrop = bd,
-                        modifier = Modifier.weight(1f).height(48.dp)
-                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
-                } else {
-                    Row(
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(containerColor.copy(alpha = 0.2f))
-                            .clickable { onDismiss() }
-                            .height(48.dp)
-                            .weight(1f),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) { Text("取消", color = contentColor, fontSize = 16.sp) }
-                }
-            }
+                UiButton(
+                    text = tr(LocalLang.current, "取消", "Cancel"),
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                )
         }
     }
 }
