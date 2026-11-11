@@ -1,3 +1,19 @@
+# Easy-platform-tools-GUI v3.51.1 (Android)
+
+- **实况通知第一次不出现** —— 装好后第一次发实况通知时，SystemUI 的焦点插件还没缓存这个包，
+  直接把通知吞掉（`dumpsys notification` 里连记录都没有，`startForeground()` 却返回成功；
+  服务日志显示 10 次 startForeground 全部"完成"）。现在第一次先发一条普通通知把它喂熟，
+  200ms 后再发真正的实况通知，之后同一会话里直接更新。
+- **弹窗按钮不吃莫奈色** —— 弹窗子树里 `LocalAccent` 拿到的是启动首帧的旧值
+  （深色主题下等于纯白），所以「选择 / 刷新 / 下一步 / 好 / 完成」全是白底。
+  现在弹窗内按钮直读 `Palette.accent`：主按钮主色实心 + 白字，次按钮主色 16%。
+- 通知通道改在 `onCreate` 就建好，不再等第一次刷机才现建。
+- 跑普通 shell 命令不再弹「刷写完成」。
+- `GlassButton` 的 `height` 参数之前被写死 48dp，已修。
+
+真机验证（MIX 2S / Android 17 / HyperOS 3）：冷启动后第一次执行 `ls /sdcard`，
+通知栏当帧出现「执行中 · ls /sdcard」；测试实况入口连发 11 条进度更新全部落到同一条通知；
+弹窗主按钮像素值均为 `#A88028`（莫奈金）。
 # Easy-platform-tools-GUI v3.50.3 (Android)
 
 - **Material 风格底栏在深色模式下是浅色的** —— 那段底栏写在页面 `MaterialTheme` 外面，拿到的是 M3 默认浅色主题。现在给它单独套一层，`surfaceContainer` 跟卡片同色，选中药丸和图标跟着主色走

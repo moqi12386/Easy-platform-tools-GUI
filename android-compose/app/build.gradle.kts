@@ -12,8 +12,8 @@ android {
         applicationId = "com.easypt.gui"
         minSdk = 26
         targetSdk = 37
-        versionCode = 107
-        versionName = "3.50.3"
+        versionCode = 109
+        versionName = "3.51.1"
     }
 
     signingConfigs {
@@ -42,9 +42,22 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+
+    // 16 KB page size 适配（Android 15/16 要求）：
+    // 不启用 legacy 打包，.so 以未压缩方式存放，AGP 8.5+ 会按 16 KB 对齐
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {
+    // 小米焦点通知（超级岛）DSL，Apache-2.0，API 在 Maven/JitPack
+    implementation("com.xzakota.hyper.notification:focus-api:1.4")
+    // Shizuku：用来临时掐 XMSF 网络，绕过小米超级岛白名单校验
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.ui:ui:1.8.3")

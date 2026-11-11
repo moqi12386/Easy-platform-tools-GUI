@@ -240,6 +240,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 通知通道要在第一次刷机之前就建好：现建通道 + 立刻发通知，系统/焦点插件
+        // 可能不认，第一次实况通知会被吞掉（见 FlashService.foregrounded）
+        runCatching { FlashService.ensureChannel(this) }
         // root 快捷刷入镜像 / 线刷压缩包
         pickFlash = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -1461,7 +1464,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     LiveUpdate(t("命令结束", "Done"), cmd.trim().take(60), 1, 1, done = true)
                 )
             }
-            finishFlashLive(true)
+            finishFlashLive(true, announce = false)
         }
     }
 
@@ -1904,13 +1907,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         runCatching { nm.notify(flashNotifyId, b.build()) }
     }
 
-    fun finishFlashLive(success: Boolean) {
+    fun finishFlashLive(success: Boolean, announce: Boolean = true) {
         val stop = android.content.Intent(this, FlashService::class.java)
             .putExtra(FlashService.EXTRA_STOP, true)
         runCatching { startService(stop) }
         runCatching { stopService(android.content.Intent(this, FlashService::class.java)) }
-        // runRom 在后台线程跑，Toast 必须在主线程
-        if (success) runCatching { ui.post { toast(t("刷写完成", "Flashing finished")) } }
+        // runRom 在后台线程跑，Toast 必须在主线程。
+        // 跑普通 shell 命令时别弹「刷写完成」，那是另一回事（announce = false）
+        if (success && announce) runCatching { ui.post { toast(t("刷写完成", "Flashing finished")) } }
     }
 
     /** 测试实况通知：不刷机也能看胶囊/超级岛是否被系统提升 */
