@@ -147,10 +147,10 @@ private val Surface: Color get() = Palette.surface
 private val TextPrimary: Color get() = Palette.text
 private val TextSecondary: Color get() = Palette.text2
 private val Accent: Color get() = Palette.accent
-private val Danger = Color(0xFFE5484D)
-private val OkColor: Color get() = if (Palette.dark) Color(0xFF3DD68C) else Color(0xFF12A150)
-private val ErrColor: Color get() = if (Palette.dark) Color(0xFFFF7B72) else Color(0xFFD93B3B)
-private val LogColor: Color get() = if (Palette.dark) Color(0xFFC9CDD6) else Color(0xFF4A5160)
+private val Danger: Color get() = LogColors.danger
+private val OkColor: Color get() = LogColors.ok
+private val ErrColor: Color get() = LogColors.err
+private val LogColor: Color get() = LogColors.text
 
 class MainActivity : ComponentActivity(), FastbootUsb.Logger {
 
