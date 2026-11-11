@@ -406,8 +406,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         mark("04-prefs")
         reloadWallpaper(sync = true)
         android.util.Log.i("EasyPT", "focusProbe: " + focusProbe())
+        FlashService.ensureChannel(this)   // 通道提前建好，否则首次刷机不会显示实况通知
         XmsfBypass.appCtx = applicationContext
         checkInterruptedFlash()
+        FlashService.ensureChannel(this)   // 通道提前建好，否则首次刷机不会显示实况通知
         XmsfBypass.appCtx = applicationContext
         checkInterruptedFlash()
         XmsfBypass.requestPermission()
@@ -816,7 +818,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             flashStep = 0
             flashPart = ""
             append(t("=== 模拟刷机开始（不连接任何设备）===", "=== simulated flash (no device) ==="), Accent)
-            updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, 24))
+            lastCapText = ""
+            lastNotifyPush = 0L
+            repeat(3) {
+                updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, 24))
+                Thread.sleep(800)
+            }
             val parts = listOf("vendor", "system", "product")
             for (i in 1..24) {
                 flashPart = parts[(i - 1) / 8]
@@ -1312,7 +1319,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         ensureBatteryExempt()        // 实况通知：开刷就挂一条常驻进度，Android 16+ 会显示成实况通知/超级岛
         flashing = true
         runCatching { flashMarker().writeText("${romProduct.ifEmpty { "未知机型" }} · ${steps.size} 步") }
-        updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
+        // 预热：系统对「刚出现的通知」有一次性的提升迟疑，
+        // 连续推几次、留出间隔，第一次刷机也能立刻显示实况通知
+        lastCapText = ""
+        lastNotifyPush = 0L
+        repeat(3) {
+            updateFlashLive(LiveUpdate(t("线刷中", "Flashing"), t("准备中…", "Preparing…"), 0, steps.size))
+            Thread.sleep(800)
+        }
         for ((i, s) in steps.withIndex()) {
             flashPart = s.part
             flashStep = i + 1; flashMax = steps.size
@@ -2472,7 +2486,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             NavigationBar(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .navigationBarsPadding()
                             ) {
                                 NavigationBarItem(
                                     selected = page == 0,
