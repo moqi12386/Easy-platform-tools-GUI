@@ -5231,53 +5231,14 @@ fun LogColorDialog(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val wall = LocalWallBackdrop.current
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = { onSave(colors) },
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr(lang, "完成", "Done"), color = Color.White) }
-            } else if (useBackdrop && wall != null) {
-                // 按钮抄 demo 的 LiquidButton
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = wall,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                LiquidButton(
-                    onClick = { onSave(colors) },
-                    backdrop = wall,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = LocalAccent.current
-                ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(LocalAccent.current)
-                        .clickable { onSave(colors) }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "完成", "Done"), color = Color.White, fontSize = 16.sp) }
-            }
+            // 三风格统一：DialogActions 自己挑 miuix / Material / 玻璃的按钮，颜色只从 Palette 取
+            DialogActions(
+                dismissText = tr(lang, "取消", "Cancel"),
+                onDismiss = onDismiss,
+                confirmText = tr(lang, "完成", "Done"),
+                onConfirm = { onSave(colors) },
+                confirmColor = LocalAccent.current
+            )
         }
     }
     }
