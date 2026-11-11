@@ -142,7 +142,7 @@ private val Surface: Color get() = Palette.surface
 private val TextPrimary: Color get() = Palette.text
 private val TextSecondary: Color get() = Palette.text2
 private val Accent: Color get() = Palette.accent
-private val Danger = Color(0xFFE5484D)
+private val Danger: Color get() = Palette.danger
 private val OkColor: Color get() = if (Palette.dark) Color(0xFF3DD68C) else Color(0xFF12A150)
 private val ErrColor: Color get() = if (Palette.dark) Color(0xFFFF7B72) else Color(0xFFD93B3B)
 private val LogColor: Color get() = if (Palette.dark) Color(0xFFC9CDD6) else Color(0xFF4A5160)
@@ -2716,6 +2716,9 @@ object Palette {
     /** 玻璃 / 原生 在不支持取样的机器上的纯色兜底 */
     val glassSolid: Color get() = if (dark) Color(0xFF1F2026) else Color(0xFFFFFFFF)
 
+    /** 危险操作（擦除、删除）的红色，深浅色一致 */
+    val danger: Color get() = Color(0xFFE5484D)
+
     /** 弹窗背后的遮罩：浅色用偏蓝的深色，深色直接压黑 */
     val dim: Color get() = if (dark) Color(0xFF121212).copy(alpha = 0.56f) else Color(0xFF29293A).copy(alpha = 0.23f)
 }
@@ -3431,7 +3434,7 @@ fun HomePage(
                     tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Bootloader", "Reboot bootloader"), "bootloader",
                     tint = Color(0xFF0A84FF), onClick = { onReboot("bootloader") })
-                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Color(0xFFFF3B30))
+                AppRow(Icons.Filled.Refresh, tr(lang, "进入 EDL", "Enter EDL"), "oem edl", onClick = onEdl, tint = Palette.danger)
             }
             1 -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
@@ -3444,7 +3447,7 @@ fun HomePage(
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = Color(0xFF34C759))
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启 Recovery", "Reboot recovery"), "reboot recovery",
                     tint = Color(0xFFFF9F0A), onClick = { onReboot("recovery") })
-                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Color(0xFFFF3B30))
+                AppRow(Icons.Filled.Refresh, tr(lang, "重启 EDL", "Reboot EDL"), "reboot edl", onClick = onEdl, tint = Palette.danger)
             }
             else -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.PlayArrow, tr(lang, "测试连接", "Ping"), "/api/status", onClick = onPing)
@@ -4349,53 +4352,24 @@ fun GlassConfirmDialog(
             Modifier.padding(24.dp, 6.dp, 24.dp, 24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val bd = LocalWallBackdrop.current
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                top.yukonga.miuix.kmp.basic.Button(
-                    onClick = onConfirm,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f)
-                ) { Text(confirmText, color = Color.White) }
-            } else if (useBackdrop && bd != null) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                LiquidButton(
-                    onClick = onConfirm,
-                    backdrop = bd,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    tint = if (destructive) Color(0xFFFF3B30) else LocalAccent.current
-                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(contentColor.copy(alpha = 0.10f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(if (destructive) Color(0xFFFF3B30) else LocalAccent.current)
-                        .clickable { onConfirm() }
-                        .height(48.dp)
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(confirmText, color = Color.White, fontSize = 16.sp) }
-            }
+            GlassButton(
+                text = tr(lang, "取消", "Cancel"),
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+                textColor = contentColor,
+                fontSize = 16.sp,
+                surface = Color.White.copy(alpha = 0.3f),
+                plainBackground = contentColor.copy(alpha = 0.10f)
+            )
+            GlassButton(
+                text = confirmText,
+                onClick = onConfirm,
+                modifier = Modifier.weight(1f),
+                textColor = Color.White,
+                fontSize = 16.sp,
+                primary = true,
+                tint = if (destructive) Palette.danger else LocalAccent.current
+            )
         }
     }
 }
