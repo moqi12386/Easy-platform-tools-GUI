@@ -2486,6 +2486,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             NavigationBar(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
+                                    .height(72.dp)   // 默认 80dp 偏高，压低一点
                             ) {
                                 NavigationBarItem(
                                     selected = page == 0,
@@ -2987,7 +2988,7 @@ fun KSwitchRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 80.dp   // M3 NavigationBar 默认 80dp
+        UiStyle.Material -> 72.dp   // 和底栏实际高度保持一致
         UiStyle.Miuix -> 64.dp      // miuix NavigationBar ItemHeight 64dp
         else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
     }
