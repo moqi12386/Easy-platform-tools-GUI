@@ -3028,8 +3028,8 @@ fun KSwitchRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 80.dp   // 库组件的内容高度
-        UiStyle.Miuix -> 64.dp      // miuix NavigationBar ItemHeight 64dp
+        UiStyle.Material -> 60.dp   // 自绘底栏内容高度
+        UiStyle.Miuix -> 60.dp      // 自绘底栏内容高度
         else -> 84.dp               // 玻璃/原生：胶囊 + 上下 10dp 留白
     }
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
