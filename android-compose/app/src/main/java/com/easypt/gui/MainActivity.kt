@@ -56,6 +56,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -195,7 +196,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
     /** 实验：状态栏真模糊（内容录两遍，只露顶部模糊条） */
-    private var expBlur by mutableStateOf(true)
+    private var expBlur by mutableStateOf(false)
     /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
     private var screenCorner by mutableStateOf(20f)
     private var fontChoice by mutableStateOf(AppFont.System)
@@ -334,7 +335,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
-        expBlur = sp.getBoolean("expblur", true)
+        expBlur = sp.getBoolean("expblur", false)
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         val dk = sp.getBoolean("dark", false)
         logCmdColor = readLogColor(sp, "lc2Cmd")
@@ -2493,18 +2494,25 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                     }
 
-                    // 顶部虚化过渡：画在【内容之上】，卡片滚进状态栏区域时淡出
+                    // 顶部毛玻璃：用 AndroidLiquidGlass 的 backdrop 对背景做真模糊，
+                    // 再叠一层很淡的渐变，避免出现硬边
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(90.dp)
+                            .height(96.dp)
+                            .then(
+                                if (useBackdrop && wallBackdrop != null)
+                                    Modifier.drawBackdrop(
+                                        backdrop = wallBackdrop,
+                                        shape = { RectangleShape },
+                                        effects = { blur(radius = 30f) }
+                                    )
+                                else Modifier
+                            )
                             .background(
                                 Brush.verticalGradient(
-                                    0f to Bg.copy(alpha = 0.99f),
-                                    0.22f to Bg.copy(alpha = 0.95f),
-                                    0.42f to Bg.copy(alpha = 0.80f),
-                                    0.62f to Bg.copy(alpha = 0.55f),
-                                    0.82f to Bg.copy(alpha = 0.26f),
+                                    0f to Bg.copy(alpha = 0.45f),
+                                    0.60f to Bg.copy(alpha = 0.18f),
                                     1f to Color.Transparent
                                 )
                             )
