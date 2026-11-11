@@ -4634,11 +4634,17 @@ fun LiquidChoiceDialog(
                     }
                 }
                 }  // Column(可滚动选项)
-                UiButton(
-                    text = tr(LocalLang.current, "取消", "Cancel"),
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                )
+                Box(
+                    Modifier
+                        .padding(24.dp, 12.dp, 24.dp, 24.dp)
+                        .fillMaxWidth()
+                ) {
+                    UiButton(
+                        text = tr(LocalLang.current, "取消", "Cancel"),
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    )
+                }
         }
     }
 }
