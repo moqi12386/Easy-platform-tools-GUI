@@ -3698,34 +3698,14 @@ fun SettingsPage(
                 Spacer(Modifier.height(2.dp))
                 // 按钮一律用 demo 的 LiquidButton（有按下液态形变 + 高光）
                 val resetWall = LocalWallBackdrop.current
-                if (useBackdrop && resetWall != null) {
-                    LiquidButton(
-                        onClick = onResetGlass,
-                        backdrop = resetWall,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = LocalAccent.current, fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(LocalAccent.current.copy(alpha = 0.14f))
-                            .clickable { onResetGlass() }
-                            .padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            tr(lang, "重置为默认参数", "Reset to defaults"),
-                            color = LocalAccent.current, fontSize = 14.sp
-                        )
-                    }
-                }
+                GlassButton(
+                    text = tr(lang, "重置为默认参数", "Reset to defaults"),
+                    onClick = onResetGlass,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                    textColor = LocalAccent.current,
+                    fontSize = 14.sp,
+                    plainBackground = LocalAccent.current.copy(alpha = 0.14f)
+                )
                 if (!realGlass) {
                     Text(
                         tr(
