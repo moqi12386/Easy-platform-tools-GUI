@@ -2872,7 +2872,13 @@ object Palette {
             monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.10f else 0.05f) } ?: base
         }
     val surface: Color
-        get() = m3?.surfaceContainer ?: run {
+        get() = m3?.let {
+            // 卡片底色：surfaceContainer 里掺一点主色，形成「比按钮浅一档」的动态色阶
+            androidx.compose.ui.graphics.lerp(
+                it.surfaceContainer, it.primary,
+                if (dark) 0.16f else 0.10f
+            )
+        } ?: run {
             val base = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
             monetAccent?.let { androidx.compose.ui.graphics.lerp(base, it, if (dark) 0.12f else 0.06f) } ?: base
         }
