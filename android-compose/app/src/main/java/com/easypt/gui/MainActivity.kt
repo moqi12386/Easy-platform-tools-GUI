@@ -2505,6 +2505,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             Modifier
                                                 .weight(1f)
                                                 .fillMaxHeight()
+                                                .clip(androidx.compose.ui.graphics.RectangleShape)
                                                 // 关掉水波纹：长按时会画出一大片矩形阴影
                                                 .clickable(
                                                     interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
@@ -2514,7 +2515,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             verticalArrangement = Arrangement.Center
                                         ) {
                                             // 选中态：M3 的胶囊指示器
-                                            // 选中态：小胶囊指示器（颜色跟按钮主色一致，随莫奈变化）
                                             Box(
                                                 Modifier
                                                     .width(56.dp)
