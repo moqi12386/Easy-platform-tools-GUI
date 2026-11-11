@@ -4498,11 +4498,6 @@ fun GlassDialogPanel(
     val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
-    // Material：用官方 M3 对话框
-    if (LocalStyle.current == UiStyle.Material) {
-        MaterialDialog(title = null, onDismiss = onDismiss, body = content)
-        return
-    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         // MIUIX：容器换成库里的 Card。只加这一个分支，所有基于 GlassDialogPanel 的弹窗
@@ -5066,25 +5061,6 @@ fun LiquidChoiceDialog(
     val containerColor = if (light) Color(0xFFFAFAFA).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.4f)
     val dimColor = if (light) Color(0xFF29293A).copy(alpha = 0.23f) else Color(0xFF121212).copy(alpha = 0.56f)
 
-    // Material：官方 M3 对话框；选项用 M3 ListItem，取消用 TextButton
-    if (LocalStyle.current == UiStyle.Material) {
-        MaterialDialog(title = title, onDismiss = onDismiss) {
-            options.forEachIndexed { i, name ->
-                ListItem(
-                    modifier = Modifier.clickable { onPick(i) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = { Text(name, style = MaterialTheme.typography.bodyLarge) },
-                    trailingContent = if (i == selected) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("取消") }
-            }
-        }
-        return
-    }
 
     // MIUIX：容器用库里的 Card，行用 BasicComponent，取消用官方 TextButton。
     // 窗口仍用 Compose 的 Dialog —— miuix 的 WindowDialog 需要
