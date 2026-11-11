@@ -4874,27 +4874,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 modifier = Modifier.weight(1f)
             )
             val refreshBd = LocalWallBackdrop.current
-            if (LocalStyle.current == UiStyle.Miuix) {
-                top.yukonga.miuix.kmp.basic.TextButton(
-                    text = tr(lang, "刷新", "Refresh"),
-                    onClick = { reload++ }
-                )
-            } else if (useBackdrop && refreshBd != null) {
-                // 刷新也是玻璃按钮，不是一行蓝字
-                LiquidButton(onClick = { reload++ }, backdrop = refreshBd) {
-                    Text(tr(lang, "刷新", "Refresh"), color = contentColor, fontSize = 14.sp)
-                }
-            } else {
-                Text(
-                    tr(lang, "刷新", "Refresh"),
-                    color = Palette.accent, fontSize = 14.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Palette.accent.copy(alpha = 0.12f))
-                        .clickable { reload++ }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                )
-            }
+            // unified: one accent chip for every style             Text(                 tr(lang, "刷新", "Refresh"),                 color = Palette.accent, fontSize = 14.sp,                 modifier = Modifier                     .clip(RoundedCornerShape(50))                     .background(Palette.accent.copy(alpha = 0.12f))                     .clickable { reload++ }                     .padding(horizontal = 14.dp, vertical = 6.dp)             )
         }
         when {
             loading -> Text(
@@ -4928,54 +4908,14 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                         )
                         Spacer(Modifier.height(6.dp))
                         val isBusy = busyIndex == i
-                        if (LocalStyle.current == UiStyle.Miuix) {
-                            top.yukonga.miuix.kmp.basic.Button(
-                                onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
-                                colors = if (isBusy) {
-                                    top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary()
-                                } else {
-                                    top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
-                                    else tr(lang, "选择", "Select")
-                                )
-                            }
-                        } else if (useBackdrop && bd != null) {
-                            LiquidButton(
-                                onClick = {
-                                    if (!isBusy) { busyIndex = i; progress = 0 }
-                                },
-                                backdrop = bd,
-                                modifier = Modifier.fillMaxWidth().height(38.dp),
-                                tint = if (isBusy) Palette.accent else Color.Unspecified
-                            ) {
-                                Text(
-                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
-                                    else tr(lang, "选择", "Select"),
-                                    color = contentColor, fontSize = 13.sp
-                                )
-                            }
-                        } else {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(38.dp)
-                                    .clip(RoundedCornerShape(19.dp))
-                                    .background(if (isBusy) Palette.accent else Palette.accent.copy(alpha = 0.18f))
-                                    .clickable { if (!isBusy) { busyIndex = i; progress = 0 } },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
-                                    else tr(lang, "选择", "Select"),
-                                    color = if (isBusy) Color.White else contentColor,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
+                        // unified: UiButton for every style
+                        UiButton(
+                            text = if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
+                                   else tr(lang, "选择", "Select"),
+                            onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
+                            enabled = !isBusy,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
