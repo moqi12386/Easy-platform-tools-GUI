@@ -2080,7 +2080,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
         Palette.dark = dark
         // Material 风格：整个 Palette 转发到 Material You 动态色（系统从壁纸取色）
-        Palette.m3 = if (style != UiStyle.Material) null
+        // 开了莫奈时留给下面的「软件壁纸取色」来生成 scheme，不用系统壁纸的动态色
+        Palette.m3 = if (style != UiStyle.Material || monet) null
         else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (dark) androidx.compose.material3.dynamicDarkColorScheme(this@MainActivity)
             else androidx.compose.material3.dynamicLightColorScheme(this@MainActivity)
@@ -2103,6 +2104,24 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             } else null
         }
         Palette.monetAccent = monetColor
+        // 莫奈：卡片背景 / 底栏整块配色都来自软件壁纸的取色（不是系统壁纸）
+        if (monet && style == UiStyle.Material && monetColor != null) {
+            val seed = monetColor!!
+            val base = if (dark) androidx.compose.material3.darkColorScheme()
+            else androidx.compose.material3.lightColorScheme()
+            Palette.m3 = base.copy(
+                primary = seed,
+                surfaceContainer = androidx.compose.ui.graphics.lerp(
+                    base.surfaceContainer, seed, if (dark) 0.16f else 0.08f
+                ),
+                surfaceContainerHigh = androidx.compose.ui.graphics.lerp(
+                    base.surfaceContainerHigh, seed, if (dark) 0.14f else 0.07f
+                ),
+                background = androidx.compose.ui.graphics.lerp(
+                    base.background, seed, if (dark) 0.10f else 0.05f
+                )
+            )
+        }
 
         // 只有「液态玻璃」这一档才启用 backdrop 库（libhwui 渲染树在部分机型上会原生崩溃，
         // 其他样式完全不碰渲染特效，保证默认稳定）
