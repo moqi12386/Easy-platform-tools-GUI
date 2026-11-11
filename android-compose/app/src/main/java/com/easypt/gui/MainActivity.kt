@@ -5016,18 +5016,18 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                 )
                             }
                         } else {
+                            // A 口径：按钮底色就是莫奈主色，白字（和「执行」一致）
                             GlassButton(
                                 text = if (isBusy) "${tr(lang, "下载中", "Downloading")} $progress%"
                                 else tr(lang, "选择", "Select"),
                                 onClick = { if (!isBusy) { busyIndex = i; progress = 0 } },
                                 modifier = Modifier.fillMaxWidth(),
-                                textColor = if (isBusy) Color.White else contentColor,
+                                textColor = Color.White,
                                 fontSize = 13.sp,
                                 height = 38.dp,
-                                primary = isBusy,
+                                primary = true,
                                 tint = LocalAccent.current,
-                                plainBackground = if (isBusy) LocalAccent.current
-                                else LocalAccent.current.copy(alpha = 0.18f)
+                                plainBackground = LocalAccent.current
                             )
                         }
                     }
