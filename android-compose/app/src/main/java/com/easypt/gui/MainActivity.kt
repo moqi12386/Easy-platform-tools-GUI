@@ -3278,8 +3278,10 @@ fun HomePage(
         Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
-            .padding(bottom = bottomSpacer())
+            // 先滚动再加底部留白：留白成为「内容的一部分」，于是卡片能滑到底栏下面，
+            // 而滚到最底时最后一张卡片又正好停在底栏上方。
             .verticalScroll(rememberScrollState())
+            .padding(bottom = bottomSpacer())
     ) {
         if (crashBannerVisible) {
             Row(
@@ -3567,8 +3569,10 @@ fun SettingsPage(
         Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
-            .padding(bottom = bottomSpacer())
+            // 先滚动再加底部留白：留白成为「内容的一部分」，于是卡片能滑到底栏下面，
+            // 而滚到最底时最后一张卡片又正好停在底栏上方。
             .verticalScroll(rememberScrollState())
+            .padding(bottom = bottomSpacer())
     ) {
         val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
         // 删字体要确认一次（液态玻璃弹窗）
