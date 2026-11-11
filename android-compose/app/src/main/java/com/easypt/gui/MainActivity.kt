@@ -2574,7 +2574,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     )
                             ) {
                                 Row(
-                                    Modifier.fillMaxWidth().height(60.dp),
+                                    Modifier.fillMaxWidth().height(70.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     listOf(
@@ -3119,8 +3119,8 @@ fun KSwitchRow(
  */
 fun bottomSpacer(): androidx.compose.ui.unit.Dp {
     val barHeight = when (LocalStyle.current) {
-        UiStyle.Material -> 60.dp   // 自绘底栏内容高度
-        UiStyle.Miuix -> 60.dp      // 自绘底栏内容高度
+        UiStyle.Material -> 70.dp   // 自绘底栏内容高度
+        UiStyle.Miuix -> 70.dp      // 自绘底栏内容高度
         // 玻璃/原生：悬浮胶囊栏本身高约 64dp（含上下各 10dp 留白），
         // 页面留出这段高度，保证「滑到底时最后一项停在底栏之上」，
         // 滚动过程中内容依然从底栏下面穿过
