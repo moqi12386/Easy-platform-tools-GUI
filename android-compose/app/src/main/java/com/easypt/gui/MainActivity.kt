@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
     /** 实验：状态栏真模糊（内容录两遍，只露顶部模糊条） */
-    private var expBlur by mutableStateOf(true)
+    private var expBlur by mutableStateOf(false)
     /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
     private var screenCorner by mutableStateOf(20f)
     private var fontChoice by mutableStateOf(AppFont.System)
@@ -334,7 +334,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         customWallpaper = sp.getBoolean("wp", false)
         themeMode = ThemeMode.entries.getOrElse(sp.getInt("theme", 2)) { ThemeMode.System }
         monet = sp.getBoolean("monet", false)
-        expBlur = sp.getBoolean("expblur", true)
+        expBlur = false   // 实验开关暂时强制关闭：模糊层会糊出一大块白
         fontChoice = AppFont.entries.getOrElse(sp.getInt("font", 0)) { AppFont.System }
         val dk = sp.getBoolean("dark", false)
         logCmdColor = readLogColor(sp, "lc2Cmd")
