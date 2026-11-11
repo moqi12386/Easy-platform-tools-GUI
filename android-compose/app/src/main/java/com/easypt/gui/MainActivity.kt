@@ -195,6 +195,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
+    /** 每次回到前台 +1，用来强制重算动态色（换壁纸后系统取色会变） */
+    private var colorEpoch by mutableStateOf(0)
     /** 实验：状态栏真模糊（内容录两遍，只露顶部模糊条） */
     private var expBlur by mutableStateOf(false)
     /** 屏幕物理圆角（dp）：Android 12+ 可读，读不到就用 20dp 兜底 */
@@ -461,6 +463,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
         android.util.Log.i("EasyPT", "screenCorner: 系统资源没定义，用兜底 " + screenCorner + "dp")
     }
+    override fun onResume() {
+        super.onResume()
+        // 换壁纸后系统的动态色会变，回到前台时重新取一次
+        colorEpoch++
+    }
+
     private fun installCrashHandler() {
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->
@@ -2138,6 +2146,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ThemeMode.Night -> true
             ThemeMode.System -> systemDark
         }
+        // 订阅 colorEpoch：回到前台/换壁纸后重算动态色
+        val epochTick = colorEpoch
         Palette.dark = dark
         android.util.Log.i("EasyPT", "colorProbe monet=" + monet + " style=" + style +
             " m3=" + (Palette.m3 != null) + " surface=" + Palette.surface + " bg=" + Palette.bg + " accent=" + Palette.accent)
