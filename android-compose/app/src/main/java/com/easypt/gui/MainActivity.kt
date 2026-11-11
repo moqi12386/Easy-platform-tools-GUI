@@ -2099,6 +2099,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             ?: pal.getLightVibrantColor(0).takeIf { it != 0 }
                             ?: pal.getDominantColor(0)
                         if (c == 0) null else Color(c)
+                    }.onFailure {
+                        android.util.Log.e("MONET", "取色失败: ${it.javaClass.simpleName}: ${it.message}")
                     }.getOrNull()
                 }
             } else null
@@ -3203,7 +3205,7 @@ private fun RomDialog(
             onDismiss = onDismiss,
             confirmText = tr(lang, "开始刷写", "Start"),
             onConfirm = onStart,
-            confirmColor = LocalAccent.current
+            confirmColor = Palette.accent
         )
     }
 }
@@ -4279,8 +4281,11 @@ fun GlassDialogPanel(
                         }
                     )
             ) {
+                // 弹窗里 LocalAccent 必须是「主色」，不能是文字色：
+                // 之前给成 Palette.text，深色主题下等于白色，弹窗按钮 tint 全变成白底，
+                // 莫奈取色到按钮这一层就断了。
                 CompositionLocalProvider(
-                    LocalAccent provides Palette.text
+                    LocalAccent provides Palette.accent
                 ) {
                     content()
                 }
@@ -4359,8 +4364,8 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
                 onClick = { onDone() },
                 modifier = Modifier.weight(1f),
                 textColor = contentColor,
-                surface = Color.White.copy(alpha = 0.3f),
-                plainBackground = contentColor.copy(alpha = 0.10f)
+                surface = Palette.accent.copy(alpha = 0.32f),
+                plainBackground = Palette.accent.copy(alpha = 0.16f)
             )
             GlassButton(
                 text = nextLabel,
@@ -4368,7 +4373,7 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
                 modifier = Modifier.weight(1f),
                 textColor = Color.White,
                 primary = true,
-                tint = LocalAccent.current
+                tint = Palette.accent
             )
         }
     }
@@ -4406,8 +4411,8 @@ fun GlassConfirmDialog(
                 modifier = Modifier.weight(1f),
                 textColor = contentColor,
                 fontSize = 16.sp,
-                surface = Color.White.copy(alpha = 0.3f),
-                plainBackground = contentColor.copy(alpha = 0.10f)
+                surface = Palette.accent.copy(alpha = 0.32f),
+                plainBackground = Palette.accent.copy(alpha = 0.16f)
             )
             GlassButton(
                 text = confirmText,
@@ -4478,7 +4483,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
                 modifier = Modifier.weight(1f),
                 textColor = contentColor,
                 fontSize = 16.sp,
-                surface = Color.White.copy(alpha = 0.3f),
+                surface = Palette.accent.copy(alpha = 0.32f),
                 plainBackground = containerColor.copy(alpha = 0.2f)
             )
             GlassButton(
@@ -4488,7 +4493,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
                 textColor = Color.White,
                 fontSize = 16.sp,
                 primary = true,
-                tint = LocalAccent.current
+                tint = Palette.accent
             )
         }
     }
@@ -4792,7 +4797,7 @@ fun LiquidChoiceDialog(
                             )
                             Spacer(Modifier.width(8.dp))
                         }
-                        if (sel) Icon(Icons.Filled.Check, null, tint = LocalAccent.current, modifier = Modifier.size(20.dp))
+                        if (sel) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(20.dp))
                     }
                 }
                 }  // Column(可滚动选项)
@@ -4963,9 +4968,11 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             GlassButton(
                 text = tr(lang, "刷新", "Refresh"),
                 onClick = { reload++ },
-                textColor = contentColor,
+                textColor = Color.White,
                 fontSize = 14.sp,
-                plainBackground = LocalAccent.current.copy(alpha = 0.12f)
+                height = 38.dp,
+                primary = true,
+                tint = Palette.accent
             )
         }
         when {
@@ -5026,7 +5033,7 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                                 fontSize = 13.sp,
                                 height = 38.dp,
                                 primary = true,
-                                tint = LocalAccent.current,
+                                tint = Palette.accent,
                                 plainBackground = LocalAccent.current
                             )
                         }
@@ -5076,8 +5083,8 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
                 modifier = Modifier.width(160.dp),
                 textColor = contentColor,
                 fontSize = 16.sp,
-                surface = Color.White.copy(alpha = 0.3f),
-                plainBackground = Color.White.copy(alpha = 0.2f)
+                surface = Palette.accent.copy(alpha = 0.32f),
+                plainBackground = Palette.accent.copy(alpha = 0.16f)
             )
         }
     }
@@ -5237,7 +5244,7 @@ fun LogColorDialog(
                 onDismiss = onDismiss,
                 confirmText = tr(lang, "完成", "Done"),
                 onConfirm = { onSave(colors) },
-                confirmColor = LocalAccent.current
+                confirmColor = Palette.accent
             )
         }
     }
