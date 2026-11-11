@@ -4810,86 +4810,6 @@ private fun SliderRow(
  */
 /** MIUIX 版选择弹窗：容器是库里的 Card，行是 BasicComponent，取消是官方 TextButton */
 @Composable
-fun MiuixChoiceDialog(
-    title: String,
-    options: List<String>,
-    selected: Int,
-    onPick: (Int) -> Unit,
-    onDismiss: () -> Unit,
-    deletable: Set<Int> = emptySet(),
-    onDelete: ((Int) -> Unit)? = null
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) {
-            Box(Modifier.fillMaxSize()) {
-                // 点空白处关闭
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { onDismiss() }
-                )
-                Column(
-                    Modifier
-                        .align(Alignment.Center)
-                        .padding(40.dp)
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-                        Column(Modifier.padding(vertical = 8.dp)) {
-                            Text(
-                                title,
-                                color = MiuixTheme.colorScheme.onBackground,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)
-                            )
-                            options.forEachIndexed { i, name ->
-                                BasicComponent(
-                                    title = name,
-                                    onClick = { onPick(i) },
-                                    endActions = {
-                                        // 自己导入的字体多一个删除按钮（之前这分支被我漏掉了，
-                                        // 结果 MIUIX 下自定义字体删不掉）
-                                        if (onDelete != null && deletable.contains(i)) {
-                                            top.yukonga.miuix.kmp.basic.TextButton(
-                                                text = "删除",
-                                                onClick = { onDelete.invoke(i) }
-                                            )
-                                        }
-                                        if (i == selected) {
-                                            Icon(
-                                                Icons.Filled.Check, contentDescription = null,
-                                                tint = MiuixTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                )
-                            }
-                            top.yukonga.miuix.kmp.basic.TextButton(
-                                text = "取消",
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun LiquidChoiceDialog(
     backdrop: Backdrop?,
     title: String,
@@ -4910,11 +4830,6 @@ fun LiquidChoiceDialog(
     // MIUIX：容器用库里的 Card，行用 BasicComponent，取消用官方 TextButton。
     // 窗口仍用 Compose 的 Dialog —— miuix 的 WindowDialog 需要
     // LocalNavigationEventDispatcherOwner（本工程没提供，会崩），
-    // OverlayDialog 又必须放在根级 Box 才能盖满屏，嵌在页面里画不出来。
-    if (LocalStyle.current == UiStyle.Miuix) {
-        MiuixChoiceDialog(title, options, selected, onPick, onDismiss, deletable, onDelete)
-        return
-    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     CompositionLocalProvider(
