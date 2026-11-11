@@ -2139,6 +2139,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             ThemeMode.System -> systemDark
         }
         Palette.dark = dark
+        android.util.Log.i("EasyPT", "colorProbe monet=" + monet + " style=" + style +
+            " m3=" + (Palette.m3 != null) + " surface=" + Palette.surface + " bg=" + Palette.bg + " accent=" + Palette.accent)
         // 只有开了「莫奈取色」才走系统动态色；关掉就回到项目自己的配色
         Palette.m3 = if (style != UiStyle.Material || !monet) {
             null
@@ -2312,6 +2314,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             primary = LocalAccent.current,
                                             surface = Surface,
                                             surfaceContainer = Surface,
+                                            surfaceContainerLow = Surface,
                                             onSurface = TextPrimary,
                                             background = Bg,
                                             onBackground = TextPrimary
@@ -2322,6 +2325,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             onPrimary = Color.White,
                                             surface = Surface,
                                             surfaceContainer = Surface,
+                                            surfaceContainerLow = Surface,
                                             onSurface = TextPrimary,
                                             background = Bg,
                                             onBackground = TextPrimary
@@ -2532,6 +2536,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     // 底栏底色跟卡片用同一个色，M3 默认的 #211F26 偏紫、比卡片亮一档，
                                     // 摆在一起像两个东西
                                     surfaceContainer = Surface,
+                                    surfaceContainerLow = Surface,
                                     // NavigationBarItem 的选中药丸取 secondaryContainer、图标取 onSecondaryContainer，
                                     // 不覆盖的话是 M3 基线那套紫色，跟本项目的蓝色主色对不上
                                     secondaryContainer = LocalAccent.current.copy(alpha = 0.24f),
@@ -2547,6 +2552,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     onPrimary = Color.White,
                                     surface = Surface,
                                     surfaceContainer = Surface,
+                                    surfaceContainerLow = Surface,
                                     secondaryContainer = LocalAccent.current.copy(alpha = 0.14f),
                                     onSecondaryContainer = LocalAccent.current,
                                     onSurface = TextPrimary,
@@ -2876,7 +2882,7 @@ object Palette {
             // 卡片底色：surfaceContainer 里掺一点主色，形成「比按钮浅一档」的动态色阶
             androidx.compose.ui.graphics.lerp(
                 it.surfaceContainer, it.primary,
-                if (dark) 0.16f else 0.10f
+                if (dark) 0.34f else 0.30f
             )
         } ?: run {
             val base = if (dark) Color(0xFF1B1C20) else Color(0xFFFFFFFF)
