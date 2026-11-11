@@ -2510,18 +2510,30 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             verticalArrangement = Arrangement.Center
                                         ) {
                                             // 选中态：M3 的胶囊指示器
-                                            // 纯图标着色（不画胶囊底，避免出现色块/阴影感）
-                                            Icon(
-                                                ic, contentDescription = null,
-                                                tint = if (sel) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(22.dp)
-                                            )
+                                            // 选中态：小胶囊指示器（颜色跟按钮主色一致，随莫奈变化）
+                                            Box(
+                                                Modifier
+                                                    .width(56.dp)
+                                                    .height(28.dp)
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(
+                                                        if (sel) LocalAccent.current.copy(alpha = 0.14f)
+                                                        else Color.Transparent
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    ic, contentDescription = null,
+                                                    tint = if (sel) LocalAccent.current
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
                                             Spacer(Modifier.height(2.dp))
                                             Text(
                                                 label,
                                                 fontSize = 11.sp,
-                                                color = if (sel) MaterialTheme.colorScheme.onSurface
+                                                color = if (sel) LocalAccent.current
                                                 else MaterialTheme.colorScheme.onSurfaceVariant
                                                 , maxLines = 1
                                             )
