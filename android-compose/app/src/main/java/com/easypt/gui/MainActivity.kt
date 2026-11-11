@@ -4749,22 +4749,8 @@ fun LiquidChoiceDialog(
 @Composable
 fun glassInsetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
     val wall = LocalWallBackdrop.current
-    // 输入框 / 日志框底板：同样优先走取样玻璃（RenderEffect 在部分机器上会被跳过）
-    val assets = LocalGlassAssets.current
-    val screen = LocalGlassScreen.current
-    return if (assets != null && screen.width > 0) {
-        Modifier.glassSurface(
-            assets = assets,
-            shape = shape,
-            cornerDp = 16,
-            screen = screen,
-            blurLevel = 0.35f,
-            density = 1f,
-            light = !Palette.dark,
-            tint = Palette.glassTint,
-            tintAlpha = if (Palette.dark) 0.45f else 0.55f
-        )
-    } else if (useBackdrop && wall != null) {
+    // 输入框 / 日志框底板：和卡片同一套 drawBackdrop（vibrancy + 8dp 模糊 + 底料）
+    return if (useBackdrop && wall != null) {
         Modifier.drawBackdrop(
             backdrop = wall,
             shape = { shape },
