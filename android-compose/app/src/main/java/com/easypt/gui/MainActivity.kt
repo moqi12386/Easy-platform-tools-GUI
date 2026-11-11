@@ -3195,16 +3195,7 @@ fun SliderRow(style: UiStyle, label: String, value: Float, onChange: (Float) -> 
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            Slider(
-                value = value,
-                onValueChange = onChange,
-                valueRange = 0f..100f,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Palette.accent,
-                    inactiveTrackColor = if (Palette.dark) Color(0xFF3A3C42) else Color(0xFFE1E4E8)
-                )
-            )
+            UiSlider(value = value, onValueChange = onChange, valueRange = 0f..100f)
         }
     }
 }
@@ -4092,7 +4083,7 @@ fun SettingsPage(
                             "Card tint  ${(Palette.cardTint * 100).toInt()}%"),
                         color = Palette.text, fontSize = 14.sp
                     )
-                    androidx.compose.material3.Slider(
+                    UiSlider(
                         value = Palette.cardTint,
                         onValueChange = { onCardTint(it) },
                         valueRange = 0f..0.30f
@@ -5165,15 +5156,7 @@ private fun SliderRow(
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            androidx.compose.material3.Slider(
-                value = value, onValueChange = onChange, valueRange = min..max,
-                // 滑条也要跟着壁纸取色，不用 M3 默认的紫色主色
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = Palette.accent,
-                    activeTrackColor = Palette.accent,
-                    inactiveTrackColor = Palette.accent.copy(alpha = 0.24f)
-                )
-            )
+            UiSlider(value = value, onValueChange = onChange, valueRange = min..max)
         }
     }
 }
