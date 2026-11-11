@@ -3291,7 +3291,7 @@ private fun BigLogOverlay(
             } else {
                 Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+                    .background(Palette.bg)
             }
             LazyColumn(
                 state = listState,
@@ -3632,7 +3632,7 @@ fun HomePage(
                 // 深底上再写深色日志，日间模式直接看不清
                 Modifier
                     .clip(logShape)
-                    .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+                    .background(Palette.bg)
             }
             // 新日志进来就贴到最后一行；不滚的话窗口一直停在最旧那几行，得手动往下拉
             val logListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -4884,7 +4884,7 @@ fun glassInsetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
     } else {
         Modifier
             .clip(shape)
-            .background(if (Palette.dark) Color(0xFF1C1D22) else Color(0xFFF1F3F7))
+            .background(Palette.bg)
     }
 }
 
@@ -5176,7 +5176,7 @@ fun LogColorDialog(
     val light = !Palette.dark
     val contentColor = if (light) Color.Black else Color.White
     // 和日志输出框同一套底料（glassInsetSurface），预览和对比度保护才准
-    val bgSample = if (light) Color(0xFFFAFAFA) else Color(0xFF121212)
+    val bgSample = Ui.surface
     var colors by remember { mutableStateOf(initial) }
     var active by remember { mutableIntStateOf(0) }
     val names = listOf(
