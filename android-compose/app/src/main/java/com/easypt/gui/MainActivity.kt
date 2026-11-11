@@ -5069,26 +5069,16 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
             Modifier.padding(24.dp, 12.dp, 24.dp, 24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.Center
         ) {
-            val bd = LocalWallBackdrop.current
-            if (useBackdrop && bd != null) {
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = bd,
-                    modifier = Modifier.height(48.dp).width(160.dp),
-                    surfaceColor = Color.White.copy(alpha = 0.3f)
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-            } else {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .clickable { onDismiss() }
-                        .height(48.dp)
-                        .width(160.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) { Text(tr(lang, "取消", "Cancel"), color = contentColor, fontSize = 16.sp) }
-            }
+            // 三风格统一：GlassButton 自己挑 LiquidButton / miuix 文字按钮 / 实心胶囊
+            GlassButton(
+                text = tr(lang, "取消", "Cancel"),
+                onClick = onDismiss,
+                modifier = Modifier.width(160.dp),
+                textColor = contentColor,
+                fontSize = 16.sp,
+                surface = Color.White.copy(alpha = 0.3f),
+                plainBackground = Color.White.copy(alpha = 0.2f)
+            )
         }
     }
 }
