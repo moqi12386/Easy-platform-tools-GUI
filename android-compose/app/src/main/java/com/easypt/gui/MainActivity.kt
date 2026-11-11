@@ -2258,23 +2258,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ) {
                     WallpaperView(assets)
                 }
-                // 顶部虚化过渡：内容滚进状态栏区域时逐渐淡出（相册那种效果）。
-                // 多段渐变更平滑，越靠上越接近背景色。
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(240.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                0f to Bg.copy(alpha = 0.98f),
-                                0.18f to Bg.copy(alpha = 0.88f),
-                                0.38f to Bg.copy(alpha = 0.62f),
-                                0.62f to Bg.copy(alpha = 0.30f),
-                                0.82f to Bg.copy(alpha = 0.10f),
-                                1f to Color.Transparent
-                            )
-                        )
-                )
                 Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
@@ -2480,6 +2463,21 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             }
                         }
                     }
+
+                    // 顶部虚化过渡：画在【内容之上】，卡片滚进状态栏区域时淡出
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Bg.copy(alpha = 0.95f),
+                                    0.35f to Bg.copy(alpha = 0.70f),
+                                    0.70f to Bg.copy(alpha = 0.28f),
+                                    1f to Color.Transparent
+                                )
+                            )
+                    )
 
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     // Material Design 3：底部导航直接用 M3 的 NavigationBar + NavigationBarItem
