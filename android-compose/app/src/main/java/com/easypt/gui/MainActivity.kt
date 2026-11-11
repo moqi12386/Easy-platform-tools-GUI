@@ -2564,12 +2564,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .navigationBarsPadding()   // 整条浮在导航条之上，图标在 60dp 内居中
-                                    // 用带形状的 background 直接填充，不用 clip：
-                                    // clip + background 会在边缘留 1px 抗锯齿缝，透出后面的深色
+                                    // 按小米《全面屏手势提示线适配说明》：底栏要铺到屏幕最底部，
+                                    // 小白条就画在底栏颜色上；圆角只做上两角
                                     .background(
                                         MaterialTheme.colorScheme.surface,
-                                        RoundedCornerShape(screenCorner.dp)
+                                        RoundedCornerShape(
+                                            screenCorner.dp, screenCorner.dp, 0.dp, 0.dp
+                                        )
                                     )
                             ) {
                                 Row(
@@ -2624,6 +2625,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         }
                                     }
                                 }
+                                // 导航条区域：同色铺满，小白条就画在这上面（按小米文档）
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .windowInsetsBottomHeight(WindowInsets.navigationBars)
+                                )
                             }
                         }
                     } else if (style == UiStyle.Miuix) {
