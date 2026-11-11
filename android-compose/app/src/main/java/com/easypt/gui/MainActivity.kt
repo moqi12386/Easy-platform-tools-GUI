@@ -2516,29 +2516,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                     }
 
-                    // 顶部毛玻璃：用 AndroidLiquidGlass 的 backdrop 对背景做真模糊，
-                    // 再叠一层很淡的渐变，避免出现硬边
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(96.dp)
-                            .then(
-                                if (useBackdrop && wallBackdrop != null)
-                                    Modifier.drawBackdrop(
-                                        backdrop = wallBackdrop,
-                                        shape = { RectangleShape },
-                                        effects = { blur(radius = 30f) }
-                                    )
-                                else Modifier
-                            )
-                            .background(
-                                Brush.verticalGradient(
-                                    0f to Bg.copy(alpha = 0.45f),
-                                    0.60f to Bg.copy(alpha = 0.18f),
-                                    1f to Color.Transparent
-                                )
-                            )
-                    )
+                    // 顶部不做模糊/渐变遮罩（按用户要求去掉，太难看）
+
 
                     // —— 直接照抄 AndroidLiquidGlass demo 的 LiquidBottomTabs ——
                     // Material Design 3：底部导航直接用 M3 的 NavigationBar + NavigationBarItem
