@@ -2505,7 +2505,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                             Modifier
                                                 .weight(1f)
                                                 .fillMaxHeight()
-                                                .clickable { page = idx },
+                                                // 关掉水波纹：长按时会画出一大片矩形阴影
+                                                .clickable(
+                                                    interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
+                                                    indication = null
+                                                ) { page = idx },
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.Center
                                         ) {
