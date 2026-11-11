@@ -2120,6 +2120,13 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                 ),
                 background = androidx.compose.ui.graphics.lerp(
                     base.background, seed, if (dark) 0.10f else 0.05f
+                ),
+                // 底栏选中态的胶囊 / 图标用的是 secondaryContainer，不一起染就还是原蓝色
+                secondaryContainer = androidx.compose.ui.graphics.lerp(
+                    base.secondaryContainer, seed, if (dark) 0.45f else 0.22f
+                ),
+                onSecondaryContainer = androidx.compose.ui.graphics.lerp(
+                    base.onSecondaryContainer, seed, 0.25f
                 )
             )
         }
@@ -2235,7 +2242,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         LocalCardText provides Palette.text,
                         LocalStyle provides style,
                         // 原生风格：主色位一律用中性色，界面里不再出现任何彩色
-                        LocalAccent provides if (style == UiStyle.Native) Palette.nativeAccent else LocalAccent.current
+                        LocalAccent provides when (style) { UiStyle.Native -> Palette.nativeAccent; UiStyle.Material -> Palette.accent; else -> LocalAccent.current }
                     ) {
                         MiuixTheme(colors = if (dark) miuixDark() else miuixLight()) {
                             MaterialTheme(
@@ -2246,7 +2253,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     // Material You：API 31+ 直接用系统从壁纸取的动态配色，
                                     // 低版本回退到项目自己这套
                                     val c = LocalContext.current
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    // 优先用「软件壁纸」算出来的方案（莫奈），没有再用系统动态色
+                                    val paletteScheme = Palette.m3
+                                    if (paletteScheme != null) {
+                                        paletteScheme
+                                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                         if (dark) androidx.compose.material3.dynamicDarkColorScheme(c)
                                         else androidx.compose.material3.dynamicLightColorScheme(c)
                                     } else if (dark) {
