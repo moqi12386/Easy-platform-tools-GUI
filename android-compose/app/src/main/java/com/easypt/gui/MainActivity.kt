@@ -2264,9 +2264,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         .fillMaxSize()
                         .then(if (useBackdrop) Modifier.layerBackdrop(wallBackdrop) else Modifier)
                 ) {
-                    // Material + 莫奈：页面背景就是动态色本身，不铺壁纸，
-                    // 否则壁纸把 Bg 盖住，看起来“莫奈没生效”
-                    if (!(style == UiStyle.Material && monet)) WallpaperView(assets)
+                    WallpaperView(assets)
                 }
                 // 实验：内容录两遍，正常画一遍；顶部 120dp 内再画一遍模糊的
                 val contentLayer = rememberGraphicsLayer()
