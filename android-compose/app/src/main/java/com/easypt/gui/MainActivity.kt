@@ -2223,9 +2223,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         key(dark, monet) {
             val onWall = if ((assets?.topLum ?: 0f) > 0.45f) Palette.text else Color.White
             // 底栏在屏幕最下面，得用壁纸「底部」的亮度；以前用 topLum，壁纸上下亮度不一样就看不见字。
-            // 再叠上底栏那层 40% 玻璃底料，算出真实底色亮度，然后按对比度挑黑字还是白字
+            // 底栏实际是「玻璃底料 40% + 壁纸 60%」叠出来的（LiquidBottomTabs 的 containerColor
+            // 就是 0.4 的 #FAFAFA / #121212），但人眼看到的主要是那层底料：
+            // 之前只给 0.4 权重，壁纸底部偏暗就算成「暗底」→ 日间模式底栏明明是浅色却给白字，
+            // 就是「白天不反色」的原因。按底料主导（0.6）算，日间自然出深色字。
             val veilLum = if (dark) 0.07f else 0.93f
-            val barLum = 0.4f * veilLum + 0.6f * (assets?.bottomLum ?: 0.5f)
+            val barLum = 0.6f * veilLum + 0.4f * (assets?.bottomLum ?: 0.5f)
             val onBar = readableOn(barLum)
             // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
             val wallBackdrop = rememberLayerBackdrop()
