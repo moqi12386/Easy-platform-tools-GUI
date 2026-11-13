@@ -229,6 +229,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var showLogColors by mutableStateOf(false)
     /** 检查到的可用更新；非 null 时弹「稍后 / 立即更新」 */
     private var updateInfo by mutableStateOf<UpdateInfo?>(null)
+    /** 更新包下载进度；null=没在下，0..100=下载中 */
+    private var updateProgress by mutableStateOf<Int?>(null)
+    private var updateSource by mutableStateOf("")
     private var fontPicker: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickFlash: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickRomZip: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
@@ -2002,6 +2005,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             var lastErr = ""
             for ((i, url) in mirrors.withIndex()) {
                 val host = url.substringAfter("//").substringBefore("/")
+                ui.post { updateSource = host; updateProgress = 0 }
                 append(t("源 ${i + 1}/${mirrors.size}：$host", "Source ${i + 1}/${mirrors.size}: $host"), TextSecondary)
                 val f = File(cacheDir, "update.apk")
                 try {
@@ -2028,6 +2032,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     val pct = (got * 100 / total).toInt()
                                     if (pct / 10 != lastPct / 10) {
                                         lastPct = pct
+                                        ui.post { updateProgress = pct }
                                         append("  $pct%", TextSecondary)
                                     }
                                 }
@@ -2038,10 +2043,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     if (f.length() < 1024 * 100) throw IllegalStateException("文件太小（${f.length()} 字节）")
                     append(t("下载完成：${f.length() / 1048576} MB", "Downloaded ${f.length() / 1048576} MB"), OkColor)
                     done = true
-                    ui.post { installApk(f) }
+                    ui.post { updateProgress = null; installApk(f) }
                     break
                 } catch (e: Throwable) {
                     lastErr = "${e.javaClass.simpleName}: ${e.message}"
+                    ui.post { updateProgress = null }
                     append(t("该源失败：$lastErr", "Source failed: $lastErr"), ErrColor)
                 }
             }
@@ -2826,17 +2832,45 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             )
                         }
                         updateInfo?.let { info ->
-                            GlassConfirmDialog(
-                                lang = lang,
-                                title = t("发现新版本 ${info.tag}", "Update ${info.tag} available"),
-                                message = t(
-                                    "当前版本 ${currentVersionName()}，新版本 ${info.tag}。\n\n下载完成后会拉起系统安装器，覆盖安装不会丢数据。",
-                                    "Current ${currentVersionName()}, new ${info.tag}.\n\nAfter downloading, the system installer opens; updating keeps your data."
-                                ),
-                                confirmText = t("立即更新", "Update now"),
-                                onConfirm = { updateInfo = null; downloadUpdate(info) },
-                                onDismiss = { updateInfo = null }
-                            )
+                            val p = updateProgress
+                            AppGlassPanel(LocalWallBackdrop.current, { if (p == null) updateInfo = null }) {
+                                Text(
+                                    t("发现新版本 ${info.tag}", "Update ${info.tag} available"),
+                                    color = LocalCardText.current, fontSize = 20.sp, fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 8.dp)
+                                )
+                                Text(
+                                    if (p != null) t("正在下载… $p%  ${updateSource}", "Downloading… $p%  ${updateSource}")
+                                    else t("当前版本 ${currentVersionName()}，新版本 ${info.tag}。下载完成后会拉起系统安装器。",
+                                        "Current ${currentVersionName()}, new ${info.tag}. The installer opens when done."),
+                                    color = LocalCardText.current.copy(alpha = 0.75f), fontSize = 14.sp,
+                                    modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 12.dp)
+                                )
+                                Row(
+                                    Modifier.fillMaxWidth().padding(20.dp, 4.dp, 20.dp, 20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    GlassButton(
+                                        text = t("稍后", "Later"),
+                                        onClick = { if (p == null) updateInfo = null },
+                                        modifier = Modifier.weight(1f),
+                                        textColor = LocalCardText.current,
+                                        fontSize = 15.sp,
+                                        surface = Color.White.copy(alpha = 0.3f),
+                                        plainBackground = Color.White.copy(alpha = 0.2f)
+                                    )
+                                    GlassButton(
+                                        text = if (p != null) t("下载中 $p%", "Downloading $p%")
+                                               else t("立即更新", "Update now"),
+                                        onClick = { if (p == null) downloadUpdate(info) },
+                                        modifier = Modifier.weight(1f),
+                                        textColor = Color.White,
+                                        fontSize = 15.sp,
+                                        primary = true,
+                                        tint = LocalAccent.current
+                                    )
+                                }
+                            }
                         }
                         if (showLogColors) {
                     LogColorDialog(
