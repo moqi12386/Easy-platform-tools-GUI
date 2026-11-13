@@ -232,6 +232,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /** 更新包下载进度；null=没在下，0..100=下载中 */
     private var updateProgress by mutableStateOf<Int?>(null)
     private var updateSource by mutableStateOf("")
+    /** 用户点过「稍后」的版本号：自动检查时不再重复弹 */
+    private var dismissedUpdateTag by mutableStateOf("")
+    /** 已下载字节（无 Content-Length 时用它显示进度） */
+    private var updateBytes by mutableStateOf(0L)
     private var fontPicker: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickFlash: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickRomZip: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
@@ -1987,76 +1991,154 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /**
      * 下载更新包并拉起安装器。多个源依次试，全失败就在日志里写清。
      */
+    /** 下载更新的通知（安卓原生进度条通知） */
+    private fun notifyUpdate(pct: Int, text: String) {
+        runCatching {
+            val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
+            if (Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(
+                    android.app.NotificationChannel(
+                        "easypt_update", "更新下载", android.app.NotificationManager.IMPORTANCE_LOW
+                    )
+                )
+            }
+            if (Build.VERSION.SDK_INT >= 33 &&
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    this, android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) return
+            val b = if (Build.VERSION.SDK_INT >= 26) {
+                android.app.Notification.Builder(this, "easypt_update")
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(this)
+            }
+            b.setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(t("正在下载更新", "Downloading update"))
+                .setContentText(text)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setVisibility(android.app.Notification.VISIBILITY_PUBLIC)
+            if (pct >= 0) b.setProgress(100, pct.coerceIn(0, 100), false)
+            else b.setProgress(0, 0, true)
+            nm.notify(4202, b.build())
+        }
+    }
+
+    private fun cancelUpdateNotif() {
+        runCatching {
+            getSystemService(android.app.NotificationManager::class.java)?.cancel(4202)
+        }
+    }
+    /**
+     * 用系统 DownloadManager 下载更新：进度、通知栏、断点重试都由系统负责，
+     * 我们只是轮询它的真实进度（不再自己按 10% 打点）。
+     */
     private fun downloadUpdate(info: UpdateInfo) {
         val mirrors = mutableListOf<String>()
         if (info.apkUrl.isNotEmpty()) {
             mirrors.add(info.apkUrl)
+            // 只放实测能用的国内加速镜像（2026-11-13 用 curl HEAD 验过：ghfast.top /
+            // gh-proxy.com / ghproxy.net 都返回 200，llkk.cc、moeyy.xyz、ghproxy.cc 全部超时）
             for (host in listOf("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")) {
                 mirrors.add(host + info.apkUrl)
             }
         }
-        if (mirrors.isEmpty()) {
-            append(t("这个版本没有可下载的 APK", "No APK attached to this release"), ErrColor)
+        val dm = getSystemService(android.app.DownloadManager::class.java)
+        if (mirrors.isEmpty() || dm == null) {
+            append(t("没有可用的下载源", "No download source available"), ErrColor)
             return
         }
-        append(t("开始下载 ${info.tag} …", "Downloading ${info.tag} …"), TextSecondary)
         bg {
-            var done = false
-            var lastErr = ""
+            var doneUri: android.net.Uri? = null
             for ((i, url) in mirrors.withIndex()) {
                 val host = url.substringAfter("//").substringBefore("/")
-                ui.post { updateSource = host; updateProgress = 0 }
                 append(t("源 ${i + 1}/${mirrors.size}：$host", "Source ${i + 1}/${mirrors.size}: $host"), TextSecondary)
-                val f = File(cacheDir, "update.apk")
-                try {
-                    if (f.exists()) f.delete()
-                    val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
-                        connectTimeout = 15000
-                        readTimeout = 30000
-                        instanceFollowRedirects = true
-                        setRequestProperty("User-Agent", "EasyPT")
-                    }
-                    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
-                    val total = conn.contentLengthLong
-                    conn.inputStream.use { input ->
-                        f.outputStream().use { out ->
-                            val buf = ByteArray(64 * 1024)
-                            var got = 0L
-                            var lastPct = -1
-                            while (true) {
-                                val r = input.read(buf)
-                                if (r <= 0) break
-                                out.write(buf, 0, r)
-                                got += r
+                ui.post { updateProgress = 0; updateSource = host }
+                val id = try {
+                    dm.enqueue(
+                        android.app.DownloadManager.Request(android.net.Uri.parse(url))
+                            .setTitle("EasyPT ${info.tag}.apk")
+                            .setDescription(t("应用更新", "App update"))
+                            .setMimeType("application/vnd.android.package-archive")
+                            .setNotificationVisibility(
+                                android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                            )
+                            .setDestinationInExternalFilesDir(
+                                this@MainActivity,
+                                android.os.Environment.DIRECTORY_DOWNLOADS,
+                                "EasyPT-${info.tag}.apk"
+                            )
+                    )
+                } catch (e: Throwable) {
+                    append(t("提交下载失败：${e.message}", "Enqueue failed: ${e.message}"), ErrColor)
+                    continue
+                }
+                var lastPct = -1
+                while (true) {
+                    Thread.sleep(600)
+                    val c = dm.query(android.app.DownloadManager.Query().setFilterById(id))
+                    var status = -1
+                    if (c != null) {
+                        c.use {
+                            if (it.moveToFirst()) {
+                                status = it.getInt(it.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_STATUS))
+                                val got = it.getLong(
+                                    it.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                                )
+                                val total = it.getLong(
+                                    it.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                                )
                                 if (total > 0) {
                                     val pct = (got * 100 / total).toInt()
-                                    if (pct / 10 != lastPct / 10) {
+                                    if (pct != lastPct) {
                                         lastPct = pct
-                                        ui.post { updateProgress = pct }
-                                        append("  $pct%", TextSecondary)
+                                        ui.post { updateProgress = pct; updateBytes = got }
                                     }
+                                } else {
+                                    ui.post { updateProgress = -1; updateBytes = got }
                                 }
                             }
                         }
                     }
-                    conn.disconnect()
-                    if (f.length() < 1024 * 100) throw IllegalStateException("文件太小（${f.length()} 字节）")
-                    append(t("下载完成：${f.length() / 1048576} MB", "Downloaded ${f.length() / 1048576} MB"), OkColor)
-                    done = true
-                    ui.post { updateProgress = null; installApk(f) }
-                    break
-                } catch (e: Throwable) {
-                    lastErr = "${e.javaClass.simpleName}: ${e.message}"
-                    ui.post { updateProgress = null }
-                    append(t("该源失败：$lastErr", "Source failed: $lastErr"), ErrColor)
+                    if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                        doneUri = dm.getUriForDownloadedFile(id)
+                        break
+                    }
+                    if (status == android.app.DownloadManager.STATUS_FAILED) {
+                        append(t("该源失败", "Source failed"), ErrColor)
+                        break
+                    }
                 }
+                if (doneUri != null) break
             }
-            if (!done) {
-                append(t("所有下载源都失败：$lastErr", "All download sources failed: $lastErr"), ErrColor)
+            ui.post {
+                updateProgress = null
+                val u = doneUri
+                if (u != null) {
+                    append(t("下载完成，正在拉起安装器", "Downloaded, opening installer"), OkColor)
+                    installApkUri(u)
+                } else {
+                    append(t("所有下载源都失败", "All download sources failed"), ErrColor)
+                }
+                updateInfo = null
             }
         }
     }
 
+    /** 系统下载器给出的内容 Uri，直接交给安装器（不需要 FileProvider） */
+    private fun installApkUri(uri: android.net.Uri) {
+        runCatching {
+            val i = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(i)
+        }.onFailure {
+            append(t("拉起安装器失败：${it.message}", "Failed to open installer: ${it.message}"), ErrColor)
+        }
+    }
     /** 用 FileProvider 把 cache 里的 apk 交给系统安装器 */
     private fun installApk(f: File) {
         runCatching {
@@ -2156,7 +2238,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 "New version $l (current $cur) → https://github.com/moqi12386/Easy-platform-tools-GUI/releases/latest"),
                             OkColor
                         )
-                        updateInfo = UpdateInfo(l, apkUrl ?: "")
+                        if (l != dismissedUpdateTag) updateInfo = UpdateInfo(l, apkUrl ?: "")
                         toast(t("发现新版本 $l", "New version $l"))
                     }
                     else -> if (manual) {
@@ -2833,14 +2915,17 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                         updateInfo?.let { info ->
                             val p = updateProgress
-                            AppGlassPanel(LocalWallBackdrop.current, { if (p == null) updateInfo = null }) {
+                            AppGlassPanel(LocalWallBackdrop.current, {
+                                if (p == null) { dismissedUpdateTag = info.tag; updateInfo = null }
+                            }) {
                                 Text(
                                     t("发现新版本 ${info.tag}", "Update ${info.tag} available"),
                                     color = LocalCardText.current, fontSize = 20.sp, fontWeight = FontWeight.Medium,
                                     modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 8.dp)
                                 )
                                 Text(
-                                    if (p != null) t("正在下载… $p%  ${updateSource}", "Downloading… $p%  ${updateSource}")
+                                    if (p != null && p >= 0) t("正在下载… $p%  ${updateSource}", "Downloading… $p%  ${updateSource}")
+                                    else if (p != null) t("正在下载… ${updateBytes / 1048576} MB  ${updateSource}", "Downloading… ${updateBytes / 1048576} MB  ${updateSource}")
                                     else t("当前版本 ${currentVersionName()}，新版本 ${info.tag}。下载完成后会拉起系统安装器。",
                                         "Current ${currentVersionName()}, new ${info.tag}. The installer opens when done."),
                                     color = LocalCardText.current.copy(alpha = 0.75f), fontSize = 14.sp,
@@ -2852,7 +2937,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 ) {
                                     GlassButton(
                                         text = t("稍后", "Later"),
-                                        onClick = { if (p == null) updateInfo = null },
+                                        onClick = {
+                                            if (p == null) {
+                                                dismissedUpdateTag = info.tag
+                                                updateInfo = null
+                                            }
+                                        },
                                         modifier = Modifier.weight(1f),
                                         textColor = LocalCardText.current,
                                         fontSize = 15.sp,
@@ -2860,7 +2950,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         plainBackground = Color.White.copy(alpha = 0.2f)
                                     )
                                     GlassButton(
-                                        text = if (p != null) t("下载中 $p%", "Downloading $p%")
+                                        text = if (p != null && p >= 0) t("下载中 $p%", "Downloading $p%")
+                                               else if (p != null) t("下载中 ${updateBytes / 1048576} MB", "Downloading ${updateBytes / 1048576} MB")
                                                else t("立即更新", "Update now"),
                                         onClick = { if (p == null) downloadUpdate(info) },
                                         modifier = Modifier.weight(1f),
