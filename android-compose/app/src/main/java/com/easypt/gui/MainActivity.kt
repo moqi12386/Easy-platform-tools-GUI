@@ -1516,14 +1516,16 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         safeRender = v
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("forceSafe", v).apply()
         if (v) {
-            // 打开安全模式：立刻回退到上一个样式，并关掉所有特效
+            // 安全模式：不关闭液态玻璃，也不换样式；
+            // 只把「导致崩溃的那一步」退回去（样式/主题恢复到上一次记录的值）
             val sp = getSharedPreferences(PREF, MODE_PRIVATE)
-            val prev = sp.getInt("prevStyle", UiStyle.Native.ordinal)
-            if (style == UiStyle.Glass) {
-                style = UiStyle.entries.getOrElse(prev) { UiStyle.Native }
+            val prevStyle = sp.getInt("prevStyle", style.ordinal)
+            if (prevStyle != style.ordinal) {
+                style = UiStyle.entries.getOrElse(prevStyle) { style }
                 sp.edit().putInt("style", style.ordinal).apply()
             }
-            append(t("安全模式已开启：已回退到 ${style.labelZh}", "Safe mode on: rolled back to ${style.labelZh}"), OkColor)
+            crashBannerClosed = true
+            append(t("安全模式已开启：已回退上一步操作", "Safe mode on: reverted the last step"), OkColor)
         } else {
             append(t("安全模式已关闭", "Safe mode off"), OkColor)
         }
@@ -2240,7 +2242,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 其他样式完全不碰渲染特效，保证默认稳定）
         // 库里那套效果（vibrancy + blur + lens）在 Android 12~15 上照抄使用；
         // Android 16+（含这台 Xiaomi）系统 libhwui 处理 RenderEffect 会原生崩溃，降到取样玻璃
-        useBackdrop = style == UiStyle.Glass && Build.VERSION.SDK_INT >= 31 && !safeRender
+        useBackdrop = style == UiStyle.Glass && Build.VERSION.SDK_INT >= 31
         LaunchedEffect(assets, dark) { applyBars(assets) }
         // 每次样式变化：两帧内没崩就认为这次切换是安全的
         LaunchedEffect(style) {
