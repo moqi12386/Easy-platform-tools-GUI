@@ -601,6 +601,15 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         setContentView(root)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 从「安装未知应用」设置页回来：已授权就把待装的包装上
+        val pend = pendingInstallUri
+        if (pend != null && Build.VERSION.SDK_INT >= 26 && packageManager.canRequestPackageInstalls()) {
+            pendingInstallUri = null
+            installApkUri(pend)
+        }
+    }
     override fun onDestroy() {
         try { unregisterReceiver(usbReceiver) } catch (_: Exception) { }
         try { fb.close() } catch (_: Throwable) { }
@@ -2126,8 +2135,25 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         }
     }
 
+    /** 等待用户去系统设置里打开「安装未知应用」后，回来继续装 */
+    private var pendingInstallUri: android.net.Uri? = null
+
     /** 系统下载器给出的内容 Uri，直接交给安装器（不需要 FileProvider） */
     private fun installApkUri(uri: android.net.Uri) {
+        // 没有「安装未知应用」权限时，安装器根本不会弹，必须先引导用户去开
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            pendingInstallUri = uri
+            append(t("需要允许「安装未知应用」才能安装更新", "Allow installing unknown apps to update"), ErrColor)
+            runCatching {
+                startActivity(
+                    android.content.Intent(
+                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        android.net.Uri.parse("package:$packageName")
+                    )
+                )
+            }
+            return
+        }
         runCatching {
             val i = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
