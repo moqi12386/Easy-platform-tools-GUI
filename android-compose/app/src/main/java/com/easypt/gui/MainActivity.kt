@@ -20,6 +20,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.text.BasicTextField
@@ -118,6 +119,8 @@ enum class UiStyle(val labelZh: String, val labelEn: String) {
 enum class Lang { Zh, En }
 
 fun tr(lang: Lang, zh: String, en: String): String = if (lang == Lang.En) en else zh
+
+data class UpdateInfo(val tag: String, val apkUrl: String)
 
 data class LogLine(val text: String, val color: Color)
 
@@ -224,6 +227,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private val ErrText: Color get() = logErrColor ?: ErrColor
     private val LogText: Color get() = logTextColor ?: LogColor
     private var showLogColors by mutableStateOf(false)
+    /** 检查到的可用更新；非 null 时弹「稍后 / 立即更新」 */
+    private var updateInfo by mutableStateOf<UpdateInfo?>(null)
     private var fontPicker: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickFlash: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickRomZip: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
@@ -1974,11 +1979,96 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
      * 查 GitHub 上最新 release 的 tag，和本机版本比。
      * [manual] = 用户手动点的：无论有没有新版本都写一条日志；自动检查只在有新版本时提示。
      */
+    /**
+     * 下载更新包并拉起安装器。多个源依次试，全失败就在日志里写清。
+     */
+    private fun downloadUpdate(info: UpdateInfo) {
+        val mirrors = mutableListOf<String>()
+        if (info.apkUrl.isNotEmpty()) {
+            mirrors.add(info.apkUrl)
+            for (host in listOf("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")) {
+                mirrors.add(host + info.apkUrl)
+            }
+        }
+        if (mirrors.isEmpty()) {
+            append(t("这个版本没有可下载的 APK", "No APK attached to this release"), ErrColor)
+            return
+        }
+        append(t("开始下载 ${info.tag} …", "Downloading ${info.tag} …"), TextSecondary)
+        bg {
+            var done = false
+            var lastErr = ""
+            for ((i, url) in mirrors.withIndex()) {
+                val host = url.substringAfter("//").substringBefore("/")
+                append(t("源 ${i + 1}/${mirrors.size}：$host", "Source ${i + 1}/${mirrors.size}: $host"), TextSecondary)
+                val f = File(cacheDir, "update.apk")
+                try {
+                    if (f.exists()) f.delete()
+                    val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "EasyPT")
+                    }
+                    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
+                    val total = conn.contentLengthLong
+                    conn.inputStream.use { input ->
+                        f.outputStream().use { out ->
+                            val buf = ByteArray(64 * 1024)
+                            var got = 0L
+                            var lastPct = -1
+                            while (true) {
+                                val r = input.read(buf)
+                                if (r <= 0) break
+                                out.write(buf, 0, r)
+                                got += r
+                                if (total > 0) {
+                                    val pct = (got * 100 / total).toInt()
+                                    if (pct / 10 != lastPct / 10) {
+                                        lastPct = pct
+                                        append("  $pct%", TextSecondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    conn.disconnect()
+                    if (f.length() < 1024 * 100) throw IllegalStateException("文件太小（${f.length()} 字节）")
+                    append(t("下载完成：${f.length() / 1048576} MB", "Downloaded ${f.length() / 1048576} MB"), OkColor)
+                    done = true
+                    ui.post { installApk(f) }
+                    break
+                } catch (e: Throwable) {
+                    lastErr = "${e.javaClass.simpleName}: ${e.message}"
+                    append(t("该源失败：$lastErr", "Source failed: $lastErr"), ErrColor)
+                }
+            }
+            if (!done) {
+                append(t("所有下载源都失败：$lastErr", "All download sources failed: $lastErr"), ErrColor)
+            }
+        }
+    }
+
+    /** 用 FileProvider 把 cache 里的 apk 交给系统安装器 */
+    private fun installApk(f: File) {
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this, "$packageName.fileprovider", f
+            )
+            val i = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(i)
+        }.onFailure { append(t("拉起安装器失败：${it.message}", "Failed to open installer: ${it.message}"), ErrColor) }
+    }
     fun checkUpdate(manual: Boolean = false) {
         if (manual) append(t("正在检查更新…", "Checking for updates…"), TextSecondary)
         bg {
             val cur = currentVersionName()
             var latest: String? = null
+            var apkUrl: String? = null
             var err: String? = null
             runCatching {
                 // 多个源依次试：官方 API -> 两个 GitHub 加速代理 -> 直接读 releases/latest 的跳转
@@ -2003,7 +2093,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
                             val body = conn.inputStream.bufferedReader().use { it.readText() }
                             val m = Regex("\"tag_name\"\\s*:\\s*\"v?([0-9][0-9.]*)\"").find(body)
-                            if (m != null) { latest = m.groupValues[1]; break }
+                            if (m != null) {
+                                latest = m.groupValues[1]
+                                apkUrl = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+\\.apk)\"").find(body)?.groupValues?.get(1)
+                                break
+                            }
                             throw IllegalStateException("没有 tag_name")
                         } finally {
                             conn.disconnect()
@@ -2054,6 +2148,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 "New version $l (current $cur) → https://github.com/moqi12386/Easy-platform-tools-GUI/releases/latest"),
                             OkColor
                         )
+                        updateInfo = UpdateInfo(l, apkUrl ?: "")
                         toast(t("发现新版本 $l", "New version $l"))
                     }
                     else -> if (manual) {
@@ -2077,10 +2172,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             IntSize(dm.widthPixels, dm.heightPixels)
         }
         val systemDark = isSystemInDarkTheme()
-        val dark = when (themeMode) {
-            ThemeMode.Day -> false
-            ThemeMode.Night -> true
-            ThemeMode.System -> systemDark
+        val dark = when {
+            // 原生风格的卡片是一块固定的深色板（Palette.nativeCard #1B1F27，不随主题变），
+            // 再按日间模式去算文字/弹窗/输入框的浅色配色就会白底白字。
+            // 这一档索性恒为深色（和「原生 —— 深色半透明板」的定位一致）。
+            style == UiStyle.Native -> true
+            themeMode == ThemeMode.Day -> false
+            themeMode == ThemeMode.Night -> true
+            else -> systemDark
         }
         Palette.dark = dark
         // Material 风格：整个 Palette 转发到 Material You 动态色（系统从壁纸取色）
@@ -2232,6 +2331,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             val onBar = readableOn(barLum)
             // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
             val wallBackdrop = rememberLayerBackdrop()
+            // 底栏专用图层：壁纸 + 页面卡片（wallBackdrop 里只有壁纸，所以底栏永远透不出卡片）
+            val barBackdrop = rememberLayerBackdrop()
             Box(Modifier.fillMaxSize().background(Bg).imePadding()) {
                 Box(
                     Modifier
@@ -2241,7 +2342,24 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     WallpaperView(assets)
                 }
 
-                Box(Modifier.fillMaxSize()) {
+                // 左右滑动切换 主页 / 设置（只认横向拖拽，竖向滚动不受影响）
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            var dx = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { dx = 0f },
+                                onHorizontalDrag = { _, amount -> dx += amount },
+                                onDragEnd = {
+                                    val threshold = size.width * 0.16f
+                                    if (dx < -threshold && page < 1) page = 1
+                                    else if (dx > threshold && page > 0) page = 0
+                                    dx = 0f
+                                }
+                            )
+                        }
+                ) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
                         LocalGlassAssets provides assets,
@@ -2291,7 +2409,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                     }
                                 }
                             ) {
-                                if (page == 0) {
+                                Box(
+                                    Modifier.fillMaxSize().then(
+                                        if (useBackdrop) Modifier.layerBackdrop(barBackdrop) else Modifier
+                                    )
+                                ) {
+                                androidx.compose.animation.AnimatedContent(
+                                    targetState = page,
+                                    transitionSpec = {
+                                        val dir = if (targetState > initialState) 1 else -1
+                                        (androidx.compose.animation.slideInHorizontally { it / 4 * dir } +
+                                            androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))) togetherWith
+                                            (androidx.compose.animation.slideOutHorizontally { -it / 4 * dir } +
+                                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)))
+                                    }
+                                ) { pageIdx ->
+                                if (pageIdx == 0) {
                                     HomePage(
                                         style = style,
                                         assets = assets,
@@ -2403,7 +2536,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                                 .putFloat("alpha", 0f).putFloat("gblur", 30f).putFloat("gdens", 100f).apply()
                                         },
                                         fontProgress = fontProgress,
-                                        onLogColors = { showLogColors = true },
+                                        onLogColors = {
+                                    startActivity(android.content.Intent(this@MainActivity, LogColorActivity::class.java))
+                                    @Suppress("DEPRECATION")
+                                    overridePendingTransition(R.anim.lc_in, R.anim.lc_out)
+                                },
                                         autoUpdate = autoUpdate,
                                         onAutoUpdate = { v ->
                                             autoUpdate = v
@@ -2441,6 +2578,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         token = token,
                                         onToken = { chooseToken(it) }
                                     )
+                                }
+                                }
                                 }
                             }
                         }
@@ -2538,7 +2677,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             dark = Palette.dark,
                             selectedTabIndex = { page },
                             onTabSelected = { page = it },
-                            backdrop = wallBackdrop,
+                            backdrop = barBackdrop,
                             tabsCount = 2,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -2648,7 +2787,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                         }
                         if (showRomScript) {
                             LiquidChoiceDialog(
-                                backdrop = wallBackdrop,
+                                backdrop = barBackdrop,
                                 title = tr(lang, "选择刷机脚本", "Pick flash script"),
                                 options = romScripts.map { (n, _) ->
                                     if (n.lowercase(Locale.US).contains("except_storage"))
@@ -2682,6 +2821,19 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                 lang = lang,
                                 onClose = { showBigLog = false },
                                 onClear = { clearLog() }
+                            )
+                        }
+                        updateInfo?.let { info ->
+                            GlassConfirmDialog(
+                                lang = lang,
+                                title = t("发现新版本 ${info.tag}", "Update ${info.tag} available"),
+                                message = t(
+                                    "当前版本 ${currentVersionName()}，新版本 ${info.tag}。\n\n下载完成后会拉起系统安装器，覆盖安装不会丢数据。",
+                                    "Current ${currentVersionName()}, new ${info.tag}.\n\nAfter downloading, the system installer opens; updating keeps your data."
+                                ),
+                                confirmText = t("立即更新", "Update now"),
+                                onConfirm = { updateInfo = null; downloadUpdate(info) },
+                                onDismiss = { updateInfo = null }
                             )
                         }
                         if (showLogColors) {
@@ -3690,6 +3842,9 @@ fun SettingsPage(
 
         }
 
+        // 原生风格的界面恒为深色板（EasyApp 里 style == Native -> dark = true），
+        // 切夜间模式不会有任何变化，这一档直接把这张卡隐掉，免得用户以为切了没生效。
+        if (style != UiStyle.Native) {
         Spacer(Modifier.height(12.dp))
 
         AppCard(style, assets, backdrop, screen, blur, density, alpha) {
@@ -3714,6 +3869,7 @@ fun SettingsPage(
                 )
             }
         }
+        }   // if (style != UiStyle.Native)
 
         Spacer(Modifier.height(12.dp))
 
@@ -5362,3 +5518,4 @@ fun ensureContrast(c: Color, bg: Color): Color {
 object AppLog {
     val lines = mutableStateListOf<LogLine>()
 }
+
