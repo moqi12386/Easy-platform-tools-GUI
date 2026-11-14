@@ -21,6 +21,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.text.BasicTextField
@@ -195,6 +202,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
+    /** 一镜到底无缝动画开关（金标联盟 SharedViewKit） */
+    private var svkAnim by mutableStateOf(true)
     private var fontChoice by mutableStateOf(AppFont.System)
     /** 启动时自动检查更新（默认开启，可在设置里关掉） */
     private var autoUpdate by mutableStateOf(true)
@@ -1527,6 +1536,34 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("theme", m.ordinal).apply()
     }
 
+    /**
+     * 打开「日志文字颜色」页。开关打开且设备支持一镜到底时，
+     * 用金标联盟 SharedViewKit 从设置行展开；否则普通跳转。
+     */
+    private fun openLogColors(bmp: android.graphics.Bitmap?, rect: android.graphics.Rect?) {
+        val intent = android.content.Intent(this, LogColorActivity::class.java)
+        val detected = runCatching {
+            com.itgsa.animation.sharedview.ViewAnimationManager.isViewAnimationSupported()
+        }.getOrDefault(0)
+        val radiusPx = 16f * resources.displayMetrics.density
+        // 设备自检（isViewAnimationSupported）在某些 ROM 上会误报不支持，
+        // 所以只要开关打开、拿到了源位图，就尝试走一镜到底；KIT 返回 null 时静默回退
+        val opts = if (svkAnim && bmp != null && rect != null) {
+            runCatching {
+                com.itgsa.animation.sharedview.ViewAnimationManager.makeViewAnimationOptions(
+                    bmp, rect, radiusPx, android.os.Bundle(), null
+                )
+            }.getOrNull()
+        } else null
+        if (opts != null) {
+            runCatching { startActivity(intent, opts.toBundle()) }
+                .onFailure { startActivity(intent) }
+        } else {
+            startActivity(intent)
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.lc_in, R.anim.lc_out)
+        }
+    }
     private fun chooseForceSafe(v: Boolean) {
         forceSafe = v
         safeRender = v
@@ -2652,11 +2689,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                                 .putFloat("alpha", 0f).putFloat("gblur", 30f).putFloat("gdens", 100f).apply()
                                         },
                                         fontProgress = fontProgress,
-                                        onLogColors = {
-                                    startActivity(android.content.Intent(this@MainActivity, LogColorActivity::class.java))
-                                    @Suppress("DEPRECATION")
-                                    overridePendingTransition(R.anim.lc_in, R.anim.lc_out)
-                                },
+                                        onLogColors = { bmp, rect -> openLogColors(bmp, rect) },
                                         autoUpdate = autoUpdate,
                                         onAutoUpdate = { v ->
                                             autoUpdate = v
@@ -3556,7 +3589,7 @@ private fun PartsDialog(
                 text = tr(lang, "关闭", "Close"),
                 onClick = onClose,
                 modifier = Modifier.fillMaxWidth(),
-                textColor = Palette.text,
+                textColor = LocalCardText.current,
                 surface = Color.White.copy(alpha = 0.3f)
             )
         }
@@ -3873,7 +3906,7 @@ fun SettingsPage(
     appliedFont: androidx.compose.ui.text.font.FontFamily?,
     onResetGlass: () -> Unit,
     fontProgress: Int,
-    onLogColors: () -> Unit,
+    onLogColors: (android.graphics.Bitmap?, android.graphics.Rect?) -> Unit,
     autoUpdate: Boolean,
     onAutoUpdate: (Boolean) -> Unit,
     onCheckUpdate: () -> Unit,
@@ -4179,13 +4212,37 @@ fun SettingsPage(
                 tr(lang, "把日志发给开发者", "Send the log to the developer"),
                 onClick = { onShareLog() }
             )
-            // 日志输出框里的文字颜色：命令 / 成功 / 失败 / 普通，可自己改
-            AppRow(
-                Icons.Filled.Create,
-                tr(lang, "日志文字颜色", "Log text colors"),
-                tr(lang, "自定义命令 / 成功 / 失败 / 普通颜色", "Customize command / ok / error / normal"),
-                onClick = { onLogColors() }
-            )
+            // 日志输出框里的文字颜色：命令 / 成功 / 失败 / 普通，可自己改。
+            // 这一行同时也是一镜到底动画的源：用 GraphicsLayer 把这一行录成位图 + 窗口坐标。
+            val svkScope = rememberCoroutineScope()
+            val svkLayer = rememberGraphicsLayer()
+            var svkRect by remember { mutableStateOf<android.graphics.Rect?>(null) }
+            Box(
+                Modifier
+                    .onGloballyPositioned { c ->
+                        val b = c.boundsInWindow()
+                        svkRect = android.graphics.Rect(
+                            b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt()
+                        )
+                    }
+                    .drawWithContent {
+                        svkLayer.record { this@drawWithContent.drawContent() }
+                        drawLayer(svkLayer)
+                    }
+            ) {
+                AppRow(
+                    Icons.Filled.Create,
+                    tr(lang, "日志文字颜色", "Log text colors"),
+                    tr(lang, "自定义命令 / 成功 / 失败 / 普通颜色", "Customize command / ok / error / normal"),
+                    onClick = {
+                        val rect = svkRect
+                        svkScope.launch {
+                            val bmp = runCatching { svkLayer.toImageBitmap().asAndroidBitmap() }.getOrNull()
+                            onLogColors(bmp, rect)
+                        }
+                    }
+                )
+            }
             if (crashFile.exists() || actionFile.exists()) {
                 AppRow(
                     Icons.Filled.Warning,
@@ -4241,6 +4298,49 @@ fun SettingsPage(
                     if (!XmsfBypass.canPromote(XmsfBypass.appCtx ?: return@AppRow)) XmsfBypass.openPromotedSettings()
                 }
             )
+            // 一镜到底无缝动画（金标联盟 SharedViewKit）：设备不支持时自动回退普通跳转
+            run {
+                val ctx = LocalContext.current
+                val prefs = remember { ctx.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE) }
+                var on by remember { mutableStateOf(prefs.getBoolean("svk", true)) }
+                val supported = remember { runCatching { com.itgsa.animation.sharedview.ViewAnimationManager.isViewAnimationSupported() > 0 }.getOrDefault(false) }
+                // 探测原因：KIT 判定支持的条件是「ROM 在 boot classpath 提供
+                // com.androidex.animation.sharedview.ViewAnimationManager」且 isFeatureEnabled() 为真
+                val svkReason = remember {
+                    runCatching {
+                        if (supported) {
+                            "协议 v" + com.itgsa.animation.sharedview.ViewAnimationManager.isViewAnimationSupported()
+                        } else {
+                            val cls = runCatching {
+                                Class.forName(
+                                    "com.androidex.animation.sharedview.ViewAnimationManager",
+                                    false, null
+                                )
+                            }
+                            if (cls.isFailure) {
+                                "ROM 未提供框架类（" + (cls.exceptionOrNull()?.javaClass?.simpleName ?: "?") + "）"
+                            } else {
+                                "框架类存在，但功能开关/协议不完整"
+                            }
+                        }
+                    }.getOrElse { "探测异常：" + it.javaClass.simpleName }
+                }
+                AppSwitchRow(
+                    icon = Icons.Filled.Create,
+                    title = tr(lang, "无缝转场动画", "Seamless transition"),
+                    subtitle = if (supported)
+                        tr(lang, "打开「日志文字颜色」时用一镜到底动画（自检 v$svkReason）", "Card expands into the page with a shared-view animation (probe: $svkReason)")
+                    else
+                        tr(lang, "不支持：$svkReason", "Not supported: $svkReason"),
+                    // 即使自检报不支持也允许用户打开：真正的判定交给 KIT，失败会自动回退
+                    checked = on,
+                    enabled = true,
+                    onCheckedChange = {
+                        on = it
+                        prefs.edit().putBoolean("svk", it).apply()
+                    }
+                )
+            }
             AppSwitchRow(
                 icon = Icons.Filled.Refresh,
                 title = tr(lang, "安全模式", "Safe mode"),
@@ -4276,7 +4376,7 @@ fun SettingsPage(
                         text = tr(lang, "关闭", "Close"),
                         onClick = { showCrash = false },
                         modifier = Modifier.fillMaxWidth(),
-                        textColor = Palette.text,
+                        textColor = LocalCardText.current,
                         surface = Color.White.copy(alpha = 0.3f),
                         plainText = true
                     )
@@ -4618,7 +4718,8 @@ fun OnboardingDialog(lang: Lang, onDone: () -> Unit) {
     // 所以 Material 下把外层留白收掉
     val isM3 = LocalStyle.current == UiStyle.Material
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    // 和页面卡片/功能行完全同一套文字色（LocalCardText = Palette.text），不再按主题或壁纸另算
+    val contentColor = LocalCardText.current
     val pages = listOf(
         Triple(
             tr(lang, "欢迎使用 EasyPT", "Welcome to EasyPT"),
@@ -4706,7 +4807,8 @@ fun GlassConfirmDialog(
     onDismiss: () -> Unit
 ) {
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    // 和页面卡片/功能行完全同一套文字色（LocalCardText = Palette.text），不再按主题或壁纸另算
+    val contentColor = LocalCardText.current
     val destructive = LocalStyle.current != UiStyle.Native
     AppGlassPanel(LocalWallBackdrop.current, onDismiss) {
         Text(
@@ -4749,7 +4851,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
     // 文字颜色跟「壁纸」走而不是跟主题走：深色壁纸上一律白字，浅色壁纸才用黑字，
     // 否则浅色主题 + 深壁纸时选项文字会糊在背景里看不清。
     val lightWall = isLightWallpaper(LocalGlassAssets.current)
-    val contentColor = if (lightWall) Color.Black else Color.White
+    val contentColor = LocalCardText.current
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val ctx = LocalContext.current
     val ver = remember {
@@ -5021,7 +5123,7 @@ fun LiquidChoiceDialog(
     // 文字颜色跟「壁纸」走而不是跟主题走：深色壁纸上一律白字，浅色壁纸才用黑字，
     // 否则浅色主题 + 深壁纸时选项文字会糊在背景里看不清。
     val lightWall = isLightWallpaper(LocalGlassAssets.current)
-    val contentColor = if (lightWall) Color.Black else Color.White
+    val contentColor = LocalCardText.current
     val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
     val dimColor = Palette.dim
 
@@ -5230,7 +5332,8 @@ fun BingWallpaperDialog(lang: Lang, onPick: (String) -> Unit, onDismiss: () -> U
     var progress by remember { mutableIntStateOf(0) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    // 和页面卡片/功能行完全同一套文字色（LocalCardText = Palette.text），不再按主题或壁纸另算
+    val contentColor = LocalCardText.current
 
     LaunchedEffect(reload) {
         loading = true
@@ -5416,7 +5519,8 @@ fun LogColorDialog(
     onDismiss: () -> Unit
 ) {
     val light = !Palette.dark
-    val contentColor = if (light) Color.Black else Color.White
+    // 和页面卡片/功能行完全同一套文字色（LocalCardText = Palette.text），不再按主题或壁纸另算
+    val contentColor = LocalCardText.current
     // 和日志输出框同一套底料（glassInsetSurface），预览和对比度保护才准
     val bgSample = Palette.glassTint
     var colors by remember { mutableStateOf(initial) }
