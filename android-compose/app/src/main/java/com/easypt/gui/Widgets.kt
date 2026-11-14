@@ -136,7 +136,13 @@ fun GlassButton(
     // A 口径：主按钮一律「主色底 + 白字」。两条渲染路径（有壁纸的 LiquidButton /
     // 没壁纸的实心胶囊）都按 primary 来，不再各走各的。
     val fill = if (tint != Color.Unspecified) tint else Palette.accent
-    val labelColor = if (primary) Color.White else textColor
+    // 按钮字色跟底色走，不能写死白色：莫奈金（相对亮度 0.22）配白字，
+    // 但原生风格的主色是 #ECEDEF（亮度 0.83）——浅底配白字等于看不见。
+    val labelColor = when {
+        !primary -> textColor
+        fill.luminance() < 0.45f -> Color.White
+        else -> Color(0xFF16181D)
+    }
     val bd = LocalWallBackdrop.current
     if (useBackdrop && bd != null) {
         com.easypt.gui.glass.LiquidButton(
@@ -160,10 +166,15 @@ fun GlassButton(
             plainBackground != Color.Unspecified -> plainBackground
             else -> textColor.copy(alpha = 0.10f)
         }
-        // 主按钮固定白字；其余按底色对比（深底白字、浅底黑字），避免黑底黑字
-        val onPlain =
-            if (primary) Color.White
-            else if (plainBg.luminance() < 0.45f) Color.White else Color.Black
+        // 主按钮字色由 labelColor 按底色亮度决定；其余按底色对比（深底白字、浅底黑字）
+        // 注意：半透明底色（比如 10% 白）的 RGB 是白的，但不代表真的白——
+        // 它实际叠在卡片上，用 luminance() 会误判成浅底而给出黑字。
+        val onPlain = when {
+            primary -> labelColor
+            plainBg.alpha < 0.6f -> Palette.text
+            plainBg.luminance() < 0.45f -> Color.White
+            else -> Color.Black
+        }
         Box(
             modifier
                 .height(height)
@@ -225,7 +236,7 @@ fun DialogActions(
             horizontalArrangement = Arrangement.End
         ) {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text(dismissText, color = Palette.text2)
+                Text(dismissText, color = LocalCardText.current.copy(alpha = 0.75f))
             }
             Spacer(Modifier.width(6.dp))
             androidx.compose.material3.Button(
