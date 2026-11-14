@@ -12,8 +12,8 @@ android {
         applicationId = "com.easypt.gui"
         minSdk = 26
         targetSdk = 37
-        versionCode = 116
-        versionName = "3.51.8"
+        versionCode = 117
+        versionName = "3.51.9"
     }
 
     signingConfigs {
@@ -71,4 +71,6 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("io.github.kyant0:shapes:1.2.1")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
+    // 金标联盟一镜到底无缝动画 KIT（固定 1.0.0.5，避免动态版本每次联网解析）
+    implementation("gsai.sdk:sharedview-kit:1.0.0.5")
 }
