@@ -1,3 +1,13 @@
+# Easy-platform-tools-GUI v3.51.9 (Android)
+
+- **接入 SharedViewKit（一镜到底）**：`gsai.sdk:sharedview-kit:1.0.0.5`，设置里新增「无缝转场动画」开关；
+  点「日志文字颜色」时用 GraphicsLayer 把该行录成位图，走 `makeViewAnimationOptions(bitmap, bounds, radius)` 展开到整页。
+  设备自检不支持 / 截图失败 / KIT 返回 null 时自动回退淡入淡出；开关不再置灰，自检结果写在副标题里。
+- **弹窗正文文字**：6 处 `if (light) Black else White` 统一成 `LocalCardText`（= `Palette.text`），和卡片/功能行一致。
+- **弹窗次按钮文字**：统一到 `LocalCardText`（次按钮 75% 透明度），主按钮仍为主色实心 + 白字。
+
+versionCode 117 / versionName 3.51.9
+
 # Easy-platform-tools-GUI v3.51.8 (Android)
 
 ## 自更新链路（本次重点）
