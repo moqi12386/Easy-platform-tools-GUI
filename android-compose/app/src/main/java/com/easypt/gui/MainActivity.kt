@@ -188,6 +188,12 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var romProduct = ""
     private var showBigLog by mutableStateOf(false)
     private var showFlashImage by mutableStateOf(false)
+    /** root 快捷刷入：同样走对话框选镜像 + 选目标分区 */
+    private var showLocalFlash by mutableStateOf(false)
+    private var localFlashUri by mutableStateOf<android.net.Uri?>(null)
+    /** 备份分区：先选分区再选保存位置 */
+    private var showBackupPick by mutableStateOf(false)
+    private var backupPart by mutableStateOf("boot")
     private var flashUri by mutableStateOf<Uri?>(null)
     private val logWriter = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var romFiles: Map<String, Uri> = emptyMap()
@@ -249,6 +255,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var updateBytes by mutableStateOf(0L)
     private var fontPicker: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickFlash: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
+    private var pickLocalFlash: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var pickRomZip: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
     private var showAbout by mutableStateOf(false)
     private var showPlayground by mutableStateOf(false)
@@ -270,7 +277,10 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // root 快捷刷入镜像 / 线刷压缩包
         pickFlash = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-        ) { uri -> if (uri != null) localFlash(uri) }
+        ) { uri -> if (uri != null) localFlashUri = uri }
+        pickLocalFlash = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri -> if (uri != null) localFlashUri = uri }
         pickRomZip = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
         ) { uri -> if (uri != null) loadRomArchive(uri) }
@@ -2630,7 +2640,7 @@ HomePage(
                                         onInfo = { otgInfo() },
                                         onParts = { if (mode == 1) localParts() else otgParts() },
                                         onFlash = { flashUri = null; showFlashImage = true },
-                                        onLocalFlash = { pickFlash?.launch(arrayOf("*/*")) },
+                                        onLocalFlash = { localFlashUri = null; showLocalFlash = true },
                                         onRomArchive = { pickRomZip?.launch(arrayOf("application/zip","application/gzip","application/x-tar","*/*")) },
                                         onRom = { pickRom.launch(null) },
                                         onBackup = { p ->
@@ -2639,6 +2649,7 @@ HomePage(
                                                 "${p}_${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.img"
                                             )
                                         },
+                                        onBackupPick = { backupPart = part; showBackupPick = true },
                                         onBackupBaseband = { pickBasebandDir.launch(null) },
                                         onReboot = { target ->
                                             when (mode) {
@@ -3083,6 +3094,44 @@ SettingsPage(
                             }
                         },
                         onDismiss = { showFlashImage = false }
+                    )
+                }
+                if (showLocalFlash) {
+                    FlashImageDialog(
+                        style = style,
+                        lang = lang,
+                        imageUri = localFlashUri,
+                        part = part,
+                        parts = parts.map { it.first },
+                        onPickImage = { pickLocalFlash?.launch(arrayOf("*/*")) },
+                        onPart = { choosePart(it) },
+                        onStart = {
+                            val u = localFlashUri
+                            if (u != null) {
+                                showLocalFlash = false
+                                localFlash(u)
+                            }
+                        },
+                        onDismiss = { showLocalFlash = false },
+                        quickTitle = true
+                    )
+                }
+                if (showBackupPick) {
+                    BackupPartDialog(
+                        style = style,
+                        lang = lang,
+                        part = backupPart,
+                        parts = parts.map { it.first },
+                        onPart = { backupPart = it },
+                        onStart = {
+                            showBackupPick = false
+                            choosePart(backupPart)
+                            pendingDest = backupPart
+                            pickBackupDest.launch(
+                                "${backupPart}_${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.img"
+                            )
+                        },
+                        onDismiss = { showBackupPick = false }
                     )
                 }
                 if (showAbout) {
@@ -3653,7 +3702,8 @@ private fun FlashImageDialog(
     onPickImage: () -> Unit,
     onPart: (String) -> Unit,
     onStart: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    quickTitle: Boolean = false
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val options = remember(parts) {
@@ -3670,7 +3720,11 @@ private fun FlashImageDialog(
             }.getOrNull() ?: u.lastPathSegment?.substringAfterLast('/').orEmpty()
         }.orEmpty()
     }
-    AppDialog(style, tr(lang, "刷入镜像", "Flash image"), onDismiss) {
+    AppDialog(
+        style,
+        if (quickTitle) tr(lang, "快捷刷入镜像", "Quick flash image") else tr(lang, "刷入镜像", "Flash image"),
+        onDismiss
+    ) {
         Text(tr(lang, "镜像文件", "Image file"), color = LocalCardText.current, fontSize = 14.sp)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3735,6 +3789,64 @@ private fun FlashImageDialog(
     }
 }
 
+/** 备份分区：选分区（可输入或从列表选）后再选保存位置 */
+@Composable
+private fun BackupPartDialog(
+    style: UiStyle,
+    lang: Lang,
+    part: String,
+    parts: List<String>,
+    onPart: (String) -> Unit,
+    onStart: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val options = remember(parts) {
+        if (parts.isEmpty()) listOf("boot", "init_boot", "vbmeta", "dtbo", "super", "system", "vendor", "recovery", "modem", "persist")
+        else parts
+    }
+    AppDialog(style, tr(lang, "备份分区", "Back up partition"), onDismiss) {
+        Text(tr(lang, "要导出的分区", "Partition to dump"), color = LocalCardText.current, fontSize = 14.sp)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppField(
+                value = part,
+                onValueChange = onPart,
+                placeholder = tr(lang, "分区名，例如 boot", "partition, e.g. boot"),
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(LocalAccent.current.copy(alpha = 0.16f))
+                    .clickable { showPicker = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.List, contentDescription = null, tint = LocalAccent.current, modifier = Modifier.size(22.dp))
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        DialogActions(
+            dismissText = tr(lang, "取消", "Cancel"),
+            onDismiss = onDismiss,
+            confirmText = tr(lang, "选择保存位置", "Choose location"),
+            onConfirm = onStart,
+            enabled = part.isNotBlank()
+        )
+    }
+    if (showPicker) {
+        LiquidChoiceDialog(
+            backdrop = LocalWallBackdrop.current,
+            title = tr(lang, "选择分区", "Pick partition"),
+            options = options,
+            selected = options.indexOf(part),
+            onPick = { showPicker = false; onPart(options[it]) },
+            onDismiss = { showPicker = false }
+        )
+    }
+}
 @Composable
 fun HomePage(
     style: UiStyle,
@@ -3766,6 +3878,7 @@ fun HomePage(
     onRomArchive: () -> Unit,
     onRom: () -> Unit,
     onBackup: (String) -> Unit,
+    onBackupPick: () -> Unit,
     onBackupBaseband: () -> Unit,
     onReboot: (String) -> Unit,
     onEdl: () -> Unit,
@@ -3982,10 +4095,10 @@ fun HomePage(
             }
             1 -> AppCard(style, assets, backdrop, screen, blur, density, alpha) {
                 AppRow(Icons.Filled.Lock, tr(lang, "检测 root", "Check root"), "su -c id", onClick = onRoot)
-                AppRow(Icons.Filled.Build, tr(lang, "快捷刷入镜像", "Quick flash image"), tr(lang, "选镜像，直接 dd 到 $part", "pick an image, dd to $part"), onClick = onLocalFlash)
+                AppRow(Icons.Filled.Build, tr(lang, "快捷刷入镜像", "Quick flash image"), tr(lang, "选镜像与目标分区，dd 到所选分区", "pick image + target partition, dd to it"), onClick = onLocalFlash)
                 AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"), "/dev/block/by-name", onClick = onParts)
                 AppRow(Icons.Filled.Star, tr(lang, "备份分区", "Back up partition"),
-                    tr(lang, "把 $part 导出为镜像", "dump $part to a file"), onClick = { onBackup(part) })
+                    tr(lang, "选择分区，导出为镜像", "pick a partition, dump to a file"), onClick = { onBackupPick() })
                 AppRow(Icons.Filled.Star, tr(lang, "备份基带", "Back up baseband"),
                     tr(lang, "modem / persist / fsg 等", "modem / persist / fsg …"), onClick = onBackupBaseband)
                 AppRow(Icons.Filled.Refresh, tr(lang, "重启系统", "Reboot"), "reboot", onClick = { onReboot("") }, tint = RebootGreen)
