@@ -22,14 +22,18 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
 import kotlin.math.roundToInt
 
 /** API 31 起才有 RenderEffect，才能走库的实时模糊；以下走预烘焙取样 */
@@ -66,28 +70,32 @@ fun Modifier.glassSurface(
     val level = blurLevel
     val dens = density
     val a = assets
-    // 参考项目的做法：深色壁纸压暗一点，浅色壁纸反而提亮，保持通透不磨砂
-    val scrim = if (light) 0.04f + dens * 0.10f else 0.10f + dens * 0.18f
-    val sheenEnd = with(LocalDensity.current) { 140.dp.toPx() }
+    // 顶部高光：旧版在 140dp 内叠到 0.30，整张卡上半截发白；
+    // 现在收短到 110dp、峰值减半，只留一道“灯打上去”的光
+    val sheenEnd = with(LocalDensity.current) { 110.dp.toPx() }
     // 画刷提前建好，避免每帧分配
     val sheen = remember(dens, sheenEnd) {
         Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.16f + dens * 0.14f),
+            0f to Color.White.copy(alpha = 0.10f + dens * 0.10f),
             0.55f to Color.Transparent,
             endY = sheenEnd
         )
     }
+    // 描边改成 135° 渐变：左上最亮、右下收暗，圆角处才有“玻璃边缘”的立体感
     val edge = remember(light) {
-        if (light) Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.75f),
-            0.45f to Color.White.copy(alpha = 0.35f),
-            1f to Color(0xFF9FB6CC).copy(alpha = 0.55f)
-        ) else Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.40f),
-            0.45f to Color.White.copy(alpha = 0.08f),
-            1f to Color.White.copy(alpha = 0.22f)
+        if (light) Brush.linearGradient(
+            0f to Color.White.copy(alpha = 0.80f),
+            0.35f to Color.White.copy(alpha = 0.30f),
+            0.75f to Color(0xFF9FB6CC).copy(alpha = 0.30f),
+            1f to Color(0xFF9FB6CC).copy(alpha = 0.58f)
+        ) else Brush.linearGradient(
+            0f to Color.White.copy(alpha = 0.55f),
+            0.38f to Color.White.copy(alpha = 0.10f),
+            0.75f to Color.White.copy(alpha = 0.04f),
+            1f to Color.White.copy(alpha = 0.26f)
         )
     }
+    val topShadowEnd = with(LocalDensity.current) { 96.dp.toPx() }
     return this
         .onGloballyPositioned { c ->
             if (fixedPos == null) {
@@ -121,11 +129,30 @@ fun Modifier.glassSurface(
             } else {
                 drawRect(Color(0xFF151B24))
             }
-            // 玻璃自带的色：浅壁纸提亮，深壁纸压暗，都保持通透
+            // 玻璃自带的色：按“这一块壁纸有多亮”决定压暗多少。
+            // 旧版固定 0.28：亮壁纸上的白字发飘，暗壁纸又闷；现在亮处多压、
+            // 暗处保持通透，卡片滚到哪都不会忽明忽暗。
+            val cy = if (screen.height > 0) {
+                ((p.y + size.height / 2f) / screen.height).coerceIn(0f, 1f)
+            } else 0.5f
+            val localLum = if (a != null) {
+                a.topLum + (a.bottomLum - a.topLum) * cy
+            } else 0.5f
+            val bright = ((localLum - 0.42f) / 0.40f).coerceIn(0f, 1f)
+            val scrim = if (light) 0.06f + dens * 0.08f + bright * 0.12f
+            else 0.05f + dens * 0.09f + bright * 0.20f
             if (light) drawRect(Color(0xFFF8FBFF).copy(alpha = scrim))
             else drawRect(Color(0xFF080D14).copy(alpha = scrim))
             drawRect(tint.copy(alpha = tintAlpha))
             drawRoundRect(brush = sheen, cornerRadius = CornerRadius(cornerPx))
+            // 内侧顶边暗影：玻璃有厚度，不是一张贴纸
+            drawRect(
+                brush = Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.10f + dens * 0.05f),
+                    0.45f to Color.Transparent,
+                    endY = topShadowEnd.coerceAtMost(size.height * 0.5f).coerceAtLeast(1f)
+                )
+            )
             if (rim) {
                 drawRoundRect(
                     brush = edge,
@@ -176,20 +203,50 @@ fun glassOrSolid(
     if (!glass) return Modifier.clip(shape).background(solidColor)
 
     if (realGlass) {
-        // 参考项目：vibrancy + blur + 轻微 lens，并且必须有一层 container color 打底，
-        // 否则只剩纯透明模糊，文字会飘在壁纸上
-        val tintA = ((0.14f + 0.34f * surfaceAlpha) * (0.72f + 0.58f * density))
-            .coerceIn(0.06f, 0.60f)
-        val surface = if (light) Color(0xFFF7FAFF) else Color(0xFF0A1018)
+        // 旧版底料 0.56 接近“磨砂黑”，壁纸颜色几乎全被压掉；现在降到 0.40 左右，
+        // 通透度交给 colorControls，暗角交给 innerShadow。
+        val lum = assets?.avgLum ?: 0.35f
+        val base = if (light) 0.40f else 0.33f
+        val tintA = (base + 0.12f * surfaceAlpha).coerceIn(0.28f, 0.52f)
+        val surface = if (light) Color(0xFFF7FAFF) else Color(0xFF090E16)
+        // 壁纸越亮，背板越提亮；越暗越收一点，避免白字飘在亮色上
+        val lift = ((lum - 0.35f) * 0.30f).coerceIn(-0.04f, 0.08f)
         return Modifier.drawBackdrop(
             backdrop = backdrop,
             shape = { shape },
             effects = {
-                vibrancy()
-                blur((2f + blurAmount * 22f).dp.toPx())
+                colorControls(
+                    brightness = 0.03f + lift,
+                    contrast = 1.04f,
+                    saturation = 1.55f
+                )
+                blur((6f + blurAmount * 18f).dp.toPx())
+                // 折射从“固定 7dp”改成跟控件尺寸挂钩：小卡片不糊，大卡片边缘才有液态弯折
+                val minPx = size.minDimension
                 lens(
-                    (2f + density * 7f).dp.toPx(),
-                    (2f + density * 5f).dp.toPx()
+                    refractionHeight = (minPx * (0.05f + 0.04f * density))
+                        .coerceIn(8.dp.toPx(), 26.dp.toPx()),
+                    refractionAmount = (minPx * (0.08f + 0.06f * density))
+                        .coerceIn(10.dp.toPx(), 44.dp.toPx()),
+                    depthEffect = true,
+                    chromaticAberration = true
+                )
+            },
+            // 默认高光只有 0.5dp/50%；加到 1dp，边缘更“利”
+            highlight = { Highlight.Default.copy(width = 1.dp, alpha = 0.85f) },
+            // 卡片浮起来一点（库默认 24dp/10%）
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 28.dp,
+                    color = Color.Black.copy(alpha = 0.14f)
+                )
+            },
+            // 内侧顶边暗影，给玻璃厚度
+            innerShadow = {
+                InnerShadow(
+                    radius = 10.dp,
+                    offset = DpOffset(0.dp, 5.dp),
+                    color = Color.Black.copy(alpha = 0.10f)
                 )
             },
             onDrawSurface = { drawRect(surface.copy(alpha = tintA)) }

@@ -100,8 +100,9 @@ object Wallpaper {
         val half = Bitmap.createScaledBitmap(full, hw, hh, true)
         val levels = listOf(
             blur(half, 2),
-            blur(half, 5),
-            blur(half, 11)
+            blur(half, 7),
+            blur(half, 13),
+            blur(half, 20)
         ).map { it.asImageBitmap() }
         return GlassAssets(
             full = full.asImageBitmap(),
@@ -169,7 +170,7 @@ object Wallpaper {
         px = passV(px, w, h, radius)
         px = passH(px, w, h, radius)
         px = passV(px, w, h, radius)
-        px = saturate(px, 1.45f)   // 参考项目的 vibrancy：提饱和度，玻璃才“透亮”
+        px = saturate(px, 1.52f)   // 参考项目的 vibrancy：提饱和度，玻璃才“透亮”
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         out.setPixels(px, 0, w, 0, 0, w, h)
         return out

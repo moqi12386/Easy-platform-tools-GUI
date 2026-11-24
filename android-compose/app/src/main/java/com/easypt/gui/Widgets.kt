@@ -139,8 +139,12 @@ fun GlassButton(
     // 按钮字色跟底色走，不能写死白色：莫奈金（相对亮度 0.22）配白字，
     // 但原生风格的主色是 #ECEDEF（亮度 0.83）——浅底配白字等于看不见。
     val labelColor = when {
-        !primary -> textColor
-        fill.luminance() < 0.45f -> Color.White
+        // 没有 tint 的次要按钮：调用方给的主题字色
+        !primary && tint == Color.Unspecified -> textColor
+        // 很亮的 accent（原生浅色、浅莫奈色）：无论深浅主题都用深字
+        fill.luminance() >= 0.60f -> Color(0xFF16181D)
+        // 其余跟随主题：深色主题白字、浅色主题深字，不再写死白字
+        Palette.dark -> Color.White
         else -> Color(0xFF16181D)
     }
     val bd = LocalWallBackdrop.current

@@ -29,6 +29,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.background
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -185,6 +187,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var showRomScript by mutableStateOf(false)
     private var romProduct = ""
     private var showBigLog by mutableStateOf(false)
+    private var showFlashImage by mutableStateOf(false)
+    private var flashUri by mutableStateOf<Uri?>(null)
     private val logWriter = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var romFiles: Map<String, Uri> = emptyMap()
     private var pendingDest = ""
@@ -202,8 +206,6 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     private var customWallpaper by mutableStateOf(false)
     private var themeMode by mutableStateOf(ThemeMode.System)
     private var monet by mutableStateOf(false)
-    /** 一镜到底无缝动画开关（金标联盟 SharedViewKit） */
-    private var svkAnim by mutableStateOf(true)
     private var fontChoice by mutableStateOf(AppFont.System)
     /** 启动时自动检查更新（默认开启，可在设置里关掉） */
     private var autoUpdate by mutableStateOf(true)
@@ -253,6 +255,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     /** 首次使用向导 */
     private var showOnboarding by mutableStateOf(false)
     private var crashBannerClosed by mutableStateOf(false)
+    private var recoveredFromCrash by mutableStateOf(false)
     private var showWpSource by mutableStateOf(false)
     private var showBing by mutableStateOf(false)
 
@@ -306,6 +309,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         val prevTrace = readTrace()
         val prevCrash = readCrash()
         if (prevTrace != null) {
+            recoveredFromCrash = true
             val fails = spBoot.getInt("bootFails", 0) + 1
             spBoot.edit().putInt("bootFails", fails).apply()
             if (fails >= 2) {
@@ -838,6 +842,9 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     fun applyMode(m: Int) {
+        snapshotForRollback(
+            "切换使用模式：" + when (m) { 0 -> "OTG 主机"; 1 -> "本机 root"; else -> "遥控 PC" }
+        )
         mode = m
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("mode", m).apply()
     }
@@ -1518,67 +1525,88 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         try {
             getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("prevStyle", style.ordinal).apply()
         } catch (_: Throwable) { }
-        try {
-            File(filesDir, "last-action.txt").writeText("切换到界面样式：${s.labelZh} (${s.name})")
-        } catch (_: Throwable) {
-        }
+        snapshotForRollback("切换到界面样式：${s.labelZh} (${s.name})")
         style = s
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("style", s.ordinal).apply()
     }
 
     private fun chooseLang(l: Lang) {
+        snapshotForRollback("切换语言：${if (l == Lang.En) "English" else "中文"}")
         lang = l
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("lang", l.ordinal).apply()
     }
 
     private fun chooseTheme(m: ThemeMode) {
+        snapshotForRollback("切换夜间模式：${m.zh}")
         themeMode = m
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt("theme", m.ordinal).apply()
     }
 
-    /**
-     * 打开「日志文字颜色」页。开关打开且设备支持一镜到底时，
-     * 用金标联盟 SharedViewKit 从设置行展开；否则普通跳转。
-     */
+    /** 打开「日志文字颜色」页。金标联盟 KIT 这台 ROM 没给三方应用，普通淡入淡出。 */
     private fun openLogColors(bmp: android.graphics.Bitmap?, rect: android.graphics.Rect?) {
-        val intent = android.content.Intent(this, LogColorActivity::class.java)
-        val detected = runCatching {
-            com.itgsa.animation.sharedview.ViewAnimationManager.isViewAnimationSupported()
-        }.getOrDefault(0)
-        val radiusPx = 16f * resources.displayMetrics.density
-        // 设备自检（isViewAnimationSupported）在某些 ROM 上会误报不支持，
-        // 所以只要开关打开、拿到了源位图，就尝试走一镜到底；KIT 返回 null 时静默回退
-        val opts = if (svkAnim && bmp != null && rect != null) {
-            runCatching {
-                com.itgsa.animation.sharedview.ViewAnimationManager.makeViewAnimationOptions(
-                    bmp, rect, radiusPx, android.os.Bundle(), null
-                )
-            }.getOrNull()
-        } else null
-        if (opts != null) {
-            runCatching { startActivity(intent, opts.toBundle()) }
-                .onFailure { startActivity(intent) }
-        } else {
-            startActivity(intent)
-            @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.lc_in, R.anim.lc_out)
-        }
+        startActivity(android.content.Intent(this, LogColorActivity::class.java))
+        @Suppress("DEPRECATION")
+        overridePendingTransition(R.anim.lc_in, R.anim.lc_out)
     }
+    /** 每次可能出问题的改动前，把当前设置存一份快照；安全模式就是回退到这份快照。 */
+    private fun snapshotForRollback(label: String) {
+        getSharedPreferences(PREF, MODE_PRIVATE).edit()
+            .putString("rb_label", label)
+            .putInt("rb_style", style.ordinal)
+            .putInt("rb_theme", themeMode.ordinal)
+            .putInt("rb_lang", lang.ordinal)
+            .putInt("rb_mode", mode)
+            .putBoolean("rb_monet", monet)
+            .putInt("rb_font", fontChoice.ordinal)
+            .putFloat("rb_blur", glassBlur)
+            .putFloat("rb_dens", glassDensity)
+            .putFloat("rb_alpha", uiAlpha)
+            .apply()
+        try { File(filesDir, "last-action.txt").writeText(label) } catch (_: Throwable) { }
+    }
+
+    /** 回退到最近一次快照。返回被回退操作的描述；没有快照时返回 null。 */
+    private fun rollbackLastAction(): String? {
+        val sp = getSharedPreferences(PREF, MODE_PRIVATE)
+        val label = sp.getString("rb_label", null) ?: return null
+        style = UiStyle.entries.getOrElse(sp.getInt("rb_style", style.ordinal)) { style }
+        themeMode = ThemeMode.entries.getOrElse(sp.getInt("rb_theme", themeMode.ordinal)) { themeMode }
+        lang = Lang.entries.getOrElse(sp.getInt("rb_lang", lang.ordinal)) { lang }
+        mode = sp.getInt("rb_mode", mode)
+        monet = sp.getBoolean("rb_monet", monet)
+        fontChoice = AppFont.entries.getOrElse(sp.getInt("rb_font", fontChoice.ordinal)) { fontChoice }
+        glassBlur = sp.getFloat("rb_blur", glassBlur)
+        glassDensity = sp.getFloat("rb_dens", glassDensity)
+        uiAlpha = sp.getFloat("rb_alpha", uiAlpha)
+        sp.edit()
+            .putInt("style", style.ordinal)
+            .putInt("theme", themeMode.ordinal)
+            .putInt("lang", lang.ordinal)
+            .putInt("mode", mode)
+            .putBoolean("monet", monet)
+            .putInt("font", fontChoice.ordinal)
+            .putFloat("gblur", glassBlur)
+            .putFloat("gdens", glassDensity)
+            .putFloat("alpha", uiAlpha)
+            .remove("rb_label").remove("rb_style").remove("rb_theme").remove("rb_lang")
+            .remove("rb_mode").remove("rb_monet").remove("rb_font")
+            .remove("rb_blur").remove("rb_dens").remove("rb_alpha")
+            .apply()
+        return label
+    }
+
     private fun chooseForceSafe(v: Boolean) {
         forceSafe = v
-        safeRender = v
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("forceSafe", v).apply()
         if (v) {
-            // 安全模式：不关闭液态玻璃，也不换样式；
-            // 只把「导致崩溃的那一步」退回去（样式/主题恢复到上一次记录的值）
-            val sp = getSharedPreferences(PREF, MODE_PRIVATE)
-            val prevStyle = sp.getInt("prevStyle", style.ordinal)
-            if (prevStyle != style.ordinal) {
-                style = UiStyle.entries.getOrElse(prevStyle) { style }
-                sp.edit().putInt("style", style.ordinal).apply()
-            }
+            // 安全模式 = 回退到上一次改动前的快照
             crashBannerClosed = true
-            append(t("安全模式已开启：已回退上一步操作", "Safe mode on: reverted the last step"), OkColor)
+            val label = rollbackLastAction()
+            if (label != null) {
+                append(t("安全模式：已回退「$label」", "Safe mode: reverted \"$label\""), OkColor)
+            } else {
+                append(t("安全模式已开启：没有可回退的改动", "Safe mode on: nothing to revert"), OkColor)
+            }
         } else {
             append(t("安全模式已关闭", "Safe mode off"), OkColor)
         }
@@ -1592,6 +1620,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private fun chooseFont(f: AppFont) {
+        snapshotForRollback("切换字体：${f.zh}")
         when {
             f == AppFont.Local ->
                 fontPicker?.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
@@ -1849,6 +1878,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
     }
 
     private fun chooseMonet(v: Boolean) {
+        snapshotForRollback("切换莫奈取色：${if (v) "开" else "关"}")
         monet = v
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putBoolean("monet", v).apply()
     }
@@ -2458,7 +2488,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             }
         }
         val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            flashImage(uri)
+            if (uri != null) flashUri = uri
         }
         val pickRom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             if (uri != null) loadRom(uri)
@@ -2484,6 +2514,22 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             val onBar = readableOn(barLum)
             // 照 demo：图层里只有背景（壁纸），玻璃元件在图层外面取样
             val wallBackdrop = rememberLayerBackdrop()
+            // 照 AppMarket：用 HorizontalPager 做切页，滚动交给 Pager 自己处理
+            val pagerState = rememberPagerState(pageCount = { 2 })
+            LaunchedEffect(page) {
+                if (!pagerState.isScrollInProgress && pagerState.currentPage != page) {
+                    pagerState.animateScrollToPage(
+                        page = page,
+                        animationSpec = androidx.compose.animation.core.tween(320)
+                    )
+                }
+            }
+            LaunchedEffect(pagerState) {
+                // 跟着 currentPage 实时同步：滑过一半底栏就切，不等惯性完全停下
+                androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { p ->
+                    if (page != p) page = p
+                }
+            }
             // 底栏专用图层：壁纸 + 页面卡片（wallBackdrop 里只有壁纸，所以底栏永远透不出卡片）
             val barBackdrop = rememberLayerBackdrop()
             Box(Modifier.fillMaxSize().background(Bg).imePadding()) {
@@ -2495,24 +2541,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                     WallpaperView(assets)
                 }
 
-                // 左右滑动切换 主页 / 设置（只认横向拖拽，竖向滚动不受影响）
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            var dx = 0f
-                            detectHorizontalDragGestures(
-                                onDragStart = { dx = 0f },
-                                onHorizontalDrag = { _, amount -> dx += amount },
-                                onDragEnd = {
-                                    val threshold = size.width * 0.16f
-                                    if (dx < -threshold && page < 1) page = 1
-                                    else if (dx > threshold && page > 0) page = 0
-                                    dx = 0f
-                                }
-                            )
-                        }
-                ) {
+                // 切页交给 HorizontalPager 自己处理（原生滑动），这里不再抢横向手势
+                Box(Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
                         LocalWallBackdrop provides wallBackdrop,
                         LocalGlassAssets provides assets,
@@ -2567,18 +2597,14 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         if (useBackdrop) Modifier.layerBackdrop(barBackdrop) else Modifier
                                     )
                                 ) {
-                                androidx.compose.animation.AnimatedContent(
-                                    targetState = page,
-                                    transitionSpec = {
-                                        val dir = if (targetState > initialState) 1 else -1
-                                        (androidx.compose.animation.slideInHorizontally { it / 4 * dir } +
-                                            androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))) togetherWith
-                                            (androidx.compose.animation.slideOutHorizontally { -it / 4 * dir } +
-                                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)))
-                                    }
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    beyondViewportPageCount = 0,
+                                    overscrollEffect = null
                                 ) { pageIdx ->
-                                if (pageIdx == 0) {
-                                    HomePage(
+                                    if (pageIdx == 0) {
+HomePage(
                                         style = style,
                                         assets = assets,
                                         backdrop = backdrop,
@@ -2595,7 +2621,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         logs = logs,
                                         part = part,
                                         onModePick = { applyMode(it) },
-                                        crashBannerVisible = safeRender && !crashBannerClosed,
+                                        crashBannerVisible = recoveredFromCrash && !crashBannerClosed,
                                         onDismissCrashBanner = { crashBannerClosed = true },
                                         onConnect = { connectUsb() },
                                         onUsbDiag = { usbDiag() },
@@ -2603,7 +2629,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onBigLog = { showBigLog = true },
                                         onInfo = { otgInfo() },
                                         onParts = { if (mode == 1) localParts() else otgParts() },
-                                        onFlash = { pickImage.launch(arrayOf("*/*")) },
+                                        onFlash = { flashUri = null; showFlashImage = true },
                                         onLocalFlash = { pickFlash?.launch(arrayOf("*/*")) },
                                         onRomArchive = { pickRomZip?.launch(arrayOf("application/zip","application/gzip","application/x-tar","*/*")) },
                                         onRom = { pickRom.launch(null) },
@@ -2631,8 +2657,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         onRun = { runTyped(it) },
                                         onClear = { clearLog() }
                                     )
-                                } else {
-                                    SettingsPage(
+                                    } else {
+SettingsPage(
                                         style = style,
                                         assets = assets,
                                         backdrop = backdrop,
@@ -2727,7 +2753,7 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                                         token = token,
                                         onToken = { chooseToken(it) }
                                     )
-                                }
+                                    }
                                 }
                                 }
                             }
@@ -3038,6 +3064,25 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
                             showLogColors = false
                         },
                         onDismiss = { showLogColors = false }
+                    )
+                }
+                if (showFlashImage) {
+                    FlashImageDialog(
+                        style = style,
+                        lang = lang,
+                        imageUri = flashUri,
+                        part = part,
+                        parts = parts.map { it.first },
+                        onPickImage = { pickImage.launch(arrayOf("*/*")) },
+                        onPart = { choosePart(it) },
+                        onStart = {
+                            val u = flashUri
+                            if (u != null) {
+                                showFlashImage = false
+                                flashImage(u)
+                            }
+                        },
+                        onDismiss = { showFlashImage = false }
                     )
                 }
                 if (showAbout) {
@@ -3599,6 +3644,98 @@ private fun PartsDialog(
 // ======================= 主页 =======================
 
 @Composable
+private fun FlashImageDialog(
+    style: UiStyle,
+    lang: Lang,
+    imageUri: Uri?,
+    part: String,
+    parts: List<String>,
+    onPickImage: () -> Unit,
+    onPart: (String) -> Unit,
+    onStart: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val options = remember(parts) {
+        if (parts.isEmpty()) listOf("boot", "init_boot", "vbmeta", "dtbo", "super", "system", "vendor", "recovery")
+        else parts
+    }
+    val ctx = LocalContext.current
+    val name = remember(imageUri) {
+        imageUri?.let { u ->
+            runCatching {
+                ctx.contentResolver.query(
+                    u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null
+                )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+            }.getOrNull() ?: u.lastPathSegment?.substringAfterLast('/').orEmpty()
+        }.orEmpty()
+    }
+    AppDialog(style, tr(lang, "刷入镜像", "Flash image"), onDismiss) {
+        Text(tr(lang, "镜像文件", "Image file"), color = LocalCardText.current, fontSize = 14.sp)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppField(
+                value = if (imageUri == null) "" else name,
+                onValueChange = {},
+                placeholder = tr(lang, "未选择镜像", "No image selected"),
+                readOnly = true,
+                modifier = Modifier.weight(1f),
+                onClick = onPickImage
+            )
+            Spacer(Modifier.width(8.dp))
+            GlassButton(
+                text = if (imageUri == null) tr(lang, "选择", "Choose") else tr(lang, "重选", "Change"),
+                onClick = onPickImage,
+                height = 44.dp,
+                fontSize = 14.sp,
+                primary = true,
+                tint = Palette.accent
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(tr(lang, "目标分区", "Target partition"), color = LocalCardText.current, fontSize = 14.sp)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppField(
+                value = part,
+                onValueChange = onPart,
+                placeholder = tr(lang, "目标分区，例如 boot", "partition, e.g. boot"),
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(LocalAccent.current.copy(alpha = 0.16f))
+                    .clickable { showPicker = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.List, contentDescription = null, tint = LocalAccent.current, modifier = Modifier.size(22.dp))
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        DialogActions(
+            dismissText = tr(lang, "取消", "Cancel"),
+            onDismiss = onDismiss,
+            confirmText = tr(lang, "开始刷写", "Start"),
+            onConfirm = onStart,
+            enabled = imageUri != null && part.isNotBlank()
+        )
+    }
+    if (showPicker) {
+        LiquidChoiceDialog(
+            backdrop = LocalWallBackdrop.current,
+            title = tr(lang, "选择分区", "Pick partition"),
+            options = options,
+            selected = options.indexOf(part),
+            onPick = { showPicker = false; onPart(options[it]) },
+            onDismiss = { showPicker = false }
+        )
+    }
+}
+
+@Composable
 fun HomePage(
     style: UiStyle,
     assets: GlassAssets?,
@@ -3830,7 +3967,7 @@ fun HomePage(
                 AppRow(Icons.Filled.List, tr(lang, "读分区表", "Partitions"),
                     "fastboot getvar all", onClick = onParts)
                 AppRow(Icons.Filled.Build, tr(lang, "刷入镜像", "Flash image"),
-                    tr(lang, "当前分区：$part", "target: $part"), onClick = onFlash)
+                    tr(lang, "当前分区：$part · 点击选镜像", "target: $part · pick image"), onClick = onFlash)
                 AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM", "Flash ROM"),
                     tr(lang, "选目录，按脚本批量刷", "pick a folder, flash in order"), tint = Color(0xFF5E5CE6), onClick = onRom)
                 AppRow(Icons.Filled.Refresh, tr(lang, "线刷 ROM（zip/tgz）", "Flash ROM (zip/tgz)"), tr(lang, "选压缩包，自动解压解析", "pick archive, auto-extract"), tint = Color(0xFF5E5CE6), onClick = onRomArchive)
@@ -3942,11 +4079,6 @@ fun SettingsPage(
         val styleOrder = listOf(UiStyle.Glass, UiStyle.Miuix, UiStyle.Material, UiStyle.Native)
         // 删字体要确认一次（液态玻璃弹窗）
         var pendingDeleteFont by remember { mutableStateOf<String?>(null) }
-        var showPartPicker by remember { mutableStateOf(false) }
-        val partOptions = remember(parts) {
-            if (parts.isEmpty()) listOf("boot", "init_boot", "vbmeta", "dtbo", "super", "system", "vendor", "recovery")
-            else parts
-        }
 
         AppTitle(tr(lang, "设置", "Settings"))
 
@@ -4139,47 +4271,6 @@ fun SettingsPage(
 
         AppCard(style, assets, backdrop, screen, blur, density, alpha) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-                Text(tr(lang, "刷写", "Flashing"), color = LocalCardText.current, fontSize = 16.sp)
-                Spacer(Modifier.height(8.dp))
-                var p by remember { mutableStateOf(part) }
-                LaunchedEffect(part) { p = part }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AppField(
-                        value = p,
-                        onValueChange = { p = it; onPart(it) },
-                        placeholder = tr(lang, "目标分区，例如 boot", "partition, e.g. boot"),
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(LocalAccent.current.copy(alpha = 0.16f))
-                            .clickable { showPartPicker = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Filled.List, contentDescription = null, tint = LocalAccent.current, modifier = Modifier.size(22.dp))
-                    }
-                }
-            }
-        }
-
-        if (showPartPicker) {
-            LiquidChoiceDialog(
-                backdrop = LocalWallBackdrop.current,
-                title = tr(lang, "选择分区", "Pick partition"),
-                options = partOptions,
-                selected = partOptions.indexOf(part),
-                onPick = { showPartPicker = false; onPart(partOptions[it]) },
-                onDismiss = { showPartPicker = false }
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        AppCard(style, assets, backdrop, screen, blur, density, alpha) {
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
                 Text(tr(lang, "遥控 PC", "Remote PC"), color = LocalCardText.current, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 AppField(
@@ -4212,37 +4303,12 @@ fun SettingsPage(
                 tr(lang, "把日志发给开发者", "Send the log to the developer"),
                 onClick = { onShareLog() }
             )
-            // 日志输出框里的文字颜色：命令 / 成功 / 失败 / 普通，可自己改。
-            // 这一行同时也是一镜到底动画的源：用 GraphicsLayer 把这一行录成位图 + 窗口坐标。
-            val svkScope = rememberCoroutineScope()
-            val svkLayer = rememberGraphicsLayer()
-            var svkRect by remember { mutableStateOf<android.graphics.Rect?>(null) }
-            Box(
-                Modifier
-                    .onGloballyPositioned { c ->
-                        val b = c.boundsInWindow()
-                        svkRect = android.graphics.Rect(
-                            b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt()
-                        )
-                    }
-                    .drawWithContent {
-                        svkLayer.record { this@drawWithContent.drawContent() }
-                        drawLayer(svkLayer)
-                    }
-            ) {
-                AppRow(
-                    Icons.Filled.Create,
-                    tr(lang, "日志文字颜色", "Log text colors"),
-                    tr(lang, "自定义命令 / 成功 / 失败 / 普通颜色", "Customize command / ok / error / normal"),
-                    onClick = {
-                        val rect = svkRect
-                        svkScope.launch {
-                            val bmp = runCatching { svkLayer.toImageBitmap().asAndroidBitmap() }.getOrNull()
-                            onLogColors(bmp, rect)
-                        }
-                    }
-                )
-            }
+            AppRow(
+                Icons.Filled.Create,
+                tr(lang, "日志文字颜色", "Log text colors"),
+                tr(lang, "自定义命令 / 成功 / 失败 / 普通颜色", "Customize command / ok / error / normal"),
+                onClick = { onLogColors(null, null) }
+            )
             if (crashFile.exists() || actionFile.exists()) {
                 AppRow(
                     Icons.Filled.Warning,
@@ -4298,58 +4364,21 @@ fun SettingsPage(
                     if (!XmsfBypass.canPromote(XmsfBypass.appCtx ?: return@AppRow)) XmsfBypass.openPromotedSettings()
                 }
             )
-            // 一镜到底无缝动画（金标联盟 SharedViewKit）：设备不支持时自动回退普通跳转
-            run {
-                val ctx = LocalContext.current
-                val prefs = remember { ctx.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE) }
-                var on by remember { mutableStateOf(prefs.getBoolean("svk", true)) }
-                val supported = remember { runCatching { com.itgsa.animation.sharedview.ViewAnimationManager.isViewAnimationSupported() > 0 }.getOrDefault(false) }
-                // 探测原因：KIT 判定支持的条件是「ROM 在 boot classpath 提供
-                // com.androidex.animation.sharedview.ViewAnimationManager」且 isFeatureEnabled() 为真
-                val svkReason = remember {
-                    runCatching {
-                        if (supported) {
-                            "协议 v" + com.itgsa.animation.sharedview.ViewAnimationManager.isViewAnimationSupported()
-                        } else {
-                            val cls = runCatching {
-                                Class.forName(
-                                    "com.androidex.animation.sharedview.ViewAnimationManager",
-                                    false, null
-                                )
-                            }
-                            if (cls.isFailure) {
-                                "ROM 未提供框架类（" + (cls.exceptionOrNull()?.javaClass?.simpleName ?: "?") + "）"
-                            } else {
-                                "框架类存在，但功能开关/协议不完整"
-                            }
-                        }
-                    }.getOrElse { "探测异常：" + it.javaClass.simpleName }
-                }
-                AppSwitchRow(
-                    icon = Icons.Filled.Create,
-                    title = tr(lang, "无缝转场动画", "Seamless transition"),
-                    subtitle = if (supported)
-                        tr(lang, "打开「日志文字颜色」时用一镜到底动画（自检 v$svkReason）", "Card expands into the page with a shared-view animation (probe: $svkReason)")
-                    else
-                        tr(lang, "不支持：$svkReason", "Not supported: $svkReason"),
-                    // 即使自检报不支持也允许用户打开：真正的判定交给 KIT，失败会自动回退
-                    checked = on,
-                    enabled = true,
-                    onCheckedChange = {
-                        on = it
-                        prefs.edit().putBoolean("svk", it).apply()
-                    }
-                )
+            val safeCtx = LocalContext.current
+            val rbLabel = remember(forceSafe) {
+                safeCtx.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE)
+                    .getString("rb_label", null)
             }
             AppSwitchRow(
                 icon = Icons.Filled.Refresh,
                 title = tr(lang, "安全模式", "Safe mode"),
-                subtitle = tr(
-                    lang,
-                    "手动关闭玻璃特效（崩溃时不会自动开启，只回退上一步）",
-                    "Manually disable glass effects (crashes only roll back the last action)"
-                ),
-                checked = safeRender,
+                subtitle = when {
+                    forceSafe -> tr(lang, "已开启：上一次改动已回退", "On: last change reverted")
+                    rbLabel != null -> tr(lang, "回退上一次改动：$rbLabel", "Roll back: $rbLabel")
+                    else -> tr(lang, "没有可回退的改动", "Nothing to roll back")
+                },
+                checked = forceSafe,
+                enabled = rbLabel != null || forceSafe,
                 onCheckedChange = { onForceSafe(it) }
             )
             if (showCrash) {
@@ -4501,7 +4530,7 @@ fun LiquidBottomBar(
                     }
             ) {
                 // —— 以下参数照抄 AndroidLiquidGlass 的 LiquidBottomTabs ——
-                val containerColor = Palette.glassTint.copy(alpha = 0.4f)
+                val containerColor = Palette.glassTint.copy(alpha = 0.34f)
                 
                 val surfaceMod = when {
                     // 原生风格：和上面卡片完全同一个色板，风格统一
@@ -4514,7 +4543,7 @@ fun LiquidBottomBar(
                         shape = { capsule },
                         effects = {
                             vibrancy()
-                            blur(8f.dp.toPx())
+                            blur(12f.dp.toPx())
                             lens(24f.dp.toPx(), 24f.dp.toPx())
                         },
                         onDrawSurface = { drawRect(containerColor) }
@@ -4601,7 +4630,7 @@ fun GlassDialogPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val light = !Palette.dark
-    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
+    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.55f else 0.34f)
     val dimColor = Palette.dim
 
     // Material：用官方 M3 对话框
@@ -4669,7 +4698,7 @@ fun GlassDialogPanel(
                                         saturation = 1.5f
                                     )
                                     blur(if (light) 16.dp.toPx() else 8.dp.toPx())
-                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
+                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true, chromaticAberration = true)
                                 },
                                 highlight = { Highlight.Plain },
                                 onDrawSurface = { drawRect(containerColor) }
@@ -4687,7 +4716,7 @@ fun GlassDialogPanel(
                                     density = 0.6f,
                                     light = light,
                                     tint = Palette.glassTint,
-                                    tintAlpha = if (light) 0.55f else 0.5f
+                                    tintAlpha = if (light) 0.45f else 0.40f
                                 )
                             } else {
                                 Modifier
@@ -4852,7 +4881,7 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
     // 否则浅色主题 + 深壁纸时选项文字会糊在背景里看不清。
     val lightWall = isLightWallpaper(LocalGlassAssets.current)
     val contentColor = LocalCardText.current
-    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
+    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.55f else 0.34f)
     val ctx = LocalContext.current
     val ver = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
@@ -5124,7 +5153,7 @@ fun LiquidChoiceDialog(
     // 否则浅色主题 + 深壁纸时选项文字会糊在背景里看不清。
     val lightWall = isLightWallpaper(LocalGlassAssets.current)
     val contentColor = LocalCardText.current
-    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.6f else 0.4f)
+    val containerColor = Palette.glassTint.copy(alpha = if (light) 0.55f else 0.34f)
     val dimColor = Palette.dim
 
     // Material：官方 M3 对话框，皮肤在 MaterialSlots.MaterialChoiceDialog
@@ -5169,7 +5198,7 @@ fun LiquidChoiceDialog(
                                 effects = {
                                     colorControls(brightness = if (light) 0.2f else 0f, saturation = 1.5f)
                                     blur(if (light) 16.dp.toPx() else 8.dp.toPx())
-                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true)
+                                    lens(24.dp.toPx(), 48.dp.toPx(), depthEffect = true, chromaticAberration = true)
                                 },
                                 highlight = { Highlight.Plain },
                                 onDrawSurface = { drawRect(containerColor) }
@@ -5257,11 +5286,11 @@ fun glassInsetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
             shape = { shape },
             effects = {
                 vibrancy()
-                blur(8.dp.toPx())
+                blur(10.dp.toPx())
             },
             onDrawSurface = {
                 drawRect(
-                    Palette.glassTint.copy(alpha = if (Palette.dark) 0.45f else 0.55f)
+                    Palette.glassTint.copy(alpha = if (Palette.dark) 0.38f else 0.46f)
                     
                 )
             }
