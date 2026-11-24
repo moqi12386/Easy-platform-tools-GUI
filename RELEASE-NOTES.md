@@ -1,3 +1,18 @@
+# Easy-platform-tools-GUI v3.52.0 (Android)
+
+- **液态玻璃 v2**：亮/对比(1.04)/饱和(1.55) 调节，模糊 2~10dp；折射随卡片尺寸（上限 32/72dp）；
+  色散 + Plain 高光 + 24dp 阴影 + 内侧暗影；底料 0.28+0.26×alpha。GlassDialog / 底栏 / 输入框 / 日志框同步。
+  glassSurface 按卡片在壁纸上的位置自适应压暗、135° 描边；壁纸 4 档模糊、饱和 1.52；
+  相关 Modifier 统一 remember，避免重组重录 RenderEffect。
+- **切页改 Pager**：HorizontalPager 两页常驻，底栏点击 320ms 平滑滚动，支持原生横滑，
+  底栏选中态随 currentPage 实时同步（过一半就切），删除外层抢手势的 detectHorizontalDragGestures。
+- **按钮字色**：GlassButton 只改文字（亮 accent 深字 / 深色主题白字 / 浅色主题深字），玻璃与底色不动。
+- **刷写合并**：删除设置页「刷写」分区，主页「刷入镜像」改为 FlashImageDialog（真实文件名 + 自定义目标分区）。
+- **隐藏无缝动画开关**：移除 SharedViewKit 入口与每帧 GraphicsLayer 录制，日志颜色页恢复普通淡入淡出。
+- **安全模式重做**：改为撤销上一次改动的设置快照（rb_*），不再关闭玻璃、不再改 safeRender。
+
+versionCode 118 / versionName 3.52.0
+
 # Easy-platform-tools-GUI v3.51.9 (Android)
 
 - **接入 SharedViewKit（一镜到底）**：`gsai.sdk:sharedview-kit:1.0.0.5`，设置里新增「无缝转场动画」开关；
