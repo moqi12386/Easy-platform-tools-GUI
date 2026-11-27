@@ -2391,13 +2391,8 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
             monetColor = if (monet && style == UiStyle.Material && assets != null) {
                 withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
-                        val bmp = assets.full.asAndroidBitmap()
-                        val pal = androidx.palette.graphics.Palette.from(bmp).clearFilters().generate()
-                        val c = pal.getVibrantColor(0)
-                            .takeIf { it != 0 }
-                            ?: pal.getLightVibrantColor(0).takeIf { it != 0 }
-                            ?: pal.getDominantColor(0)
-                        if (c == 0) null else Color(c)
+                        // MCU：Celebi 量化 + Score 打分，取最具代表性的种子色
+                        Monet.seedFrom(assets.full.asAndroidBitmap())?.let { Color(it) }
                     }.onFailure {
                         android.util.Log.e("MONET", "取色失败: ${it.javaClass.simpleName}: ${it.message}")
                     }.getOrNull()
@@ -2407,30 +2402,11 @@ class MainActivity : ComponentActivity(), FastbootUsb.Logger {
         // 莫奈只给 Material 用：其它风格一律回到默认主色
         Palette.monetAccent = if (style == UiStyle.Material) monetColor else null
         // 莫奈：卡片背景 / 底栏整块配色都来自软件壁纸的取色（不是系统壁纸）
-        // 同样 remember：只在深色/莫奈开关/取色结果变化时重算，避免每次重组都做一遍 lerp
+        // MCU 生成完整 scheme（角色配对由 official MaterialDynamicColors 保证），
+        // 只在深色/开关/种子变化时重算
         val monetScheme = remember(dark, monet, style, monetColor) {
             if (monet && style == UiStyle.Material && monetColor != null) {
-                val seed = monetColor!!
-                val base = if (dark) androidx.compose.material3.darkColorScheme()
-                else androidx.compose.material3.lightColorScheme()
-                base.copy(
-                    primary = seed,
-                    surfaceContainer = androidx.compose.ui.graphics.lerp(
-                        base.surfaceContainer, seed, if (dark) 0.16f else 0.08f
-                    ),
-                    surfaceContainerHigh = androidx.compose.ui.graphics.lerp(
-                        base.surfaceContainerHigh, seed, if (dark) 0.14f else 0.07f
-                    ),
-                    background = androidx.compose.ui.graphics.lerp(
-                        base.background, seed, if (dark) 0.10f else 0.05f
-                    ),
-                    secondaryContainer = androidx.compose.ui.graphics.lerp(
-                        base.secondaryContainer, seed, if (dark) 0.45f else 0.22f
-                    ),
-                    onSecondaryContainer = androidx.compose.ui.graphics.lerp(
-                        base.onSecondaryContainer, seed, 0.25f
-                    )
-                )
+                Monet.scheme(monetColor!!.toArgb(), dark)
             } else null
         }
         Palette.m3 = if (style != UiStyle.Material) null else (monetScheme ?: dynamicScheme)
