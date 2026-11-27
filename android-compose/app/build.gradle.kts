@@ -12,8 +12,8 @@ android {
         applicationId = "com.easypt.gui"
         minSdk = 26
         targetSdk = 37
-        versionCode = 125
-        versionName = "3.52.7"
+        versionCode = 126
+        versionName = "3.52.8"
     }
 
     signingConfigs {
@@ -70,7 +70,10 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("io.github.kyant0:shapes:1.2.1")
-    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
+    // MIUIX 官方全套（和 AppMarket 一致）：ui + preference + squircle
+    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.5-rc01")
+    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.5-rc01")
+    implementation("top.yukonga.miuix.kmp:miuix-squircle-android:0.9.5-rc01")
     // MCU 源码用到的编译期注解（仅编译期，不进 APK）
     compileOnly("com.google.errorprone:error_prone_annotations:2.36.0")
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")

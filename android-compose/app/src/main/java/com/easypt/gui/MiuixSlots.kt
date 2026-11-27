@@ -34,7 +34,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -90,33 +91,16 @@ fun MiuixRow(
     tint: Color? = null,
     onClick: (() -> Unit)? = null
 ) {
-    val text = LocalCardText.current
-    val lead: (@Composable () -> Unit)? = if (icon != null) {
-        {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconTile(icon, tint)
-                Spacer(Modifier.width(14.dp))
-            }
-        }
-    } else null
-    val tail: (@Composable RowScope.() -> Unit)? = if (trailing != null) {
-        { trailing() }
-    } else if (chevron && onClick != null) {
-        {
-            Icon(
-                Icons.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = text.copy(alpha = 0.35f),
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    } else null
-    BasicComponent(
+    // 用 miuix-preference 的 ArrowPreference：箭头、点击涟漪、行高都由库负责
+    ArrowPreference(
         title = title,
         summary = subtitle,
-        startAction = lead,
-        endActions = if (tail == null) null else ({ tail!!.invoke(this) }),
-        onClick = onClick
+        startAction = if (icon == null) null else ({
+            IconTile(icon, tint)
+        }),
+        endActions = trailing ?: {},
+        onClick = onClick ?: {},
+        enabled = onClick != null
     )
 }
 
@@ -129,24 +113,15 @@ fun MiuixSwitchRow(
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    BasicComponent(
+    SwitchPreference(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
         title = title,
         summary = subtitle,
-        startAction = {
-            IconTile(icon)
-            Spacer(Modifier.width(14.dp))
-        },
-        endActions = {
-            MiuixSwitch(
-                checked = checked,
-                onCheckedChange = { onCheckedChange(it) },
-                enabled = enabled
-            )
-        },
-        onClick = if (enabled) ({ onCheckedChange(!checked) }) else null
+        startAction = { IconTile(icon) },
+        enabled = enabled
     )
 }
-
 @Composable
 fun MiuixField(
     value: String,
