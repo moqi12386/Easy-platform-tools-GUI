@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
@@ -59,8 +59,15 @@ fun MiuixThemed(content: @Composable () -> Unit) {
 
 @Composable
 fun MiuixTitle(text: String) = MiuixThemed {
-    // 库自己的顶部标题（MIUI 的大标题样式），不再用 CommonTitle 的通用排版
-    SmallTopAppBar(title = text)
+    // 之前用 SmallTopAppBar：它带一块不透明容器，直接铺成屏幕顶部一条大白条，
+    // 和 MIUI 的「页内大标题」观感不符。改用库里的 SmallTitle（透明、无容器），
+    // 并且左右留 16dp，和卡片的 16dp 对齐。
+    // 标题色跟壁纸走（LocalTitleColor），否则浅色壁纸 + 浅色主题会糊成一片
+    SmallTitle(
+        text,
+        Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 2.dp),
+        LocalTitleColor.current
+    )
 }
 
 @Composable
@@ -166,7 +173,14 @@ fun MiuixBottomBar(
     modifier: Modifier = Modifier
 ) = MiuixThemed {
     // 用库自己的 NavigationBar / NavigationBarItem，不再手画图标+文字
-    NavigationBar(modifier = modifier.fillMaxWidth()) {
+    // 背景铺到手势条下面，内容区再让开 navigationBars，
+    // 否则底部会露出一条灰色空隙（截图里能看到）
+    Box(
+        modifier
+            .fillMaxWidth()
+            .background(MiuixTheme.colorScheme.surfaceContainer)
+    ) {
+    NavigationBar(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
         NavigationBarItem(
             selected = page == 0,
             onClick = { onPage(0) },
@@ -179,6 +193,7 @@ fun MiuixBottomBar(
             icon = Icons.Filled.Settings,
             label = settingsLabel
         )
+    }
     }
 }
 /**
