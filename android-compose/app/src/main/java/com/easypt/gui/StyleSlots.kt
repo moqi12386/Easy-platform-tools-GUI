@@ -106,6 +106,7 @@ fun AppSelectRow(
 @Composable
 fun AppTitle(text: String) = when (LocalStyle.current) {
     UiStyle.Material -> MaterialTitle(text)
+    UiStyle.Miuix -> MiuixTitle(text)
     else -> CommonTitle(text)
 }
 

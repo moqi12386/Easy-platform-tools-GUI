@@ -34,6 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.NavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
 import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
@@ -51,6 +55,12 @@ import top.yukonga.miuix.kmp.theme.lightColorScheme as miuixLight
 @Composable
 fun MiuixThemed(content: @Composable () -> Unit) {
     MiuixTheme(colors = if (Palette.dark) miuixDark() else miuixLight()) { content() }
+}
+
+@Composable
+fun MiuixTitle(text: String) = MiuixThemed {
+    // 库自己的顶部标题（MIUI 的大标题样式），不再用 CommonTitle 的通用排版
+    SmallTopAppBar(title = text)
 }
 
 @Composable
@@ -155,51 +165,22 @@ fun MiuixBottomBar(
     settingsLabel: String,
     modifier: Modifier = Modifier
 ) = MiuixThemed {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(
-                MiuixTheme.colorScheme.surfaceContainer,
-                RoundedCornerShape(rememberScreenCorner())
-            )
-    ) {
-        Row(
-            Modifier.fillMaxWidth().height(70.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            listOf(
-                Triple(Icons.Filled.Home, homeLabel, 0),
-                Triple(Icons.Filled.Settings, settingsLabel, 1)
-            ).forEach { (ic, label, idx) ->
-                val sel = page == idx
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(androidx.compose.ui.graphics.RectangleShape)
-                        .clickable(
-                            interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
-                            indication = null
-                        ) { onPage(idx) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        ic, contentDescription = null,
-                        tint = if (sel) MiuixTheme.colorScheme.primary else Palette.text2,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        label, fontSize = 11.sp,
-                        color = if (sel) MiuixTheme.colorScheme.primary else Palette.text2
-                    )
-                }
-            }
-        }
+    // 用库自己的 NavigationBar / NavigationBarItem，不再手画图标+文字
+    NavigationBar(modifier = modifier.fillMaxWidth()) {
+        NavigationBarItem(
+            selected = page == 0,
+            onClick = { onPage(0) },
+            icon = Icons.Filled.Home,
+            label = homeLabel
+        )
+        NavigationBarItem(
+            selected = page == 1,
+            onClick = { onPage(1) },
+            icon = Icons.Filled.Settings,
+            label = settingsLabel
+        )
     }
 }
-
 /**
  * MIUIX 弹窗容器：miuix 的 Card + 20dp 内边距。
  * KDialog 的 MIUIX 分支直接调用它，这样 miuix 的弹窗皮肤和其它 miuix 组件放在一起。
@@ -207,19 +188,31 @@ fun MiuixBottomBar(
 @Composable
 fun MiuixDialog(
     title: String,
+    onDismiss: () -> Unit = {},
     body: @Composable ColumnScope.() -> Unit
 ) = MiuixThemed {
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
-            Column(Modifier.padding(20.dp)) {
-                Text(
-                    title,
-                    color = MiuixTheme.colorScheme.onBackground,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.height(12.dp))
-                body()
+    // MIUIX 库没有 dialog 组件，这里用它的 Card + 遮罩：
+    // 点击遮罩关闭，卡片 28dp 圆角、20dp 内边距（与 MIUI 系统弹窗一致）
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = if (Palette.dark) 0.45f else 0.25f))
+            .clickable(
+                interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
+                indication = null
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.padding(32.dp).clickable(
+            interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
+            indication = null
+        ) { }) {
+            MiuixCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp) {
+                Column(Modifier.padding(20.dp)) {
+                    SmallTitle(title)
+                    Spacer(Modifier.height(8.dp))
+                    body()
+                }
             }
         }
     }

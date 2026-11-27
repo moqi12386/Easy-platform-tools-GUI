@@ -3471,6 +3471,11 @@ fun KDialog(
         MaterialDialog(title = title, onDismiss = onDismiss, body = body)
         return
     }
+    // MIUIX：用 MiuixSlots 里的 miuix 卡片弹窗（之前漏了这条分支，落到玻璃面板上了）
+    if (style == UiStyle.Miuix) {
+        MiuixDialog(title = title, onDismiss = onDismiss, body = body)
+        return
+    }
     // 玻璃 / 原生：自绘面板，皮肤在 GlassSlots.GlassDialog
     GlassDialog(title, onDismiss, body)
 }
