@@ -5,11 +5,13 @@ Windows 上的 adb / fastboot 图形化命令台，外加一个能**自己插 OT
 
 ![Windows 主界面](docs/main.png)
 
-> **Android 版**（`android-compose/`，当前 **v3.50.1**）：Compose 重写，四种界面样式（原生 / Material 莫奈取色 / MIUIX / 液态玻璃）。
+> **Android 版**（`android-compose/`，当前 **v3.52.5**）：Compose 重写，四种界面样式（原生 / Material 莫奈取色 / MIUIX / 液态玻璃）。
 >
 > - **OTG 直连**：手机插 OTG 就能对另一台停在 fastboot 的设备执行 `getvar` / `flash` / `erase`，**不用电脑、不用 root**
 > - **大分区分块刷**：`system` / `product` 这类 Android sparse 镜像按块边界重打包，4 GB+ 的分区也能一路刷进去（真机验证过 1410 MB / 118 包、4502 MB / 376 包）
 > - 本机 root 备份刷写、遥控 PC、解析 `flash_all` 脚本线刷
+> - **莫奈取色走官方 Material Color Utilities**（`Hct` + `SchemeTonalSpot` + `MaterialDynamicColors`），
+>   源码按 Apache-2.0 vendor 在 `android-compose/app/src/main/java/`，出处见 [NOTICE](NOTICE)
 >
 > 详见 [RELEASE-NOTES](RELEASE-NOTES.md)。
 
@@ -394,3 +396,11 @@ powershell -ExecutionPolicy Bypass -File scripts\hackios-boot.ps1 -Uefi <uefi.im
 ## 免责
 
 仅用于调试**你自己拥有**的设备。刷机有风险，操作前请确认能接受变砖的可能。
+## 第三方与许可
+
+- 本项目代码：MIT（见 [LICENSE](LICENSE)）
+- 依赖清单：见 [THIRD-PARTY.md](THIRD-PARTY.md)
+- **直接拷贝进仓库的第三方源码**：
+  - [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Apache-2.0）——液态玻璃的模糊/折射/高光
+  - [material-foundation/material-color-utilities](https://github.com/material-foundation/material-color-utilities)（Apache-2.0）——莫奈取色
+- 完整出处声明与许可文本：见 [NOTICE](NOTICE)

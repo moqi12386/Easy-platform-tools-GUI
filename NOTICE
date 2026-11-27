@@ -1,0 +1,26 @@
+Easy-platform-tools-GUI — NOTICE
+
+本仓库包含以下按 Apache License 2.0 授权的第三方源码，
+均保留了原文件的版权声明，完整许可文本见
+https://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+1) Material Color Utilities
+   来源: https://github.com/material-foundation/material-color-utilities
+   许可: Apache-2.0, Copyright 2021 Google LLC
+   位置: android-compose/app/src/main/java/{blend,contrast,dislike,dynamiccolor,
+         hct,palettes,quantize,scheme,score,temperature,utils}  (47 个 .java 文件)
+   用途: 莫奈动态配色 —— QuantizerCelebi + Score 取种子，Hct + SchemeTonalSpot
+         生成色调板，MaterialDynamicColors 逐角色取色；封装在 com/easypt/gui/Monet.kt
+
+2) AndroidLiquidGlass
+   来源: https://github.com/Kyant0/AndroidLiquidGlass
+   许可: Apache-2.0, Copyright Kyant0
+   位置: android-compose/app/src/main/java/com/easypt/gui/ 下的液态玻璃相关实现
+         （LiquidButton / LiquidSlider / LiquidToggle / LiquidBottomTabs /
+          glassSurface / GlassDialogPanel / glassInsetSurface 等）
+   用途: 液态玻璃的实时模糊、折射、高光
+
+--------------------------------------------------------------------------------
+其余依赖通过 Gradle 从 Maven / Google Maven 拉取，不随本仓库分发，
+清单见 THIRD-PARTY.md。本项目自身代码为 MIT 许可，见 LICENSE。

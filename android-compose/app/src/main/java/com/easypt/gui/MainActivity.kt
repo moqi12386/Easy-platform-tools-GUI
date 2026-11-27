@@ -4995,9 +4995,25 @@ fun AboutDialog(style: UiStyle, lang: Lang, backdrop: Backdrop?, onDismiss: () -
             color = contentColor.copy(alpha = 0.68f), fontSize = 14.sp, lineHeight = 21.sp,
             modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 10.dp)
         )
+        // 第三方组件声明：Material Color Utilities 是整段 vendor 进来的（Apache-2.0），
+        // 按许可要求在这里和仓库 NOTICE 里都要写明出处
         Text(
-            "玻璃效果来自 Kyant0/AndroidLiquidGlass (Apache-2.0)",
-            color = contentColor.copy(alpha = 0.5f), fontSize = 11.sp,
+            tr(
+                lang,
+                "开源组件（Apache-2.0）：\n" +
+                    "· Material Color Utilities — material-foundation/material-color-utilities\n" +
+                    "· AndroidLiquidGlass — Kyant0\n" +
+                    "· MIUIX — top.yukonga.miuix.kmp\n" +
+                    "· Shizuku API — RikkaApps\n" +
+                    "完整许可见仓库 NOTICE 文件",
+                "Open-source components (Apache-2.0):\n" +
+                    "· Material Color Utilities — material-foundation/material-color-utilities\n" +
+                    "· AndroidLiquidGlass — Kyant0\n" +
+                    "· MIUIX — top.yukonga.miuix.kmp\n" +
+                    "· Shizuku API — RikkaApps\n" +
+                    "Full licenses: NOTICE in the repository"
+            ),
+            color = contentColor.copy(alpha = 0.55f), fontSize = 11.sp, lineHeight = 16.sp,
             modifier = Modifier.padding(24.dp, 0.dp, 24.dp, 12.dp)
         )
         Row(

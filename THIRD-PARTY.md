@@ -25,7 +25,7 @@
 | androidx.compose.material3 | Material 3 组件 | Apache-2.0 |
 | androidx.compose.material:material-icons-core / -extended | 图标 | Apache-2.0 |
 | androidx.documentfile | SAF 目录读取（线刷选目录） | Apache-2.0 |
-| androidx.palette:palette-ktx | 从壁纸取莫奈配色 | Apache-2.0 |
+| androidx.palette:palette-ktx | 图片主色（**已不再用于莫奈**，莫奈改用 MCU，见文末） | Apache-2.0 |
 | [io.github.kyant0:backdrop](https://github.com/Kyant0/AndroidLiquidGlass) | 液态玻璃的实时模糊 / 折射 / 高光 | Apache-2.0 |
 | [io.github.kyant0:shapes](https://github.com/Kyant0/AndroidLiquidGlass) | Capsule 等形状 | Apache-2.0 |
 | [top.yukonga.miuix.kmp:miuix-ui-android](https://github.com/compose-miuix-ui/miuix) | MIUIX 风格组件 | Apache-2.0 |
@@ -70,6 +70,22 @@
 
 按 Apache-2.0 第 4 条，这里保留出处声明：原项目 Copyright Kyant0，完整许可文本见
 <https://github.com/Kyant0/AndroidLiquidGlass/blob/main/LICENSE>。
+
+### Material Color Utilities（莫奈取色）
+
+**莫奈取色整条链路也换成了官方实现**，源码是按文件拷贝进仓库的，不是 Gradle 依赖：
+
+| 来源 | 许可 | 拷进本仓库的位置 |
+|---|---|---|
+| [material-foundation/material-color-utilities](https://github.com/material-foundation/material-color-utilities) | Apache-2.0 | `android-compose/app/src/main/java/{blend,contrast,dislike,dynamiccolor,hct,palettes,quantize,scheme,score,temperature,utils}`（47 个 `.java` 文件） |
+
+用法：`QuantizerCelebi` + `Score` 从壁纸取种子 → `Hct.fromInt` → `SchemeTonalSpot` →
+`MaterialDynamicColors` 逐角色取 ARGB，封装在 `com/easypt/gui/Monet.kt`。
+
+这个包依赖的两个编译期注解库（`com.google.errorprone:error_prone_annotations`、
+`com.google.code.findbugs:jsr305`）用 `compileOnly` 引入，**不打进 APK**。
+
+按 Apache-2.0：这些文件均保留了 Google 的原始版权头；出处与许可见仓库根目录 [NOTICE](NOTICE)。
 如需替换成自己的实现，删掉 `glass/` 目录并把 `glassSurface` 换成纯色兜底即可，功能不受影响。
 
 ## 本项目
