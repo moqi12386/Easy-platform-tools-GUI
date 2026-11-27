@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons as M3Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,10 +45,14 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialTitle(text: String) {
-    LargeTopAppBar(
-        title = { Text(text, maxLines = 1) },
-        colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent),
-        windowInsets = WindowInsets(0, 0, 0, 0)
+    // M3 large app bar 展开态高 152dp，工具类应用太占地方；
+    // 这里用 headlineMedium(28/36) 直接排，四边 16dp，符合 M3 标题层级
+    Text(
+        text,
+        style = MaterialTheme.typography.headlineMedium,
+        color = Palette.text,
+        maxLines = 1,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
     )
 }
 
@@ -59,13 +63,13 @@ fun MaterialCard(
 ) = CompositionLocalProvider(LocalCardText provides Palette.text) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = Palette.surface),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = if (Palette.dark) 1.dp else 3.dp
         )
     ) {
-        Column(Modifier.padding(vertical = 6.dp), content = content)
+        Column(Modifier.padding(vertical = 4.dp), content = content)
     }
 }
 
@@ -88,7 +92,7 @@ fun MaterialRow(
             Text(
                 subtitle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     } else null
@@ -97,7 +101,7 @@ fun MaterialRow(
     } else if (chevron && onClick != null) {
         {
             Icon(
-                M3Icons.Filled.KeyboardArrowRight,
+                M3Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(22.dp)
@@ -136,7 +140,7 @@ fun MaterialSwitchRow(
                 Text(
                     s,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
         },
@@ -162,7 +166,7 @@ fun MaterialField(
         singleLine = true,
         placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyLarge) },
         textStyle = MaterialTheme.typography.bodyLarge,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(4.dp),
         keyboardOptions = if (numeric)
             androidx.compose.foundation.text.KeyboardOptions(
                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
@@ -188,7 +192,11 @@ fun MaterialDialog(
         ) {
             Column(Modifier.padding(24.dp)) {
                 if (title != null) {
-                    Text(title, color = Palette.text, fontSize = androidx.compose.ui.unit.TextUnit(19f, androidx.compose.ui.unit.TextUnitType.Sp))
+                    Text(
+                        title,
+                        color = Palette.text,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
                     androidx.compose.foundation.layout.Spacer(Modifier.size(12.dp))
                 }
                 body()
@@ -230,7 +238,7 @@ fun MaterialChoiceDialog(
                         androidx.compose.material3.Text(
                             "删除",
                             color = Palette.text2,
-                            fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier
                                 .clickable { onDelete(i) }
                                 .padding(end = 10.dp)
